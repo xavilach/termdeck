@@ -1476,16 +1476,14 @@ dependencies = [
     { name = "asyncssh" },
     { name = "bcrypt" },
     { name = "pyserial" },
+    { name = "pyte" },
+    { name = "textual" },
 ]
 
 [package.optional-dependencies]
 gui = [
     { name = "aiohttp" },
     { name = "pywebview" },
-]
-tui = [
-    { name = "pyte" },
-    { name = "textual" },
 ]
 web = [
     { name = "aiohttp" },
@@ -1506,11 +1504,11 @@ requires-dist = [
     { name = "asyncssh", specifier = ">=2.24.1" },
     { name = "bcrypt", specifier = ">=5.0.0" },
     { name = "pyserial", specifier = ">=3.5" },
-    { name = "pyte", marker = "extra == 'tui'", specifier = ">=0.8.2" },
+    { name = "pyte", specifier = ">=0.8.2" },
     { name = "pywebview", marker = "extra == 'gui'", specifier = ">=6.2.1" },
-    { name = "textual", marker = "extra == 'tui'", specifier = ">=8.2.8" },
+    { name = "textual", specifier = ">=8.2.8" },
 ]
-provides-extras = ["tui", "web", "gui"]
+provides-extras = ["web", "gui"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -156,3 +156,61 @@ async def test_empty_quick_connect_does_nothing(page):
     await page.evaluate("new Promise((r) => setTimeout(r, 0))")
     assert await page.query_selector(".tab") is None
     assert await page.is_hidden("#toast")
+
+
+@pytest.fixture
+async def page_with_file(tmp_path, monkeypatch):
+    """Like `page`, but the profile file is prepared by the test before the page loads."""
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", BROWSERS)
+    path = tmp_path / "profiles.json"
+    store = ProfileStore(path)
+    async with async_playwright() as pw:
+        try:
+            browser = await pw.chromium.launch()
+        except Exception as exc:
+            pytest.skip(f"chromium cannot be launched: {str(exc)[:80]}")
+        runner, url = await start(store=store)
+        try:
+            page = await browser.new_page()
+            page.store = store
+
+            async def open_page():
+                await page.goto(url)
+                await page.wait_for_function("typeof prompt === 'function' && document.querySelector('#new-profile')")
+
+            page.open_page = open_page
+            yield page
+        finally:
+            await browser.close()
+            await runner.cleanup()
+
+
+async def test_corrupt_profile_file_is_shown_and_quick_connect_works(page_with_file):
+    page = page_with_file
+    page.store.path.write_text("{oops")
+    await page.open_page()
+    await page.wait_for_selector("#profile-problems:not([hidden])")
+    assert "Profiles not loaded" in await page.text_content("#profile-problems")
+    await page.fill("#quick-input", "bob@host.example")
+    await page.press("#quick-input", "Enter")
+    await page.wait_for_selector(".tab")
+    assert "bob@host.example" in await page.text_content(".tab")
+    assert page.store.path.read_text() == "{oops"
+
+
+async def test_invalid_entry_is_counted_and_saving_shows_no_error(page_with_file):
+    import json
+
+    page = page_with_file
+    page.store.path.write_text(json.dumps({"profiles": [
+        {"name": "bad", "kind": "serial", "serial": {"device": "d", "parity": "Q"}}]}))
+    await page.open_page()
+    await page.wait_for_selector("#profile-problems:not([hidden])")
+    assert "1 profile skipped" in await page.text_content("#profile-problems")
+    await _new_ssh_profile(page, "fine")
+    await page.click("#editor-save")
+    await page.wait_for_selector("#editor[open]", state="detached")
+    assert page.store.get("fine").ssh.host == "fine.example"
+    assert await page.is_hidden("#toast")
+    assert "1 profile skipped" in await page.text_content("#profile-problems")
+    assert [e["name"] for e in json.loads(page.store.path.read_text())["profiles"]] == ["fine", "bad"]

@@ -12,11 +12,11 @@ SSH and serial terminal with saved profiles. One core, four interfaces:
 ## Install
 
 ```sh
-uv sync --all-extras        # or: pip install ".[tui,web,gui]"
+uv sync --all-extras        # or: pip install ".[web,gui]"
 uv run termdeck --help
 ```
 
-Extras: `tui` (Textual), `web` (aiohttp), `gui` (pywebview + web). The core and the CLI need only `asyncssh`, `bcrypt` and `pyserial`.
+The core, CLI and TUI need `asyncssh`, `bcrypt`, `pyserial`, `textual` and `pyte`. Extras: `web` (aiohttp), `gui` (pywebview + web).
 
 ## Features
 
@@ -26,7 +26,7 @@ Extras: `tui` (Textual), `web` (aiohttp), `gui` (pywebview + web). The core and 
 - **Serial**: any pyserial device or URL (`COM3`, `/dev/ttyUSB0`, `rfc2217://host:port`); speed, data bits, parity, stop bits, flow control, DTR/RTS, break.
 - **Follow the device**: a serial profile remembers its USB adapter (VID:PID, serial number, USB socket) and finds it again when its port name changes. It never guesses between adapters it cannot tell apart, and refuses to connect if the old port name now belongs to a different adapter.
 - **Local line editing**: for devices without a line editor. Edit the line here (arrows, Home/End, Ctrl+U/K/W, history with Up/Down) and send it on Enter. After a prompt such as `Password:` the line is not echoed and not kept in history.
-- **Terminal**: character set, Enter and Backspace mapping, local echo, scrollback, session log file, font size, themes.
+- **Terminal**: character set, Enter and Backspace mapping, local echo, scrollback, session log file (`{name}`, `{host}`, `{date}` in the path), font size, themes.
 - **Host keys**: unknown keys are always confirmed, changed keys are flagged. Kept in termdeck's own `known_hosts`; `~/.ssh/known_hosts` is also read.
 
 Settings forms show only the options of the selected connection type. Less common options are behind the **Advanced** switch.
@@ -38,13 +38,14 @@ termdeck add ssh web example.com -u bob -L 8080:db:5432 -g Prod
 termdeck add serial board COM3 -b 9600 --parity E
 termdeck set web ssh.keepalive=30 terminal.theme=dracula   # any option: section.option=value
 termdeck list
+termdeck options                     # every option name for set/--set
 termdeck connect web                 # or a quick target: bob@host:2222, COM3@9600
 termdeck tunnel web                  # forwards only, no shell
 termdeck sftp web get /var/log/syslog
 termdeck ports                       # serial ports with their USB identity
 ```
 
-`termdeck show NAME` prints a profile as JSON, which is also where the option names for `set` come from.
+`termdeck show NAME` prints a profile as JSON; `termdeck options` lists every option with its values and default.
 
 ## Keys
 

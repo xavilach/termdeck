@@ -16,7 +16,6 @@ from textual.widgets import (
 )
 
 from ..profiles import Profile, ProfileStore, describe_options, parse_forward, resolve_target
-from ..serialport import update_identity
 from .terminal import TerminalView
 
 FORWARD_FLAGS = {"L": "local", "R": "remote", "D": "dynamic"}
@@ -255,7 +254,7 @@ class ProfileEditor(ModalScreen[Profile | None]):
         self._store(event.text_area.id, event.text_area.text)
 
     @on(Button.Pressed, "#save")
-    def action_save(self) -> None:
+    async def action_save(self) -> None:
         v = self.values
         try:
             data = {"name": v["name"].strip(), "kind": v["kind"], "group": v["group"].strip(),
@@ -264,12 +263,14 @@ class ProfileEditor(ModalScreen[Profile | None]):
             if v["kind"] == "ssh":
                 data["ssh"]["forwards"] = [asdict(f) for f in text_to_forwards(data["ssh"].pop("forwards_text"))]
             profile = Profile.from_dict(data)
-            existing = self.store.load()
-            if self.original is None and profile.name in existing:
-                raise ValueError(f"a profile named {profile.name!r} already exists")
-            update_identity(profile, existing.get(self.original or profile.name))
-            self.store.save(profile, replace=self.original)
-        except (ValueError, TypeError) as exc:
+            # In a thread: saving a serial profile scans the USB ports, slow on Windows.
+            if self.original is None:
+                await asyncio.to_thread(self.store.add, profile)
+            else:
+                await asyncio.to_thread(self.store.update, self.original, profile)
+        except (ValueError, TypeError, KeyError, OSError) as exc:
+            if isinstance(exc, KeyError):
+                exc = ValueError(exc.args[0])
             self.query_one("#error", Label).update(Text(str(exc), style="red"))
             if isinstance(exc, FieldError):
                 self._show_field(exc)
@@ -353,6 +354,7 @@ class TermdeckTUI(App, inherit_bindings=False):
         self.store = store or ProfileStore()
         self.start_profile = start_profile
         self._tab_ids = 0
+        self._reported: set[str] = set()
 
     def compose(self) -> ComposeResult:
         with Vertical(id="sidebar"):
@@ -373,18 +375,35 @@ class TermdeckTUI(App, inherit_bindings=False):
             yield Footer()
 
     async def on_mount(self) -> None:
-        await self.reload_profiles()
+        count = await self.reload_profiles()
         if self.start_profile:
             self.open_tab(self.start_profile)
-        elif self.store.load():
+        elif count:
             self.query_one("#profiles").focus()
         else:
             self.query_one("#quick").focus()
 
     # ---- profiles ----
 
-    async def reload_profiles(self) -> None:
-        profiles = sorted(self.store.load().values(), key=lambda p: (p.group == "", p.group.lower(), p.name.lower()))
+    def load_profiles(self) -> dict[str, Profile]:
+        """Saved profiles; problems with the file are shown, never fatal."""
+        try:
+            profiles = self.store.load()
+        except ValueError as exc:  # unreadable profiles.json: start empty, write nothing
+            self._notify_once(str(exc), "Profiles not loaded", "error")
+            return {}
+        for line in self.store.warnings():
+            self._notify_once(line, f"Skipped in {self.store.path.name}", "warning")
+        return profiles
+
+    def _notify_once(self, message: str, title: str, severity: str) -> None:
+        """Problems with the profile file are reported once, not on every reload."""
+        if message not in self._reported:
+            self._reported.add(message)
+            self.notify(message, title=title, severity=severity, timeout=20, markup=False)
+
+    async def reload_profiles(self) -> int:
+        profiles = sorted(self.load_profiles().values(), key=lambda p: (p.group == "", p.group.lower(), p.name.lower()))
         items, group = [], None
         for p in profiles:
             if p.group != group and (p.group or group):
@@ -394,6 +413,7 @@ class TermdeckTUI(App, inherit_bindings=False):
         view = self.query_one("#profiles", ListView)
         await view.clear()
         await view.extend(items)
+        return len(profiles)
 
     def selected_profile(self) -> Profile | None:
         item = self.query_one("#profiles", ListView).highlighted_child
@@ -409,7 +429,7 @@ class TermdeckTUI(App, inherit_bindings=False):
         if not event.value.strip():
             return
         try:
-            profile = resolve_target(event.value, self.store.load())
+            profile = resolve_target(event.value, self.load_profiles())
         except KeyError as exc:
             self.notify(exc.args[0], severity="error", markup=False)
             return
@@ -444,7 +464,10 @@ class TermdeckTUI(App, inherit_bindings=False):
 
         async def done(confirmed):
             if confirmed:
-                self.store.delete(profile.name)
+                try:
+                    await asyncio.to_thread(self.store.delete, profile.name)
+                except (KeyError, ValueError, OSError) as exc:
+                    self.notify(str(exc.args[0] if isinstance(exc, KeyError) else exc), severity="error", markup=False)
                 await self.reload_profiles()
 
         self.push_screen(ConfirmDialog("Delete profile", f"Delete {profile.name}?", "Delete", danger=True), callback=done)

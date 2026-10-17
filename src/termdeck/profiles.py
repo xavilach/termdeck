@@ -12,22 +12,25 @@ from dataclasses import MISSING, asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any, Literal
 
-from .config import config_dir, open_private
+from .config import atomic_write, config_dir, file_lock
 
 ForwardKind = Literal["local", "remote", "dynamic"]
 
 
 def option(default: Any, label: str, help: str = "", *, advanced: bool = False,
-           choices: dict | None = None, widget: str = "", kinds: tuple[str, ...] = ("ssh", "serial"),
-           hidden: bool = False) -> Any:
+           choices: dict | None = None, widget: str = "", kinds: tuple[str, ...] | None = None,
+           hidden: bool = False, min: float | None = None, max: float | None = None,
+           wide: bool = False) -> Any:
     """A profile option.
 
-    `widget` refines the input type (path, secret, multiline). `kinds` lists the
-    connection types the option applies to, so UIs hide the others. `hidden`
-    options are stored and kept by every UI but never shown in forms.
+    `widget` refines the input type (path, secret, multiline, device, forwards).
+    `kinds` lists the connection types the option applies to, so UIs hide the
+    others; it defaults to the section's type (SSH options apply to SSH only).
+    `hidden` options are stored and kept by every UI but never shown in forms.
+    `min`/`max` bound numbers. `wide` asks forms for a full-width field.
     """
     meta = {"label": label, "help": help, "advanced": advanced, "choices": choices, "widget": widget,
-            "kinds": kinds, "hidden": hidden}
+            "kinds": kinds, "hidden": hidden, "min": min, "max": max, "wide": wide}
     if isinstance(default, list):
         return field(default_factory=list, metadata=meta)
     return field(default=default, metadata=meta)
@@ -48,11 +51,11 @@ class Forward:
             raise ValueError(f"invalid forward type {self.kind!r}")
         if not _is_int(self.listen_port) or not 0 <= self.listen_port < 65536:
             raise ValueError(f"invalid forward listen port {self.listen_port!r}")
-        _check_host(self.listen_host, "forward listen host")
+        check_host(self.listen_host, "forward listen host")
         if self.kind != "dynamic":
             if not self.dest_host:
                 raise ValueError(f"forward {self} needs a destination host")
-            _check_host(self.dest_host, "forward destination host")
+            check_host(self.dest_host, "forward destination host")
             if not _is_int(self.dest_port) or not 0 < self.dest_port < 65536:
                 raise ValueError(f"invalid forward destination port {self.dest_port!r}")
 
@@ -79,7 +82,7 @@ def _is_int(value) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def _check_host(host: str, what: str) -> None:
+def check_host(host: str, what: str) -> None:
     if not host or _BAD_HOST_CHARS.search(host):
         raise ValueError(f"invalid {what} {host!r}")
 
@@ -105,28 +108,41 @@ def parse_forward(kind: ForwardKind, spec: str) -> Forward:
 
 @dataclass
 class SSHSettings:
-    host: str = option("", "Host", "Host name or IP address")
-    port: int = option(22, "Port")
+    host: str = option("", "Host", "Host name or IP address", wide=True)
+    port: int = option(22, "Port", min=1, max=65535)
     username: str = option("", "Username", "Asked at login when empty")
-    key_file: str = option("", "Private key", "Uses the SSH agent and default keys when empty", widget="path")
-    forwards: list[Forward] = option([], "Port forwards", "Local (-L), remote (-R) and dynamic SOCKS (-D)")
-    remote_command: str = option("", "Remote command", "Run this instead of a login shell", advanced=True)
-    jump_host: str = option("", "Jump host", "Connect through [user@]host[:port], like ssh -J", advanced=True)
-    keepalive: int = option(0, "Keepalive (s)", "Seconds between keepalives, 0 disables", advanced=True)
-    connect_timeout: int = option(15, "Connect timeout (s)", advanced=True)
+    key_file: str = option("", "Private key", "Uses the SSH agent and default keys when empty. "
+                           "Encrypted default keys need to be named here to be offered", widget="path")
+    forwards: list[Forward] = option([], "Port forwards", "Local (-L), remote (-R) and dynamic SOCKS (-D)",
+                                     widget="forwards")
+    remote_command: str = option("", "Remote command", "Run this instead of a login shell", advanced=True, wide=True)
+    jump_host: str = option("", "Jump host", "Connect through [user@]host[:port], like ssh -J", advanced=True,
+                            wide=True)
+    keepalive: int = option(0, "Keepalive (s)", "Seconds between keepalives, 0 disables", advanced=True,
+                            min=0, max=86400)
+    connect_timeout: int = option(15, "Connect timeout (s)", "0 waits as long as the system allows",
+                                  advanced=True, min=0, max=3600)
     compression: bool = option(False, "Compression", "Worth it on slow links only", advanced=True)
     use_agent: bool = option(True, "Use SSH agent", advanced=True)
-    agent_forwarding: bool = option(False, "Forward agent", "Lets the server use your agent; trust it first", advanced=True)
+    agent_forwarding: bool = option(False, "Forward agent", "Lets the server use your agent; trust it first. "
+                                    "Needs 'Use SSH agent'", advanced=True)
     x11_forwarding: bool = option(False, "X11 forwarding", "Needs a local X server", advanced=True)
-    env: str = option("", "Environment", "NAME=value per line; the server must accept them", advanced=True, widget="multiline")
+    env: str = option("", "Environment", "NAME=value per line; the server must accept them", advanced=True,
+                      widget="multiline")
     ciphers: str = option("", "Ciphers", "Comma-separated preference list, empty for defaults", advanced=True)
     kex_algs: str = option("", "Key exchange", "Comma-separated preference list, empty for defaults", advanced=True)
 
 
+# pyserial URL schemes allowed as a device. Others are refused: spy:// writes
+# everything typed (passwords included) to a file, hwgrep:// may pick any port.
+SERIAL_URL_SCHEMES = ("rfc2217", "socket", "loop", "cp2110")
+
+
 @dataclass
 class SerialSettings:
-    device: str = option("", "Device", "COM3, /dev/ttyUSB0, or a pyserial URL such as rfc2217://host:port")
-    baudrate: int = option(115200, "Speed (baud)")
+    device: str = option("", "Device", "COM3, /dev/ttyUSB0, or rfc2217://host:port or socket://host:port "
+                         "(network ports are not encrypted)", widget="device", wide=True)
+    baudrate: int = option(115200, "Speed (baud)", min=1, max=100_000_000)
     follow_device: bool = option(True, "Follow the device",
                                  "Find the same USB adapter again when its port name changes (COM3 becomes COM7)")
     usb_id: str = option("", "USB identity", "Recorded when the profile is saved with the adapter plugged in",
@@ -135,8 +151,9 @@ class SerialSettings:
     parity: str = option("N", "Parity", choices={"N": "None", "E": "Even", "O": "Odd", "M": "Mark", "S": "Space"})
     stopbits: float = option(1, "Stop bits", choices={1: "1", 1.5: "1.5", 2: "2"})
     flow: str = option("none", "Flow control", choices={"none": "None", "rtscts": "RTS/CTS", "xonxoff": "XON/XOFF"})
-    dtr: bool = option(True, "Assert DTR", "Some boards reset when DTR changes. On Linux and macOS the system "
-                       "raises DTR briefly while opening the port, so a reset at connect may still happen", advanced=True)
+    dtr: bool = option(True, "Assert DTR", "Some boards reset when DTR changes. The system or the driver may "
+                       "still raise DTR briefly while opening the port, and on Windows many drivers drop it "
+                       "on close", advanced=True)
     rts: bool = option(True, "Assert RTS", advanced=True)
 
 
@@ -149,13 +166,56 @@ class TerminalSettings:
     local_echo: bool = option(False, "Local echo", "Show typed characters yourself, for devices that do not echo", advanced=True)
     line_editing: bool = option(False, "Local line editing",
                                 "Edit lines here (arrows, history) and send them on Enter; for devices without a line editor. Turn the device echo off")
-    scrollback: int = option(10000, "Scrollback lines", advanced=True)
-    log_file: str = option("", "Log file", "Append session output to this file; {name} and {date} are replaced", advanced=True, widget="path")
-    font_size: int = option(14, "Font size")
+    scrollback: int = option(10000, "Scrollback lines", advanced=True, min=0, max=1_000_000)
+    log_file: str = option("", "Log file", "Append session output to this file; {name}, {host} and {date} are "
+                           "replaced", advanced=True, widget="path")
+    font_size: int = option(14, "Font size", min=6, max=72)
     theme: str = option("dark", "Color theme", choices={"dark": "Dark", "light": "Light", "solarized": "Solarized", "dracula": "Dracula"})
 
 
 KINDS = {"ssh": "SSH", "serial": "Serial"}
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def parse_jump(text: str) -> tuple[str, str, int]:
+    """Split a jump host, [user@]host[:port] or [user@][v6addr][:port], into (user, host, port)."""
+    user, _, hostport = text.rpartition("@")
+    if hostport.startswith("["):
+        host, closed, rest = hostport[1:].partition("]")
+        if not closed or (rest and not rest.startswith(":")):
+            raise ValueError(f"invalid jump host {text!r}")
+        port = rest[1:] if rest else "22"
+    elif hostport.count(":") > 1:  # a bare IPv6 address; a port needs [addr]:port
+        host, port = hostport, "22"
+    elif ":" in hostport:
+        host, _, port = hostport.partition(":")
+    else:
+        host, port = hostport, "22"
+    if not port.isdigit() or not 0 < int(port) < 65536:
+        raise ValueError(f"invalid jump host port in {text!r}")
+    check_host(host, "jump host")
+    return user, host, int(port)
+
+
+def parse_env(text: str) -> dict[str, str]:
+    """Environment variables from NAME=value lines."""
+    env = {}
+    for line in text.splitlines():
+        if line.strip():
+            name, sep, value = line.partition("=")
+            if not sep or not name.strip():
+                raise ValueError(f"invalid environment line {line!r}, expected NAME=value")
+            env[name.strip()] = value
+    return env
+
+
+def normalize_device(device: str) -> str:
+    """Canonical serial device name: COM ports upper case and without the \\\\.\\ prefix."""
+    device = device.strip()
+    # pyserial adds \\\\.\\ back for COM ports only; other Windows devices (com0com's CNCA0) keep it.
+    if m := re.fullmatch(r"(?:\\\\\.\\)?(com\d+)", device, re.I):
+        device = m[1].upper()
+    return device
 
 
 @dataclass
@@ -168,28 +228,38 @@ class Profile:
     terminal: TerminalSettings = field(default_factory=TerminalSettings)
 
     def validate(self) -> None:
+        """Check every option, and bring values to their canonical form (device names)."""
         if not self.name.strip():
             raise ValueError("profile name is empty")
+        if _CONTROL_CHARS.search(self.name) or _CONTROL_CHARS.search(self.group):
+            raise ValueError("profile name and folder cannot contain control characters")
         if self.kind not in KINDS:
             raise ValueError(f"unknown profile type {self.kind!r}")
         for section in (self, self.ssh, self.serial, self.terminal):
             for f in fields(section):
                 if "label" in f.metadata:
-                    _check_option(f, getattr(section, f.name))
+                    check_option(f, getattr(section, f.name))
         if self.kind == "ssh":
-            if not self.ssh.host:
+            s = self.ssh
+            if not s.host:
                 raise ValueError("ssh profile needs a host")
-            _check_host(self.ssh.host, "host")
-            if self.ssh.jump_host:
-                hostport = self.ssh.jump_host.rpartition("@")[2]
-                host = hostport[1:].partition("]")[0] if hostport.startswith("[") else hostport.partition(":")[0]
-                _check_host(host, "jump host")
-            if not 0 < self.ssh.port < 65536:
-                raise ValueError(f"invalid port {self.ssh.port}")
-            for fwd in self.ssh.forwards:
+            check_host(s.host, "host")
+            if s.jump_host:
+                parse_jump(s.jump_host)
+            for fwd in s.forwards:
                 fwd.validate()
-        elif not self.serial.device:
-            raise ValueError("serial profile needs a device")
+            parse_env(s.env)
+            if s.agent_forwarding and not s.use_agent:
+                raise ValueError("'Forward agent' needs 'Use SSH agent' (ssh.use_agent) turned on")
+        else:
+            self.serial.device = normalize_device(self.serial.device)
+            device = self.serial.device
+            if not device:
+                raise ValueError("serial profile needs a device")
+            scheme, sep, _ = device.partition("://")
+            if sep and scheme.lower() not in SERIAL_URL_SCHEMES:
+                raise ValueError(f"unsupported device URL {scheme}://, use one of: "
+                                 + ", ".join(f"{s}://" for s in SERIAL_URL_SCHEMES))
         try:
             "".encode(self.terminal.encoding)
         except LookupError:
@@ -213,8 +283,11 @@ class Profile:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Profile":
-        """Build and validate a profile. Unknown keys are ignored, missing ones get defaults."""
+    def from_dict(cls, data: dict, validate: bool = True) -> "Profile":
+        """Build and validate a profile. Unknown keys are ignored, missing ones get defaults.
+
+        `validate=False` only checks the structure, to repair a profile that fails validation.
+        """
         if not isinstance(data, dict):
             raise ValueError("profile must be an object")
         for key in ("name", "kind", "group"):
@@ -238,19 +311,20 @@ class Profile:
             serial=SerialSettings(**_known(SerialSettings, sections["serial"])),
             terminal=TerminalSettings(**_known(TerminalSettings, sections["terminal"])),
         )
-        profile.validate()
+        if validate:
+            profile.validate()
         return profile
 
 
-def _check_option(f, value) -> None:
-    label = f.metadata["label"].lower()
-    choices = f.metadata["choices"]
+def check_option(f, value) -> None:
+    meta = f.metadata
+    label = meta["label"].lower()
+    choices = meta["choices"]
     if choices:
         if value not in choices:
-            raise ValueError(f"invalid {label} {value!r}")
+            raise ValueError(f"invalid {label} {value!r}, expected one of: {', '.join(map(str, choices))}")
         return
-    default = f.default if f.default is not MISSING else f.default_factory()
-    expected = type(default)
+    expected = f.type if isinstance(f.type, type) else list
     if expected is float:
         ok = isinstance(value, (int, float)) and not isinstance(value, bool)
     elif expected is int:
@@ -258,9 +332,14 @@ def _check_option(f, value) -> None:
     else:
         ok = isinstance(value, expected)
     if not ok:
-        raise ValueError(f"{label} must be {'a number' if expected in (int, float) else expected.__name__}, got {value!r}")
-    if expected is int and value < 0:
-        raise ValueError(f"{label} cannot be negative")
+        kind = {int: "a whole number", float: "a number", bool: "true or false", str: "text"}.get(expected, expected.__name__)
+        raise ValueError(f"{label} must be {kind}, got {value!r}")
+    if expected in (int, float):
+        low, high = meta["min"], meta["max"]
+        if low is None and value < 0:
+            raise ValueError(f"{label} cannot be negative")
+        if (low is not None and value < low) or (high is not None and value > high):
+            raise ValueError(f"{label} must be between {low} and {high}, got {value}")
 
 
 def _known(cls, data: dict) -> dict:
@@ -268,35 +347,42 @@ def _known(cls, data: dict) -> dict:
     return {k: v for k, v in data.items() if k in names}
 
 
+SECTION_KINDS = {"profile": ("ssh", "serial"), "ssh": ("ssh",), "serial": ("serial",), "terminal": ("ssh", "serial")}
+SECTIONS = {"profile": Profile, "ssh": SSHSettings, "serial": SerialSettings, "terminal": TerminalSettings}
+
+
+def option_fields(section: str, include_hidden: bool = False) -> list:
+    """The dataclass fields declared with `option()` in a section."""
+    return [f for f in fields(SECTIONS[section])
+            if "label" in f.metadata and (include_hidden or not f.metadata["hidden"])]
+
+
 def describe_options() -> dict:
     """JSON-ready description of every option, grouped by section, for building forms."""
 
-    def describe(cls) -> list[dict]:
+    def describe(section: str) -> list[dict]:
         out = []
-        for f in fields(cls):
-            if "label" not in f.metadata or f.metadata["hidden"]:
-                continue
+        for f in option_fields(section):
+            meta = f.metadata
             default = f.default if f.default is not MISSING else f.default_factory()
-            choices = f.metadata["choices"]
+            choices = meta["choices"]
             out.append({
                 "key": f.name,
-                "type": "forwards" if f.name == "forwards" else type(default).__name__,
+                "type": meta["widget"] if meta["widget"] == "forwards" else f.type.__name__,
                 "default": default,
-                "label": f.metadata["label"],
-                "help": f.metadata["help"],
-                "advanced": f.metadata["advanced"],
-                "widget": f.metadata["widget"],
+                "label": meta["label"],
+                "help": meta["help"],
+                "advanced": meta["advanced"],
+                "widget": meta["widget"],
+                "wide": meta["wide"] or meta["widget"] in ("path", "multiline", "device"),
+                "min": meta["min"],
+                "max": meta["max"],
                 "choices": [[k, v] for k, v in choices.items()] if choices else None,
-                "kinds": list(f.metadata["kinds"]),
+                "kinds": list(meta["kinds"] or SECTION_KINDS[section]),
             })
         return out
 
-    return {
-        "profile": describe(Profile),
-        "ssh": describe(SSHSettings),
-        "serial": describe(SerialSettings),
-        "terminal": describe(TerminalSettings),
-    }
+    return {section: describe(section) for section in SECTIONS}
 
 
 def parse_target(text: str) -> Profile | None:
@@ -306,9 +392,9 @@ def parse_target(text: str) -> Profile | None:
     and connecting to it would send a password to whatever host it resolves to.
     SSH targets need a user (bob@host), a port (host:22), or a dotted name or address.
     """
-    if m := re.match(r"^(COM\d+|/dev/\S+|\w+://\S*)(?:@(\d+))?$", text, re.I):
+    if m := re.match(r"^((?:\\\\\.\\)?COM\d+|/dev/\S+|\w+://\S*)(?:@(\d+))?$", text, re.I):
         p = Profile(text, "serial")
-        p.serial.device = m[1]
+        p.serial.device = normalize_device(m[1])
         if m[2]:
             p.serial.baudrate = int(m[2])
         return p
@@ -348,62 +434,147 @@ def resolve_target(text: str, profiles: dict[str, "Profile"]) -> "Profile":
     raise KeyError(unknown_target(text, profiles))
 
 
+FORMAT_VERSION = 1
+
+
+class ProfileFileError(ValueError):
+    """profiles.json cannot be read. Nothing is written until the user fixes it."""
+
+
 class ProfileStore:
     """Profiles kept in one JSON file, written atomically and readable by the owner only.
 
-    An entry that fails validation is skipped by `load` (see `invalid`) but kept
-    in the file, so a hand edit gone wrong never loses data.
+    An entry that fails validation, or repeats an earlier name, is skipped by
+    `load` (see `invalid` and `warnings`) but kept in the file, so a hand edit
+    gone wrong never loses data. Changes hold a file lock and work on their own
+    copy of the file's contents, so two windows, threads or processes saving at
+    once never drop each other's profiles.
     """
 
     def __init__(self, path: Path | None = None):
         self.path = path or config_dir() / "profiles.json"
-        self.invalid: list[tuple[str, str]] = []  # (name, error) from the last load
-        self._invalid_raw: list[dict] = []
+        self.invalid: list[tuple[str, str]] = []  # (name, error) from the last load, for display
 
     def load(self) -> dict[str, Profile]:
-        self.invalid, self._invalid_raw = [], []
-        if not self.path.exists():
-            return {}
-        data = json.loads(self.path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict) or not isinstance(data.get("profiles", []), list):
-            raise ValueError(f"{self.path} is not a termdeck profile file")
-        profiles = {}
-        for raw in data.get("profiles", []):
-            try:
-                profile = Profile.from_dict(raw)
-            except (ValueError, TypeError) as exc:
-                self.invalid.append((str(raw.get("name", "?")) if isinstance(raw, dict) else "?", str(exc)))
-                self._invalid_raw.append(raw)
-                continue
-            profiles[profile.name] = profile
+        profiles, skipped = self._read()
+        self.invalid = [(name, error) for name, error, _ in skipped]
         return profiles
 
-    def get(self, name: str) -> Profile:
+    def _read(self) -> tuple[dict[str, Profile], list[tuple[str, str, Any]]]:
+        """The valid profiles, and the skipped entries as (name, error, raw entry)."""
+        if not self.path.exists():
+            return {}, []
         try:
-            return self.load()[name]
-        except KeyError:
-            raise KeyError(f"no profile named {name!r}") from None
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ProfileFileError(f"{self.path} is not valid JSON (line {exc.lineno}, column {exc.colno}): "
+                                   "fix it or move it away; nothing is saved until then") from None
+        except UnicodeDecodeError:
+            raise ProfileFileError(f"{self.path} is not UTF-8 text: fix it or move it away") from None
+        if not isinstance(data, dict) or not isinstance(data.get("profiles", []), list):
+            raise ProfileFileError(f"{self.path} is not a termdeck profile file")
+        version = data.get("version", FORMAT_VERSION)
+        if not _is_int(version) or version > FORMAT_VERSION:
+            raise ProfileFileError(f"{self.path} was written by a newer termdeck (format {version!r})")
+        profiles, skipped = {}, []
+        for number, raw in enumerate(data.get("profiles", []), 1):
+            name = str(raw.get("name", "?")) if isinstance(raw, dict) else "?"
+            try:
+                profile = Profile.from_dict(raw)
+                if profile.name in profiles:
+                    raise ValueError(f"entry {number} repeats the name of an earlier profile")
+            except (ValueError, TypeError) as exc:
+                skipped.append((name, str(exc), raw))
+                continue
+            profiles[profile.name] = profile
+        return profiles, skipped
 
-    def save(self, profile: Profile, replace: str | None = None) -> None:
-        """Add or update a profile. `replace` is the old name when renaming."""
-        profile.validate()
+    def warnings(self) -> list[str]:
+        """One line per profile the last `load` skipped (in `path`), for the UIs to show."""
+        return [f"profile {name!r} skipped: {error}" for name, error in self.invalid]
+
+    def get(self, name: str) -> Profile:
         profiles = self.load()
-        if profile.name != (replace or profile.name) and profile.name in profiles:
-            raise ValueError(f"a profile named {profile.name!r} already exists")
-        profiles.pop(replace or profile.name, None)
-        profiles[profile.name] = profile
-        self._write(profiles)
+        if name in profiles:
+            return profiles[name]
+        for bad, error in self.invalid:
+            if bad == name:
+                raise KeyError(f"profile {name!r} is invalid: {error} (in {self.path}); "
+                               f"fix it with termdeck set, or remove it with termdeck rm")
+        raise KeyError(f"no profile named {name!r}")
+
+    def get_raw(self, name: str) -> Profile:
+        """A profile even if it fails validation (unchecked), so the user can repair it."""
+        profiles, skipped = self._read()
+        if name in profiles:
+            return profiles[name]
+        for bad, _, raw in skipped:
+            if bad == name and isinstance(raw, dict):
+                return Profile.from_dict(raw, validate=False)
+        raise KeyError(f"no profile named {name!r}")
+
+    def add(self, profile: Profile) -> None:
+        """Save a new profile. Raises ValueError if the name is taken."""
+        profile.validate()
+        with file_lock(self.path):
+            profiles, skipped = self._read()
+            if profile.name in profiles or _named(skipped, profile.name):
+                raise ValueError(f"a profile named {profile.name!r} already exists")
+            _record_identity(profile, None)
+            profiles[profile.name] = profile
+            self._write(profiles, skipped)
+
+    def update(self, name: str, profile: Profile) -> None:
+        """Replace the profile called `name` (renaming it if `profile.name` differs).
+
+        A skipped entry called `name` can be updated too: that is how it gets repaired.
+        Skipped duplicates of a valid `name` are left alone.
+        """
+        profile.validate()
+        with file_lock(self.path):
+            profiles, skipped = self._read()
+            previous = profiles.pop(name, None)
+            if previous is None:
+                if not _named(skipped, name):
+                    raise KeyError(f"no profile named {name!r}: it was deleted or renamed meanwhile")
+                skipped = [entry for entry in skipped if entry[0] != name]
+            if profile.name != name and (profile.name in profiles or _named(skipped, profile.name)):
+                raise ValueError(f"a profile named {profile.name!r} already exists")
+            _record_identity(profile, previous)
+            profiles[profile.name] = profile
+            self._write(profiles, skipped)
+
+    def save(self, profile: Profile) -> None:
+        """Add `profile`, or replace the one with the same name. For scripts and tests:
+        unlike add/update it records no USB identity and checks no names."""
+        profile.validate()
+        with file_lock(self.path):
+            profiles, skipped = self._read()
+            profiles[profile.name] = profile
+            self._write(profiles, skipped)
 
     def delete(self, name: str) -> None:
-        profiles = self.load()
-        if profiles.pop(name, None) is None:
-            raise KeyError(f"no profile named {name!r}")
-        self._write(profiles)
+        """Delete every entry called `name`, valid or skipped."""
+        with file_lock(self.path):
+            profiles, skipped = self._read()
+            found = profiles.pop(name, None) is not None or _named(skipped, name)
+            if not found:
+                raise KeyError(f"no profile named {name!r}")
+            self._write(profiles, [entry for entry in skipped if entry[0] != name])
 
-    def _write(self, profiles: dict[str, Profile]) -> None:
+    def _write(self, profiles: dict[str, Profile], skipped: list) -> None:
         entries = [p.to_dict() for p in sorted(profiles.values(), key=lambda p: p.name.lower())]
-        data = {"profiles": entries + self._invalid_raw}
-        tmp = self.path.with_name(f".{self.path.name}.{os.getpid()}.tmp")
-        with open_private(tmp) as f:
-            f.write(json.dumps(data, indent=2) + "\n")
-        tmp.replace(self.path)
+        data = {"version": FORMAT_VERSION, "profiles": entries + [raw for _, _, raw in skipped]}
+        atomic_write(self.path, json.dumps(data, indent=2) + "\n")
+
+
+def _named(skipped: list, name: str) -> bool:
+    return any(entry[0] == name for entry in skipped)
+
+
+def _record_identity(profile: Profile, previous: Profile | None) -> None:
+    """Remember which USB adapter a serial profile uses (see serialport.update_identity)."""
+    if profile.kind == "serial":
+        from .serialport import update_identity  # serialport imports this module
+
+        update_identity(profile, previous)

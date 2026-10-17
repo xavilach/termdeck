@@ -6,7 +6,7 @@ The server runs on its own thread and event loop; the GUI toolkit needs the main
 import asyncio
 import threading
 
-from .config import config_dir, private_dir
+from .config import data_dir, private_dir
 
 
 class BackgroundServer:
@@ -64,7 +64,7 @@ def run() -> None:
     url = server.start()
     webview.create_window("termdeck", url, width=1280, height=800, min_size=(640, 400),
                           text_select=True, background_color="#0f1218")
-    storage = private_dir(config_dir() / "webview")
+    storage = private_dir(data_dir() / "webview")
     try:
         # Not private: keeps UI preferences (advanced toggle) between runs.
         webview.start(private_mode=False, storage_path=str(storage))

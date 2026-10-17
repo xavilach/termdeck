@@ -258,3 +258,25 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-216 | issue | Low | conv, ui, sec | tui/app.py, app.js, cli.py | Did-you-mean only in the CLI; quick-connect messages didn't explain host:22; web didn't accept a saved name. | Core `resolve_target`/`unknown_target`; web uses `POST /api/target`. | S | fixed (b782d71) |
 | P1-217 | issue | Low | conv, ui | cli.py | `tui NAME` help outdated. | Help text. | S | fixed (b782d71) |
 | P1-218 | issue | Low | sec | app.js forwardsEditor | New forward rows showed "0" ports. | Empty for 0. | S | fixed (b782d71) |
+| P1-220 | issue | Low | win | gui.py | Old WebView2 cache in %APPDATA% orphaned after moving to %LOCALAPPDATA%. | — | S | won't fix (new app: no existing installs to migrate) |
+| P1-221 | issue | Low | win | config.py file_lock | Windows lock could wait 30 s and the comment said 10 s. | One LK_LOCK call (~10 s); store calls run in threads. | S | open |
+| P1-222 | issue | Low | win | session.py | Superscript COM¹/LPT¹ device names not reserved. | Added. | S | open |
+| P1-223 | issue | Major | ui, feat | server.py list_profiles, app.js | Corrupt profiles.json broke the web UI start; missing #profile-problems element. | Return `error` with 200; persistent sidebar notice. | S | open |
+| P1-224 | issue | Major | ui | cli.py resolve_profile | Corrupt profiles.json blocked CLI quick connect. | Warn and continue with no profiles. | S | open |
+| P1-225 | issue | Minor | ui | profiles.py, cli.py | A skipped profile could not be repaired or removed from the CLI. | `get_raw` for `set`; `rm` removes skipped entries. | S | open |
+| P1-226 | issue | Minor | ui | profiles.py update | Rename onto the name of a skipped profile allowed. | Check skipped names. | S | open |
+| P1-227 | issue | Minor | ui | tui/app.py, app.js | Skipped-profile warnings repeated on every reload; web showed them as an error toast after saves. | Notify once (TUI); sidebar details (web). | S | open |
+| P1-228 | issue | Minor | ui | cli.py, profiles.py | `--set` range/choice errors lacked the key; choices not listed; "a number" for 22.5. | Check per option; list choices; "whole number". | S | open |
+| P1-229 | issue | Minor | ui | cli.py options | `options` output showed Python reprs, no ranges, unaligned. | true/false, ranges, (empty), aligned. | S | open |
+| P1-230 | issue | Cosmetic | ui | profiles.py, cli.py | Messages didn't use form labels; duplicate warning lacked the entry; path repeated. | Reworded. | S | open |
+| P1-231 | issue | Medium | sec, feat | ssh.py, config.py | Concurrent host-key saves lost keys (shared temp file, no lock). | Lock in remember_host_key; temp name per thread. | S | open |
+| P1-232 | issue | Medium | sec | profiles.py | Store kept skipped entries on the shared object: a concurrent load during a save dropped them from the file. | Per-call state (`_read`). | S | open |
+| P1-233 | issue | Low | sec, feat | server.py, tui/app.py | Delete took the file lock on the event loop. | `asyncio.to_thread`. | S | open |
+| P1-234 | issue | Medium | sec | config.py open_private | Logs in shared folders followed symlinks / took over others' files; fchmod on existing logs. | O_NOFOLLOW, owner/regular/nlink check, chmod only new files, close on error. | S | open |
+| P1-235 | issue | Medium | sec, feat | session.py | Buffered log not flushed while idle or after the session ended. | 1 s flush timer; flush when the pump ends. | S | open |
+| P1-236 | issue | Medium | feat | profiles.py normalize_device | `\\.\` stripped from non-COM devices (com0com CNCA0) which then fail to open. | Strip only for COMn. | S | open |
+| P1-237 | issue | Medium | feat | profiles.py delete | Deleting a duplicated name resurrected the other copy. | Delete removes every entry with the name. | S | open |
+| P1-238 | issue | Low | feat | profiles.py | Bare IPv6 jump host refused; cp2110:// refused. | Accept both. | S | open |
+| P1-239 | issue | Low | conv | server.py save/delete | OSError and ProfileFileError gave bare 500s. | JSON errors. | S | open |
+| P1-240 | issue | Low | conv | config.py | open_private("w", own_dir=False) truncated before checks; atomic_write left temp files on failure; log flush errors silent. | Append-only outside own dirs; unlink temp; stop logging with a notice. | S | open |
+| P1-241 | issue | Medium | test-writer | server.py quick_target | Web quick connect failed (500) with a corrupt profiles.json. | Fall back to no profiles. | S | open |

@@ -118,8 +118,20 @@ let tabIds = 0;
 // ---------- profiles sidebar ----------
 
 async function loadProfiles() {
-  state.profiles = await api("GET", "/api/profiles");
+  const { profiles, warnings, error, path } = await api("GET", "/api/profiles");
+  state.profiles = profiles;
   renderProfiles();
+  // Problems with the profile file stay visible in the sidebar instead of hiding profiles.
+  const box = $("#profile-problems");
+  box.hidden = !error && !warnings.length;
+  if (error) {
+    box.replaceChildren(el("strong", {}, "Profiles not loaded"), el("p", {}, error));
+  } else if (warnings.length) {
+    box.replaceChildren(el("details", {},
+      el("summary", {}, `${warnings.length} profile${warnings.length > 1 ? "s" : ""} skipped`),
+      el("p", { class: "muted" }, path),
+      ...warnings.map((w) => el("p", {}, w))));
+  }
 }
 
 function profileItem(p) {
@@ -231,6 +243,8 @@ function fieldInput(opt, value, onChange) {
     id, spellcheck: "false",
     type: numeric ? "number" : (opt.widget === "secret" ? "password" : "text"),
     step: opt.type === "float" ? "any" : undefined,
+    min: opt.min ?? undefined,
+    max: opt.max ?? undefined,
     oninput: () => onChange(numeric ? Number(input.value) : input.value),
   });
   input.value = value ?? "";
@@ -242,8 +256,8 @@ function fieldRow(opt, values) {
     values[opt.key] = v;
     if (opt.key === "kind") renderEditor();
   });
-  if (opt.key === "device") attachPortSuggestions(input);
-  const wide = opt.widget === "multiline" || opt.widget === "path" || ["host", "device", "jump_host", "remote_command"].includes(opt.key);
+  if (opt.widget === "device") attachPortSuggestions(input);
+  const wide = opt.wide;
   return el("label", {
     class: ["field", opt.type === "bool" && "bool", wide && "wide", opt.advanced && "advanced"].filter(Boolean).join(" "),
     for: id,

@@ -27,9 +27,10 @@ import asyncssh
 from aiohttp import web
 
 from ..profiles import (
-    Profile, ProfileStore, SerialSettings, SSHSettings, TerminalSettings, describe_options, resolve_target,
+    Profile, ProfileFileError, ProfileStore, SerialSettings, SSHSettings, TerminalSettings, describe_options,
+    resolve_target,
 )
-from ..serialport import available_ports, update_identity
+from ..serialport import available_ports
 from ..session import Session, describe_error, open_session
 
 STATIC = Path(__file__).parent / "static"
@@ -210,8 +211,17 @@ async def get_options(request: web.Request) -> web.Response:
 
 
 async def list_profiles(request: web.Request) -> web.Response:
-    profiles = request.app[store_key].load().values()
-    return web.json_response([{**p.to_dict(), "summary": p.summary()} for p in profiles])
+    """Saved profiles, plus a line for each entry of the file that could not be used."""
+    store = request.app[store_key]
+    try:
+        profiles = store.load().values()
+    except ProfileFileError as exc:  # the page still works for quick connect
+        return web.json_response({"profiles": [], "warnings": [], "error": str(exc)})
+    return web.json_response({
+        "profiles": [{**p.to_dict(), "summary": p.summary()} for p in profiles],
+        "warnings": store.warnings(),
+        "path": str(store.path),
+    })
 
 
 async def save_profile(request: web.Request) -> web.Response:
@@ -220,28 +230,39 @@ async def save_profile(request: web.Request) -> web.Response:
     store = request.app[store_key]
     try:
         profile = Profile.from_dict(await request.json())
-        existing = store.load()
-        if old_name is None and profile.name in existing:
-            raise ValueError(f"a profile named {profile.name!r} already exists")
-        await asyncio.to_thread(update_identity, profile, existing.get(old_name or profile.name))
-        store.save(profile, replace=old_name)
-    except (ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+        # In a thread: the store takes a file lock and scans USB ports for serial profiles.
+        if old_name is None:
+            await asyncio.to_thread(store.add, profile)
+        else:
+            await asyncio.to_thread(store.update, old_name, profile)
+    except KeyError as exc:
+        return _json_error(404, str(exc.args[0]))
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
         return _json_error(400, str(exc))
+    except OSError as exc:
+        return _json_error(500, f"could not save: {describe_error(exc)}")
     return web.json_response({**profile.to_dict(), "summary": profile.summary()})
 
 
 async def delete_profile(request: web.Request) -> web.Response:
     try:
-        request.app[store_key].delete(request.match_info["name"])
+        await asyncio.to_thread(request.app[store_key].delete, request.match_info["name"])
     except KeyError as exc:
         return _json_error(404, str(exc.args[0]))
+    except ValueError as exc:
+        return _json_error(400, str(exc))
+    except OSError as exc:
+        return _json_error(500, f"could not delete: {describe_error(exc)}")
     return web.json_response({"ok": True})
 
 
 async def quick_target(request: web.Request) -> web.Response:
     """Resolve quick-connect text with the core rules: a saved name or an unsaved profile."""
     text = str((await request.json())["text"])
-    profiles = request.app[store_key].load()
+    try:
+        profiles = request.app[store_key].load()
+    except ProfileFileError:  # quick targets work without the profile file (the sidebar says why)
+        profiles = {}
     try:
         profile = resolve_target(text, profiles)
     except KeyError as exc:

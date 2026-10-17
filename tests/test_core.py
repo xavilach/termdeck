@@ -34,7 +34,7 @@ def test_store_roundtrip_rename_delete(tmp_path):
     assert store.load() == {"web": ssh, "board": ser}
 
     ssh.name = "web2"
-    store.save(ssh, replace="web")
+    store.update("web", ssh)
     assert sorted(store.load()) == ["board", "web2"]
     store.delete("board")
     with pytest.raises(KeyError):

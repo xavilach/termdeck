@@ -6,11 +6,13 @@ import getpass
 import json
 import shutil
 import sys
-from dataclasses import fields
 from pathlib import PurePosixPath
 
 from . import __version__
-from .profiles import Profile, ProfileStore, SerialSettings, SSHSettings, parse_forward, resolve_target
+from .profiles import (
+    Profile, ProfileFileError, ProfileStore, SerialSettings, SSHSettings, check_option, describe_options, option_fields,
+    parse_forward, resolve_target,
+)
 from .session import describe_error, open_session
 
 
@@ -39,17 +41,27 @@ class ConsolePrompter:
         return (answer or "").strip().lower() in ("y", "yes")
 
 
-def _coerce(current, text: str):
-    if isinstance(current, bool):
+def _coerce(field, text: str):
+    """Convert command-line text to the option's type (choices by key, e.g. parity=E)."""
+    kind = field.type
+    if kind is bool:
         if text.lower() in ("1", "true", "yes", "on"):
             return True
         if text.lower() in ("0", "false", "no", "off"):
             return False
         raise ValueError(f"expected true or false, got {text!r}")
-    if isinstance(current, (int, float)) and not isinstance(current, bool):
-        number = float(text)
-        return int(number) if number.is_integer() and isinstance(current, int) else number
+    if kind in (int, float):
+        try:
+            number = float(text)
+        except ValueError:
+            raise ValueError(f"expected a number, got {text!r}") from None
+        return int(number) if number.is_integer() else number
     return text.replace("\\n", "\n")
+
+
+def _settable(section: str) -> dict:
+    """Options `--set` can change: every visible option except forwards (-L/-R/-D)."""
+    return {f.name: f for f in option_fields(section) if f.metadata["widget"] != "forwards"}
 
 
 def apply_settings(profile: Profile, assignments: list[str]) -> None:
@@ -59,11 +71,16 @@ def apply_settings(profile: Profile, assignments: list[str]) -> None:
         section_name, dot, name = key.partition(".")
         if not sep or not dot or section_name not in ("ssh", "serial", "terminal"):
             raise ValueError(f"invalid setting {item!r}, expected ssh|serial|terminal.option=value")
-        section = getattr(profile, section_name)
-        names = {f.name for f in fields(section)} - {"forwards"}
-        if name not in names:
-            raise ValueError(f"unknown option {key!r}; options: {', '.join(sorted(names))}")
-        setattr(section, name, _coerce(getattr(section, name), value))
+        settable = _settable(section_name)
+        if name not in settable:
+            raise ValueError(f"unknown option {key!r}; options: {', '.join(sorted(settable))} "
+                             "(termdeck options lists them all)")
+        try:
+            converted = _coerce(settable[name], value)
+            check_option(settable[name], converted)
+        except ValueError as exc:
+            raise ValueError(f"{key}: {exc}") from None
+        setattr(getattr(profile, section_name), name, converted)
     profile.validate()
 
 
@@ -75,14 +92,55 @@ def _forwards(args) -> list:
     )
 
 
+def _warn(store: ProfileStore) -> None:
+    if warnings := store.warnings():
+        print(f"termdeck: warning: {store.path} has entries that cannot be used:", file=sys.stderr)
+        for line in warnings:
+            print(f"  {line}", file=sys.stderr)
+
+
 def cmd_list(args, store: ProfileStore) -> int:
     profiles = store.load().values()
+    _warn(store)
     if args.json:
         print(json.dumps([p.to_dict() for p in profiles], indent=2))
+    elif not profiles:
+        print("No profiles. Create one with: termdeck add ssh NAME HOST, or termdeck add serial NAME DEVICE",
+              file=sys.stderr)
     else:
         for p in profiles:
             group = f"[{p.group}] " if p.group else ""
             print(f"{p.name}\t{group}{p.summary()}")
+    return 0
+
+
+def _accepted(o: dict) -> str:
+    """What `--set` accepts for an option, in the words of the command line."""
+    if o["choices"]:
+        return "|".join(str(k) for k, _ in o["choices"])
+    if o["type"] == "bool":
+        return "true|false"
+    if o["type"] in ("int", "float"):
+        low, high = o["min"] if o["min"] is not None else 0, o["max"]
+        return f"{low}..{high}" if high is not None else f"number >= {low}"
+    return "text (\\n for a new line)" if o["widget"] == "multiline" else "text"
+
+
+def cmd_options(args, store: ProfileStore) -> int:
+    """Every option for --set, from the same declarations the forms use."""
+    rows = []
+    for section, options in describe_options().items():
+        if section == "profile":
+            continue
+        for o in options:
+            if o["type"] == "forwards":
+                continue
+            default = json.dumps(o["default"]) if o["default"] not in ("", None) else "(empty)"
+            rows.append((f"{section}.{o['key']}", _accepted(o), f"default {default}", o["label"]))
+    widths = [max(len(row[i]) for row in rows) for i in range(3)]
+    for row in rows:
+        print("  ".join(cell.ljust(w) for cell, w in zip(row, widths)) + "  " + row[3])
+    print("\nSet them with: termdeck set NAME section.option=value, or --set on add and connect.")
     return 0
 
 
@@ -92,8 +150,6 @@ def cmd_show(args, store: ProfileStore) -> int:
 
 
 def cmd_add(args, store: ProfileStore) -> int:
-    if args.name in store.load():
-        raise ValueError(f"a profile named {args.name!r} already exists")
     if args.kind == "ssh":
         profile = Profile(args.name, "ssh", group=args.group, ssh=SSHSettings(
             host=args.target, port=args.port, username=args.user or "", key_file=args.identity or "",
@@ -105,28 +161,19 @@ def cmd_add(args, store: ProfileStore) -> int:
             stopbits=args.stopbits, flow=args.flow,
         ))
     apply_settings(profile, args.set or [])
-    _update_identity(profile)
-    store.save(profile)
+    store.add(profile)
     print(profile.summary())
     return 0
 
 
-def _update_identity(profile: Profile, previous: Profile | None = None) -> None:
-    from .serialport import update_identity
-
-    update_identity(profile, previous)
-
-
 def cmd_set(args, store: ProfileStore) -> int:
-    profile = store.get(args.name)
-    previous = Profile.from_dict(profile.to_dict())
+    profile = store.get_raw(args.name)  # a profile that fails validation can be repaired here
     apply_settings(profile, args.settings)
-    _update_identity(profile, previous)
     if args.local or args.remote or args.dynamic:
         profile.ssh.forwards = _forwards(args)
     if args.no_forwards:
         profile.ssh.forwards = []
-    store.save(profile)
+    store.update(args.name, profile)
     print(profile.summary())
     return 0
 
@@ -134,19 +181,24 @@ def cmd_set(args, store: ProfileStore) -> int:
 def cmd_rename(args, store: ProfileStore) -> int:
     profile = store.get(args.name)
     profile.name = args.new_name
-    store.save(profile, replace=args.name)
+    store.update(args.name, profile)
+    print(f"renamed {args.name!r} to {args.new_name!r}", file=sys.stderr)
     return 0
 
 
 def cmd_rm(args, store: ProfileStore) -> int:
     store.delete(args.name)
+    print(f"deleted {args.name!r}", file=sys.stderr)
     return 0
 
 
 def cmd_ports(args, store: ProfileStore) -> int:
     from .serialport import available_ports
 
-    for port in available_ports():
+    ports = available_ports()
+    if not ports:
+        print("No serial ports found.", file=sys.stderr)
+    for port in ports:
         print("\t".join((port["device"], port["description"], port["usb_id"])).rstrip())
     return 0
 
@@ -162,7 +214,13 @@ async def _ssh_connect(name: str, store: ProfileStore):
 
 def resolve_profile(target: str, store: ProfileStore) -> Profile:
     """A saved profile by name, else a quick target such as user@host or COM3@9600."""
-    return resolve_target(target, store.load())
+    try:
+        profiles = store.load()
+    except ProfileFileError as exc:  # quick targets (bob@host, COM3) still work
+        print(f"termdeck: warning: {exc}", file=sys.stderr)
+        profiles = {}
+    _warn(store)
+    return resolve_target(target, profiles)
 
 
 async def cmd_connect(args, store: ProfileStore) -> int:
@@ -277,18 +335,20 @@ def build_parser() -> argparse.ArgumentParser:
     ssh = kinds.add_parser("ssh", help="SSH profile")
     ssh.add_argument("name")
     ssh.add_argument("target", metavar="HOST")
-    ssh.add_argument("-p", "--port", type=int, default=22)
+    ssh.add_argument("-p", "--port", type=int, default=SSHSettings().port)
     ssh.add_argument("-u", "--user")
     ssh.add_argument("-i", "--identity", metavar="KEY_FILE")
     _add_forward_options(ssh)
     serial = kinds.add_parser("serial", help="serial port profile")
     serial.add_argument("name")
     serial.add_argument("target", metavar="DEVICE")
-    serial.add_argument("-b", "--baud", type=int, default=115200)
-    serial.add_argument("--databits", type=int, default=8, choices=(5, 6, 7, 8))
-    serial.add_argument("--parity", default="N", choices=("N", "E", "O", "M", "S"))
-    serial.add_argument("--stopbits", type=float, default=1, choices=(1, 1.5, 2))
-    serial.add_argument("--flow", default="none", choices=("none", "rtscts", "xonxoff"))
+    # Defaults and choices come from the option declarations (profiles.py).
+    defaults, choices = SerialSettings(), {o["key"]: o["choices"] for o in describe_options()["serial"]}
+    serial.add_argument("-b", "--baud", type=int, default=defaults.baudrate)
+    serial.add_argument("--databits", type=int, default=defaults.bytesize, choices=[k for k, _ in choices["bytesize"]])
+    serial.add_argument("--parity", default=defaults.parity, choices=[k for k, _ in choices["parity"]])
+    serial.add_argument("--stopbits", type=float, default=defaults.stopbits, choices=[k for k, _ in choices["stopbits"]])
+    serial.add_argument("--flow", default=defaults.flow, choices=[k for k, _ in choices["flow"]])
     for k in (ssh, serial):
         k.add_argument("-g", "--group", default="", help="sidebar folder")
         k.add_argument("--set", action="append", metavar="SECTION.OPTION=VALUE", help="any other option, repeatable")
@@ -309,6 +369,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_rm)
     p = sub.add_parser("ports", help="list serial ports")
     p.set_defaults(func=cmd_ports)
+    p = sub.add_parser("options", help="list every option for --set and termdeck set")
+    p.set_defaults(func=cmd_options)
 
     p = sub.add_parser("tunnel", help="open a profile's port forwards without a shell")
     p.add_argument("name")
@@ -328,6 +390,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if sys.platform == "win32":
+        # Redirected output would otherwise use the ANSI code page and fail on accents.
+        for stream in (sys.stdout, sys.stderr):
+            if hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="utf-8", errors="replace")
     args = build_parser().parse_args(argv)
     store = ProfileStore()
     try:

@@ -1,12 +1,13 @@
 """SSH connections: interactive shell, port forwards and SFTP (asyncssh)."""
 
+import asyncio
 from dataclasses import replace
 from pathlib import Path
 
 import asyncssh
 
-from .config import config_dir, open_private
-from .profiles import Profile
+from .config import atomic_write, config_dir, file_lock, open_private, user_path
+from .profiles import Profile, check_host, parse_env, parse_jump
 from .session import Prompter, Session, printable
 
 MAX_PASSWORD_TRIES = 3
@@ -30,14 +31,15 @@ def _host_pattern(host: str, port: int) -> str:
 
 def remember_host_key(host: str, port: int, key: asyncssh.SSHKey) -> None:
     """Store `key` in termdeck's known_hosts, replacing any older key for this host."""
+    check_host(host, "host")  # never write a pattern that could match other hosts
     path = known_hosts_path()
     pattern = _host_pattern(host, port)
-    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
-    lines = [line for line in lines if line.split(" ", 1)[0] != pattern]
     algorithm, blob = key.export_public_key("openssh").decode().split()[:2]
-    lines.append(f"{pattern} {algorithm} {blob}")
-    with open_private(path) as f:
-        f.write("\n".join(lines) + "\n")
+    with file_lock(path):  # two tabs may accept keys at the same moment
+        lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+        lines = [line for line in lines if line.split(" ", 1)[0] != pattern]
+        lines.append(f"{pattern} {algorithm} {blob}")
+        atomic_write(path, "\n".join(lines) + "\n")
 
 
 class _Client(asyncssh.SSHClient):
@@ -81,44 +83,33 @@ class _Client(asyncssh.SSHClient):
 
 
 async def _load_key(path: str, prompter: Prompter) -> asyncssh.SSHKey:
-    path = str(Path(path).expanduser())
+    path = str(user_path(path))
     try:
-        return asyncssh.read_private_key(path)
+        return await asyncio.to_thread(asyncssh.read_private_key, path)
     except asyncssh.KeyImportError as exc:
         if "passphrase" not in str(exc).lower():
             raise
     passphrase = await prompter.ask(f"Passphrase for {path}: ")
     if passphrase is None:
         raise asyncssh.KeyImportError("passphrase entry cancelled")
-    return asyncssh.read_private_key(path, passphrase)
+    # Decrypting a key takes most of a second: keep the event loop (other tabs) running.
+    return await asyncio.to_thread(asyncssh.read_private_key, path, passphrase)
 
 
 def _csv(value: str) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
-def _parse_env(text: str) -> dict[str, str]:
-    env = {}
-    for line in text.splitlines():
-        if line.strip():
-            name, sep, value = line.partition("=")
-            if not sep:
-                raise ValueError(f"invalid environment line {line!r}, expected NAME=value")
-            env[name.strip()] = value
-    return env
-
-
 def jump_profile(profile: Profile) -> Profile:
-    """Profile for the jump host: [user@]host[:port], other options inherited."""
-    user, _, hostport = profile.ssh.jump_host.rpartition("@")
-    host, port = hostport, 22
-    if hostport.startswith("["):
-        host, _, rest = hostport[1:].partition("]")
-        port = int(rest[1:]) if rest.startswith(":") else 22
-    elif hostport.count(":") == 1:
-        host, port = hostport.split(":")
-    ssh = replace(profile.ssh, host=host, port=int(port), username=user or profile.ssh.username,
-                  jump_host="", forwards=[])
+    """Profile for the jump host: [user@]host[:port], connection options inherited.
+
+    Like ssh -J, the jump host only relays: it gets no agent or X11 forwarding,
+    no environment, no command and no port forwards.
+    """
+    user, host, port = parse_jump(profile.ssh.jump_host)
+    ssh = replace(profile.ssh, host=host, port=port, username=user or profile.ssh.username,
+                  jump_host="", forwards=[], agent_forwarding=False, x11_forwarding=False,
+                  env="", remote_command="")
     return replace(profile, name=f"{profile.name} (jump)", ssh=ssh)
 
 
@@ -184,7 +175,7 @@ class SSHConnection:
                 fingerprint = key.get_fingerprint()
                 if not await prompter.confirm_host_key(s.host, s.port, fingerprint, client.key_changed):
                     raise
-                remember_host_key(s.host, s.port, key)
+                await asyncio.to_thread(remember_host_key, s.host, s.port, key)
         raise asyncssh.HostKeyNotVerifiable("host key still not trusted after accepting it")
 
     async def start_forwards(self) -> list[str]:
@@ -215,7 +206,7 @@ class SSHConnection:
             s.remote_command or None,
             term_type=self.profile.terminal.term_type,
             term_size=(cols, rows),
-            env=_parse_env(s.env),
+            env=parse_env(s.env),
             x11_forwarding=s.x11_forwarding,
             stderr=asyncssh.STDOUT,
             encoding=None,

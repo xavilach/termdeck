@@ -193,3 +193,62 @@ async def test_editor_shows_advanced_and_focuses_a_cleared_advanced_number(tmp_p
         assert app.focused is editor.query_one(f"#{field}", Input)
         assert "enter a number" in str(editor.query_one("#error", Label).render())
         assert "box" not in app.store.load()
+
+
+def _record_notifications(app):
+    """Collect what the app tells the user through notify()."""
+    seen = []
+    original = app.notify
+
+    def notify(message, **kw):
+        seen.append((str(message), kw.get("severity", "information")))
+        return original(message, **kw)
+
+    app.notify = notify
+    return seen
+
+
+async def test_corrupt_profiles_file_is_reported_not_fatal(tmp_path):
+    path = tmp_path / "p.json"
+    path.write_text("{oops")
+    app = TermdeckTUI(store=ProfileStore(path))
+    seen = _record_notifications(app)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        assert any(str(path) in m and s == "error" for m, s in seen)
+        assert app.focused.id == "quick"  # starts as with no profiles
+    assert path.read_text() == "{oops"
+
+
+async def test_invalid_entries_are_reported_in_the_tui(tmp_path):
+    import json
+
+    path = tmp_path / "p.json"
+    path.write_text(json.dumps({"profiles": [
+        {"name": "good", "kind": "serial", "serial": {"device": "d"}},
+        {"name": "bad", "kind": "serial", "serial": {"device": "d", "parity": "Q"}},
+    ]}))
+    app = TermdeckTUI(store=ProfileStore(path))
+    seen = _record_notifications(app)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        assert any("bad" in m and s == "warning" for m, s in seen)
+
+
+async def test_skipped_entry_warning_is_not_repeated_after_a_reload(tmp_path):
+    import json
+
+    path = tmp_path / "p.json"
+    path.write_text(json.dumps({"profiles": [
+        {"name": "bad", "kind": "serial", "serial": {"device": "d", "parity": "Q"}},
+    ]}))
+    app = TermdeckTUI(store=ProfileStore(path))
+    seen = _record_notifications(app)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.reload_profiles()
+        app.store.add(Profile("fine", "serial", serial=SerialSettings(device="loop://")))
+        await app.reload_profiles()
+        await pilot.pause()
+        assert [m for m, s in seen if "bad" in m and s == "warning"] != []
+        assert len([m for m, s in seen if "bad" in m and s == "warning"]) == 1

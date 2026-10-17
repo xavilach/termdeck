@@ -90,7 +90,7 @@ async def test_profile_crud(client):
     assert (await client.post("/api/profiles", json=body)).status == 400  # duplicate name
     body["name"] = "board2"
     assert (await client.put("/api/profiles/board", json=body)).status == 200
-    assert [p["name"] for p in await (await client.get("/api/profiles")).json()] == ["board2"]
+    assert [p["name"] for p in (await (await client.get("/api/profiles")).json())["profiles"]] == ["board2"]
     bad = {"name": "x", "kind": "serial", "serial": {"device": "d", "parity": "Q"}}
     assert (await client.post("/api/profiles", json=bad)).status == 400
     assert (await client.delete("/api/profiles/board2")).status == 200
@@ -294,3 +294,38 @@ async def test_sftp_ticket_for_a_directory_is_a_400(client, ssh_server):
     assert r.status == 400
     assert (await r.json())["error"]
     await ws.close()
+
+
+async def test_profiles_list_reports_warnings(client, tmp_path):
+    import json
+
+    (tmp_path / "profiles.json").write_text(json.dumps({"profiles": [
+        {"name": "good", "kind": "serial", "serial": {"device": "d"}},
+        {"name": "bad", "kind": "serial", "serial": {"device": "d", "parity": "Q"}},
+    ]}))
+    await login(client)
+    body = await (await client.get("/api/profiles")).json()
+    assert [p["name"] for p in body["profiles"]] == ["good"]
+    assert len(body["warnings"]) == 1 and "bad" in body["warnings"][0]
+    (tmp_path / "profiles.json").write_text(json.dumps({"profiles": []}))
+    body = await (await client.get("/api/profiles")).json()
+    assert (body["profiles"], body["warnings"]) == ([], [])
+
+
+async def test_profiles_list_with_corrupt_file_is_200_with_error(client, tmp_path):
+    path = tmp_path / "profiles.json"
+    path.write_text("{oops")
+    await login(client)
+    r = await client.get("/api/profiles")
+    assert r.status == 200
+    body = await r.json()
+    assert body["profiles"] == [] and str(path) in body["error"]
+    assert path.read_text() == "{oops"
+
+
+async def test_quick_target_works_with_corrupt_profiles_file(client, tmp_path):
+    (tmp_path / "profiles.json").write_text("{oops")
+    await login(client)
+    r = await client.post("/api/target", json={"text": "bob@host.example"})
+    assert r.status == 200
+    assert (await r.json())["ssh"]["host"] == "host.example"

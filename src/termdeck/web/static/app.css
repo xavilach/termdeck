@@ -64,6 +64,9 @@ kbd { background: var(--panel-2); border: 1px solid var(--border); border-radius
 #quick-connect, #filter { margin: 0 12px 8px; width: auto; }
 #quick-connect input { font-family: var(--mono); font-size: 12px; }
 #profile-list { overflow-y: auto; flex: 1; padding: 4px 6px 12px; }
+.problems { margin: 0 12px 8px; padding: 8px 10px; border: 1px solid var(--danger); border-radius: 6px; font-size: 12px; overflow-wrap: anywhere; max-height: 40vh; overflow-y: auto; }
+.problems p { margin: 4px 0 0; }
+.problems summary { cursor: pointer; color: var(--danger); }
 .sidebar-footer { padding: 8px 12px; border-top: 1px solid var(--border); }
 .sidebar-footer button { width: 100%; font-size: 12px; }
 .group-title { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 10px 8px 4px; }
@@ -177,7 +180,7 @@ body:not(.show-advanced) .advanced { display: none; }
 .menu button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 6px 10px; border-radius: 4px; }
 .menu button:hover { background: var(--panel-2); }
 
-#toast { position: fixed; bottom: 36px; right: 20px; z-index: 60; background: var(--panel-2); border: 1px solid var(--border); border-left: 3px solid var(--accent); padding: 10px 14px; border-radius: 8px; max-width: 420px; box-shadow: 0 8px 24px #0006; }
+#toast { white-space: pre-line; position: fixed; bottom: 36px; right: 20px; z-index: 60; background: var(--panel-2); border: 1px solid var(--border); border-left: 3px solid var(--accent); padding: 10px 14px; border-radius: 8px; max-width: 420px; box-shadow: 0 8px 24px #0006; }
 #toast.error { border-left-color: var(--danger); }
 
 @media (max-width: 720px) {

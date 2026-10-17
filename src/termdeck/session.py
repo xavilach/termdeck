@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
-from .config import open_private
+from .config import open_private, user_path
 from .lineedit import LineEditor
 from .profiles import Profile, TerminalSettings
 
@@ -16,6 +16,26 @@ from .profiles import Profile, TerminalSettings
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
 # Output ending like this means the device waits for a secret (line editing hides it).
 _SECRET_PROMPT = re.compile(r"(pass(word|phrase)?|pin|passwort|mot de passe)[^\n]{0,20}[:>]\s*$", re.I)
+
+
+# Names Windows reserves for devices, with any extension: CON.log is still the console.
+_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"{d}{i}" for d in ("COM", "LPT") for i in [*range(10), "¹", "²", "³"])}
+
+
+def _file_part(text: str) -> str:
+    """`text` made safe as part of a file name on every platform."""
+    text = re.sub(r"[^\w.-]", "_", text).lstrip(".").rstrip(". ") or "session"
+    return f"_{text}" if text.split(".")[0].upper() in _RESERVED else text
+
+
+def log_path(template: str, profile: Profile, now: datetime | None = None) -> Path:
+    """The log file for a session: {name}, {host} and {date} replaced, anything else kept as typed."""
+    host = profile.ssh.host if profile.kind == "ssh" else profile.serial.device
+    values = {"name": profile.name, "host": host, "date": (now or datetime.now()).strftime("%Y%m%d-%H%M%S")}
+    path = template
+    for key, value in values.items():
+        path = path.replace("{" + key + "}", _file_part(value))
+    return user_path(path)
 
 
 def printable(text: str) -> str:
@@ -67,7 +87,7 @@ class TerminalSession(Session):
     character set, key mapping, local echo and logging.
     """
 
-    def __init__(self, inner: Session, settings: TerminalSettings, name: str):
+    def __init__(self, inner: Session, settings: TerminalSettings, log: Path | None = None):
         self.inner = inner
         self.title = inner.title
         self.can_break = inner.can_break
@@ -78,18 +98,21 @@ class TerminalSession(Session):
         self._pump: asyncio.Task | None = None
         self._editor = LineEditor() if settings.line_editing else None
         self._tail = ""  # end of the output, to spot password prompts
-        self._log = None
-        if settings.log_file:
-            safe_name = re.sub(r"[^\w.-]", "_", name).lstrip(".") or "session"
-            path = settings.log_file.format(name=safe_name, date=datetime.now().strftime("%Y%m%d-%H%M%S"))
-            self._log = open_private(Path(path).expanduser(), "ab")
+        # The log's folder belongs to the user: create it if needed, never change its permissions.
+        self._log = open_private(log, "ab", own_dir=False) if log else None
+        self._flush_timer: asyncio.TimerHandle | None = None
 
     async def _run_pump(self) -> None:
         try:
             while data := await self.inner.read():
                 if self._log:
-                    self._log.write(data)
-                    self._log.flush()
+                    # Buffered, and flushed within a second, so `tail -f` keeps up without a write per chunk.
+                    try:
+                        self._log.write(data)
+                    except OSError as exc:
+                        self._stop_logging(exc)
+                    if self._log and self._flush_timer is None:
+                        self._flush_timer = asyncio.get_running_loop().call_later(1, self._flush_log)
                 if not self._utf8:
                     data = self._decoder.decode(data).encode("utf-8")
                 if self._editor:
@@ -98,7 +121,25 @@ class TerminalSession(Session):
                 if data:
                     self._queue.put_nowait(data)
         finally:
+            self._flush_log()  # the session ended: its last output is on disk now
             self._queue.put_nowait(b"")
+
+    def _flush_log(self) -> None:
+        self._flush_timer = None
+        if self._log:
+            try:
+                self._log.flush()
+            except OSError as exc:
+                self._stop_logging(exc)
+
+    def _stop_logging(self, exc: OSError) -> None:
+        """Disk full, drive gone: stop logging and say so, but keep the session."""
+        try:
+            self._log.close()
+        except OSError:
+            pass
+        self._log = None
+        self._queue.put_nowait(f"\r\n[termdeck] logging stopped: {describe_error(exc)}\r\n".encode())
 
     async def read(self) -> bytes:
         if self._pump is None:
@@ -140,6 +181,9 @@ class TerminalSession(Session):
         await self.inner.close()
         if self._pump:
             await asyncio.gather(self._pump, return_exceptions=True)
+        if self._flush_timer:
+            self._flush_timer.cancel()
+            self._flush_timer = None
         if self._log:
             self._log.close()
             self._log = None
@@ -194,7 +238,8 @@ async def open_session(profile: Profile, prompter: Prompter, cols: int = 80, row
     profile.validate()
     raw = await open_raw_session(profile, prompter, cols, rows)
     try:
-        return TerminalSession(raw, profile.terminal, profile.name)
+        log = log_path(profile.terminal.log_file, profile) if profile.terminal.log_file else None
+        return TerminalSession(raw, profile.terminal, log)
     except BaseException:
         await raw.close()
         raise
