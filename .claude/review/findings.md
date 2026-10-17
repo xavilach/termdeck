@@ -13,9 +13,9 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
-| P1-01 | issue | Critical | ui | web/static/index.html:92, app.js:376 | Enter in the password prompt submits the first button (Cancel): login is aborted. | Cancel is `type="button"`; form submit means OK. | S | open |
-| P1-02 | issue | Critical | ui | index.html:80, app.js:816 | Enter in any profile editor field submits as Cancel and discards the edits. | Same pattern: Enter saves, Cancel is a plain button. | S | open |
-| P1-03 | issue | High | sec, ui | app.js:395, 513-527 | Changed-host-key dialog focuses "Trust new key"; one stray Enter trusts an attacker's key. Message omits host:port. `activate()` steals focus from typing. | Focus Cancel on danger dialogs, delay enabling the danger button, show host:port. | S | open |
+| P1-01 | issue | Critical | ui | web/static/index.html:92, app.js:376 | Enter in the password prompt submits the first button (Cancel): login is aborted. | Cancel is `type="button"`; form submit means OK. | S | fixed (b782d71) |
+| P1-02 | issue | Critical | ui | index.html:80, app.js:816 | Enter in any profile editor field submits as Cancel and discards the edits. | Same pattern: Enter saves, Cancel is a plain button. | S | fixed (b782d71) |
+| P1-03 | issue | High | sec, ui | app.js:395, 513-527 | Changed-host-key dialog focuses "Trust new key"; one stray Enter trusts an attacker's key. Message omits host:port. `activate()` steals focus from typing. | Focus Cancel on danger dialogs, delay enabling the danger button, show host:port. | S | fixed (b782d71) |
 | P1-04 | issue | High | ui | ssh.py:184, session.py:33 | Host key prompt shows only the SHA256 fingerprint: no key type, no previous key, no file. | Pass algorithm and old fingerprint through the Prompter; show them in every UI. | M | open |
 | P1-05 | issue | High | ui, feat | app.js:581,600,854; tui/app.py:483-510; gui.py | Live sessions close without confirmation (tab close, Ctrl+Shift+W, TUI w/q/Ctrl+Q, window close). PuTTY WarnOnClose. | Confirm when a connected session would close, in every UI; `confirm_close=True` in the GUI. | M | open |
 | P1-06 | issue | Medium | ui | app.js:337, tui/app.py:258 | Esc/Cancel discards profile edits without asking. | Compare with a snapshot; ask "Discard changes?". | S | open |
@@ -74,7 +74,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 |---|---|---|---|---|---|---|---|---|
 | P1-50 | issue | Medium | sec | web/server.py:505 | The start token is in the browser's command line (/proc readable by other local users). | Open a private redirect file instead of the token URL. | M | open |
 | P1-51 | issue | Low | sec | ssh.py:19-40 | After accepting a changed key, the old key stays trusted (other entries, OpenSSH file); CA matches show as "unknown". | Record old key as `@revoked`; treat CA matches as changed. | M | open |
-| P1-52 | issue | Low | sec | app.js:743 | A failed download navigates the app away. | Download through an `<a download>`. | S | open |
+| P1-52 | issue | Low | sec | app.js:743 | A failed download navigates the app away. | Download through an `<a download>`. | S | fixed (b782d71) |
 | P1-53 | issue | Low | sec | tui/terminal.py:190, app.js | Pasted text containing `ESC[201~` breaks out of bracketed paste. | Strip ESC from pastes. | S | open |
 | P1-54 | improvement | Low | sec | server.py:421 | Uploads have no size or part limit. | Part count limit, 413. | S | proposed |
 | P1-55 | improvement | Low | sec | server.py:63 | Per-tab secrets never expire; no logout. | Idle expiry, logout on pagehide. | S | proposed |
@@ -100,7 +100,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-71 | issue | Low | feat | ssh.py | Auth options missing: no-trivial-auth, keyboard-interactive off, certificate file, skip auth. | `ssh.*` advanced options. | S | open |
 | P1-72 | issue | Low | feat | ssh.py | TTY modes missing. | `ssh.tty_modes`. | S | open |
 | P1-73 | issue | Low | feat | ssh.py | X11 display / auth file missing. | `ssh.x11_display`, `ssh.x11_auth_file`. | S | open |
-| P1-74 | issue | Low | feat, ui | app.js:351 | Forward rows with port 0 dropped silently; empty numbers become 0; no per-forward IPv4/IPv6. | Send null for empty fields; no silent filtering. | S | open |
+| P1-74 | issue | Low | feat, ui | app.js:351 | Forward rows with port 0 dropped silently; empty numbers become 0; no per-forward IPv4/IPv6. | Send null for empty fields; no silent filtering. | S | fixed (b782d71) |
 | P1-75 | issue | Low | feat | ssh.py | Bug workarounds (16 `Bug*` keys) not available. | asyncssh exposes none of these. | M | open |
 | P1-76 | issue | Low | feat | ssh.py | TCP keepalives, address family, logical host name, username from environment, terminal speed missing. | `ssh.*` → asyncssh `tcp_keepalive`, `family`. | S | open |
 | P1-77 | issue | Medium | feat | cli.py | Plink options `-v`, `-m`, `-s`, `-nc`, `-pwfile`, `-sshlog`, `-4/-6` missing; no event log. | `-v` to stderr, per-session event log. | M | open |
@@ -166,21 +166,21 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-130 | issue | Low | ui | app.css:179, app.js:133 | "COM" badge overflows and is used for /dev and URLs. | 32 px column, "SER". | S | open |
 | P1-131 | issue | Low | ui | index.html:15,37,53 | Full-width ＋ and emoji render as boxes or in colour. | Inline SVG icons. | S | open |
 | P1-132 | issue | Low | ui | app.js:246 | Boolean fields squeezed into half a column. | Full width. | S | open |
-| P1-133 | issue | Low | ui | index.html:79, tui/app.py:39 | macOS button order; Windows expects OK then Cancel on the right. | Right-aligned primary first. | S | open |
-| P1-134 | issue | Low | conv, ui | app.js:555 | Reconnect-on-Enter listener leaks, can reconnect twice. | Dispose in `openSocket`. | S | open |
+| P1-133 | issue | Low | ui | index.html:79, tui/app.py:39 | macOS button order; Windows expects OK then Cancel on the right. | Right-aligned primary first. | S | fixed (b782d71) |
+| P1-134 | issue | Low | conv, ui | app.js:555 | Reconnect-on-Enter listener leaks, can reconnect twice. | Dispose in `openSocket`. | S | fixed (b782d71) |
 | P1-135 | issue | Low | ui | app.js:185, tui/app.py:320 | Native `confirm()` for delete; "Copy" vs "Duplicate"; "Folder" vs `--group`. | One dialog, one term. | S | open |
 | P1-136 | issue | Low | ui | gui.py:63 | Fixed dark window background; window geometry not saved. | Theme background; save geometry. | S | open |
 | P1-137 | issue | Medium | win | gui.py:69 | WebView2 cache in roaming %APPDATA%. | `data_dir()` → %LOCALAPPDATA%. | S | open |
-| P1-138 | issue | Low | conv | app.js:289 | Dead expression. | `f[key] ?? ""`. | S | open |
+| P1-138 | issue | Low | conv | app.js:289 | Dead expression. | `f[key] ?? ""`. | S | fixed (b782d71) |
 | P1-139 | issue | Medium | win | gui.py, pyproject | "Open another window" uses `window.open` which does nothing in pywebview. | Hide it in the desktop app. | S | open |
 
 ### TUI
 
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
-| P1-140 | issue | Critical | ui | tui/app.py:212 | Number fields ignore unparsable input: clearing "22" saves port 2. | Keep raw text, parse on save with a clear error. | S | open |
+| P1-140 | issue | Critical | ui | tui/app.py:212 | Number fields ignore unparsable input: clearing "22" saves port 2. | Keep raw text, parse on save with a clear error. | S | fixed (b782d71) |
 | P1-141 | issue | High | arch | tui/terminal.py:133,225 | pyte at ~0.46 MB/s on the loop, a Style per cell: big output freezes everything. | Feed in slices, cache styles. | M | open |
-| P1-142 | issue | High | ui | tui/app.py:357 | `termdeck tui nosuch` crashes with a traceback and exits 0. | Notify and continue. | S | open |
+| P1-142 | issue | High | ui | tui/app.py:357 | `termdeck tui nosuch` crashes with a traceback and exits 0. | Notify and continue. | S | fixed (b782d71) |
 | P1-143 | issue | Medium | ui | tui/terminal.py:151 | Output scrolls back to the bottom: scrollback unreadable while a device streams. | Scroll on key only; indicator. | S | open |
 | P1-144 | issue | Medium | ui | tui/app.py:300 | Editor clipped at 80x24 (Save cut off). | Responsive width/height. | S | open |
 | P1-145 | issue | Medium | ui | tui/terminal.py | No text selection/copy in the TUI terminal. | Selection + OSC 52 copy. | M | open |
@@ -193,7 +193,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
-| P1-150 | issue | High | ui | cli.py:163, profiles.py:286 | A mistyped profile name becomes an SSH host (password may go to the wrong machine). | No bare-word SSH target; "did you mean". | S | open |
+| P1-150 | issue | High | ui | cli.py:163, profiles.py:286 | A mistyped profile name becomes an SSH host (password may go to the wrong machine). | No bare-word SSH target; "did you mean". | S | fixed (b782d71) |
 | P1-151 | issue | Medium | conv | cli.py:284 | CLI redefines defaults and choices of serial options. | Derive from the option metadata. | M | open |
 | P1-152 | issue | Medium | conv | console.py | console.py is UI code listed as core. | Document it as part of the CLI. | S | open |
 | P1-153 | issue | Medium | ui | cli.py:50 | `--set serial.baudrate=abc` error lacks the option name. | Re-raise with the key. | S | open |
@@ -249,12 +249,12 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
-| P1-210 | issue | Medium | sec | app.js hostkey prompt | Unknown-host dialog still defaulted to "Trust and connect" with no delay. | `armDelay` for every host-key prompt: Cancel focused, OK armed after 1.5 s. | S | open |
-| P1-211 | issue | Medium | sec, ui | server.py sftp_ticket, app.js download | With `<a download>`, SFTP errors were hidden in the browser's download UI. | Stat the path when the ticket is made; errors become a toast. | S | open |
-| P1-212 | issue | Low | ui | app.css | Disabled buttons looked enabled. | `button:disabled` style. | S | open |
-| P1-213 | issue | Low | ui | app.js | The arming delay also slowed every SFTP delete. | Delay only via `armDelay` (host keys). | S | open |
-| P1-214 | issue | Low | ui | app.js saveEditor | Enter pressed twice saved twice; half-filled forward rows were dropped silently. | In-flight guard; incomplete rows are reported. | S | open |
-| P1-215 | issue | Low | ui | tui/app.py | A number error didn't lead to the field (hidden when advanced). | Turn Advanced on and focus the field. | S | open |
-| P1-216 | issue | Low | conv, ui, sec | tui/app.py, app.js, cli.py | Did-you-mean only in the CLI; quick-connect messages didn't explain host:22; web didn't accept a saved name. | Core `resolve_target`/`unknown_target`; web uses `POST /api/target`. | S | open |
-| P1-217 | issue | Low | conv, ui | cli.py | `tui NAME` help outdated. | Help text. | S | open |
-| P1-218 | issue | Low | sec | app.js forwardsEditor | New forward rows showed "0" ports. | Empty for 0. | S | open |
+| P1-210 | issue | Medium | sec | app.js hostkey prompt | Unknown-host dialog still defaulted to "Trust and connect" with no delay. | `armDelay` for every host-key prompt: Cancel focused, OK armed after 1.5 s. | S | fixed (b782d71) |
+| P1-211 | issue | Medium | sec, ui | server.py sftp_ticket, app.js download | With `<a download>`, SFTP errors were hidden in the browser's download UI. | Stat the path when the ticket is made; errors become a toast. | S | fixed (b782d71) |
+| P1-212 | issue | Low | ui | app.css | Disabled buttons looked enabled. | `button:disabled` style. | S | fixed (b782d71) |
+| P1-213 | issue | Low | ui | app.js | The arming delay also slowed every SFTP delete. | Delay only via `armDelay` (host keys). | S | fixed (b782d71) |
+| P1-214 | issue | Low | ui | app.js saveEditor | Enter pressed twice saved twice; half-filled forward rows were dropped silently. | In-flight guard; incomplete rows are reported. | S | fixed (b782d71) |
+| P1-215 | issue | Low | ui | tui/app.py | A number error didn't lead to the field (hidden when advanced). | Turn Advanced on and focus the field. | S | fixed (b782d71) |
+| P1-216 | issue | Low | conv, ui, sec | tui/app.py, app.js, cli.py | Did-you-mean only in the CLI; quick-connect messages didn't explain host:22; web didn't accept a saved name. | Core `resolve_target`/`unknown_target`; web uses `POST /api/target`. | S | fixed (b782d71) |
+| P1-217 | issue | Low | conv, ui | cli.py | `tui NAME` help outdated. | Help text. | S | fixed (b782d71) |
+| P1-218 | issue | Low | sec | app.js forwardsEditor | New forward rows showed "0" ports. | Empty for 0. | S | fixed (b782d71) |
