@@ -4,6 +4,7 @@ Every option carries metadata (label, help, choices, advanced) so each UI can
 build its settings form from the same definition. See `describe_options`.
 """
 
+import difflib
 import json
 import os
 import re
@@ -299,14 +300,20 @@ def describe_options() -> dict:
 
 
 def parse_target(text: str) -> Profile | None:
-    """Unsaved profile from user@host[:port] (SSH) or DEVICE[@baud] (serial)."""
+    """Unsaved profile from user@host[:port] (SSH) or DEVICE[@baud] (serial).
+
+    A bare word is not a target: it is far more likely a mistyped profile name,
+    and connecting to it would send a password to whatever host it resolves to.
+    SSH targets need a user (bob@host), a port (host:22), or a dotted name or address.
+    """
     if m := re.match(r"^(COM\d+|/dev/\S+|\w+://\S*)(?:@(\d+))?$", text, re.I):
         p = Profile(text, "serial")
         p.serial.device = m[1]
         if m[2]:
             p.serial.baudrate = int(m[2])
         return p
-    if m := re.match(r"^(?:([^@\s]+)@)?(\[[^\]]+\]|[^:\s/]+)(?::(\d+))?$", text):
+    m = re.match(r"^(?:([^@\s]+)@)?(\[[^\]]+\]|[^:\s/]+)(?::(\d+))?$", text)
+    if m and (m[1] or m[3] or "." in m[2] or m[2].startswith("[")):
         p = Profile(text, "ssh")
         p.ssh.username = m[1] or ""
         p.ssh.host = m[2].strip("[]")
@@ -314,6 +321,31 @@ def parse_target(text: str) -> Profile | None:
             p.ssh.port = int(m[3])
         return p
     return None
+
+
+def unknown_target(text: str, names) -> str:
+    """Message for a quick-connect text that is neither a profile nor a target."""
+    message = f"{text!r} is not a profile"
+    if close := difflib.get_close_matches(text, list(names), n=1):
+        message += f"; did you mean {close[0]!r}?"
+    elif re.fullmatch(r"[\w-]+", text):
+        message += f"; for a host without a dot use {text}:22 or user@{text}"
+    else:
+        message += "; use user@host, host:port, or a serial device like COM3@9600"
+    return message
+
+
+def resolve_target(text: str, profiles: dict[str, "Profile"]) -> "Profile":
+    """A saved profile by name, else a quick target such as bob@host or COM3@9600.
+
+    Raises KeyError with a message that suggests what the user may have meant.
+    """
+    text = text.strip()
+    if text in profiles:
+        return profiles[text]
+    if profile := parse_target(text):
+        return profile
+    raise KeyError(unknown_target(text, profiles))
 
 
 class ProfileStore:

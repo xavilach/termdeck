@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 import pytest
 from aiohttp import FormData, WSMsgType
@@ -224,3 +225,72 @@ async def test_content_disposition_is_safe():
     assert "\r" not in value and "\n" not in value
     assert value.startswith('attachment; filename="r_')
     assert "filename*=UTF-8''r%C3%A9%22port.txt" in value
+
+
+async def test_target_resolves_saved_quick_and_mistyped(client):
+    await login(client)
+    r = await client.post("/api/profiles", json={"name": "router", "kind": "ssh", "ssh": {"host": "r.lan"}})
+    assert r.status == 200
+
+    saved = await (await client.post("/api/target", json={"text": "router"})).json()
+    assert saved["saved"] is True and saved["ssh"]["host"] == "r.lan"
+
+    quick = await (await client.post("/api/target", json={"text": "bob@host.example"})).json()
+    assert quick["saved"] is False
+    assert quick["ssh"]["username"] == "bob" and quick["ssh"]["host"] == "host.example"
+
+    r = await client.post("/api/target", json={"text": "routr"})
+    assert r.status == 400
+    assert "did you mean 'router'?" in (await r.json())["error"]
+
+
+async def test_sftp_ticket_for_a_missing_path_is_a_400(client, ssh_server):
+    await login(client)
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "profile": ssh_server.profile().to_dict(), "cols": 80, "rows": 24})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "hostkey")
+    await ws.send_json({"type": "answer", "id": m["id"], "value": True})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "prompt")
+    await ws.send_json({"type": "answer", "id": m["id"], "value": "secret"})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "connected")
+    sid = m["session"]
+
+    r = await client.post(f"/api/sessions/{sid}/sftp/ticket", json={"path": "/nope"})
+    assert r.status == 400
+    assert (await r.json())["error"]
+    (ssh_server.root / "there").write_bytes(b"x")
+    assert (await client.post(f"/api/sessions/{sid}/sftp/ticket", json={"path": "/there"})).status == 200
+    await ws.close()
+
+
+async def _sftp_session(client, ssh_server):
+    await login(client)
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "profile": ssh_server.profile().to_dict(), "cols": 80, "rows": 24})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "hostkey")
+    await ws.send_json({"type": "answer", "id": m["id"], "value": True})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "prompt")
+    await ws.send_json({"type": "answer", "id": m["id"], "value": "secret"})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "connected")
+    return ws, m["session"]
+
+
+@pytest.mark.skipif(not hasattr(os, "geteuid") or os.geteuid() == 0, reason="root can read any file")
+async def test_sftp_ticket_for_an_unreadable_file_is_a_400(client, ssh_server):
+    ws, sid = await _sftp_session(client, ssh_server)
+    secret = ssh_server.root / "secret"
+    secret.write_bytes(b"x")
+    secret.chmod(0)
+    r = await client.post(f"/api/sessions/{sid}/sftp/ticket", json={"path": "/secret"})
+    assert r.status == 400
+    assert (await r.json())["error"]
+    await ws.close()
+
+
+async def test_sftp_ticket_for_a_directory_is_a_400(client, ssh_server):
+    ws, sid = await _sftp_session(client, ssh_server)
+    (ssh_server.root / "dir").mkdir()
+    r = await client.post(f"/api/sessions/{sid}/sftp/ticket", json={"path": "/dir"})
+    assert r.status == 400
+    assert (await r.json())["error"]
+    await ws.close()

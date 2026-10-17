@@ -15,7 +15,7 @@ from textual.widgets import (
     Button, Footer, Input, Label, ListItem, ListView, Select, Static, Switch, TabbedContent, TabPane, TextArea,
 )
 
-from ..profiles import Profile, ProfileStore, describe_options, parse_forward, parse_target
+from ..profiles import Profile, ProfileStore, describe_options, parse_forward, resolve_target
 from ..serialport import update_identity
 from .terminal import TerminalView
 
@@ -118,6 +118,14 @@ def text_to_forwards(text: str) -> list:
     return out
 
 
+class FieldError(ValueError):
+    """A value the editor could not read, with the widget to send the user to."""
+
+    def __init__(self, widget_id: str, advanced: bool, message: str):
+        super().__init__(message)
+        self.widget_id, self.advanced = widget_id, advanced
+
+
 class ProfileEditor(ModalScreen[Profile | None]):
     """Form built from describe_options(); shows only the selected type's options."""
 
@@ -211,15 +219,25 @@ class ProfileEditor(ModalScreen[Profile | None]):
 
     @on(Input.Changed)
     def input_changed(self, event: Input.Changed) -> None:
-        options = {f"{s}--{o['key']}": o for s, opts in self.options.items() for o in opts}
-        option = options.get(event.input.id)
-        value = event.value
-        if option and option["type"] in ("int", "float"):
-            try:
-                value = int(value) if option["type"] == "int" else float(value)
-            except ValueError:
-                return
-        self._store(event.input.id, value)
+        # Numbers are kept as typed and parsed on save, so a cleared or half-typed
+        # field is reported instead of saving whatever parsed last.
+        self._store(event.input.id, event.value)
+
+    def _numbers(self, section: str, values: dict) -> dict:
+        values = dict(values)
+        for o in self.options[section]:
+            text = values.get(o["key"])
+            if o["type"] in ("int", "float") and isinstance(text, str):
+                try:
+                    values[o["key"]] = int(text) if o["type"] == "int" else float(text)
+                except ValueError:
+                    raise FieldError(f"{section}--{o['key']}", o["advanced"], f"{o['label']}: enter a number") from None
+        return values
+
+    def _show_field(self, exc: "FieldError") -> None:
+        if exc.advanced:
+            self.query_one("#advanced", Switch).value = True
+        self.query_one(f"#{exc.widget_id}").focus()
 
     @on(Select.Changed)
     def select_changed(self, event: Select.Changed) -> None:
@@ -241,7 +259,8 @@ class ProfileEditor(ModalScreen[Profile | None]):
         v = self.values
         try:
             data = {"name": v["name"].strip(), "kind": v["kind"], "group": v["group"].strip(),
-                    v["kind"]: dict(v[v["kind"]]), "terminal": v["terminal"]}
+                    v["kind"]: self._numbers(v["kind"], v[v["kind"]]),
+                    "terminal": self._numbers("terminal", v["terminal"])}
             if v["kind"] == "ssh":
                 data["ssh"]["forwards"] = [asdict(f) for f in text_to_forwards(data["ssh"].pop("forwards_text"))]
             profile = Profile.from_dict(data)
@@ -252,6 +271,8 @@ class ProfileEditor(ModalScreen[Profile | None]):
             self.store.save(profile, replace=self.original)
         except (ValueError, TypeError) as exc:
             self.query_one("#error", Label).update(Text(str(exc), style="red"))
+            if isinstance(exc, FieldError):
+                self._show_field(exc)
             return
         self.dismiss(profile)
 
@@ -327,7 +348,7 @@ class TermdeckTUI(App, inherit_bindings=False):
         Binding("ctrl+q", "quit_anywhere", "Quit", show=False),
     ]
 
-    def __init__(self, start_profile: str | None = None, store: ProfileStore | None = None):
+    def __init__(self, start_profile: Profile | None = None, store: ProfileStore | None = None):
         super().__init__()
         self.store = store or ProfileStore()
         self.start_profile = start_profile
@@ -354,7 +375,7 @@ class TermdeckTUI(App, inherit_bindings=False):
     async def on_mount(self) -> None:
         await self.reload_profiles()
         if self.start_profile:
-            self.open_tab(self.store.get(self.start_profile))
+            self.open_tab(self.start_profile)
         elif self.store.load():
             self.query_one("#profiles").focus()
         else:
@@ -385,9 +406,12 @@ class TermdeckTUI(App, inherit_bindings=False):
 
     @on(Input.Submitted, "#quick")
     def quick_connect(self, event: Input.Submitted) -> None:
-        profile = parse_target(event.value.strip())
-        if profile is None:
-            self.notify("Use user@host:port, or a serial device like COM3@9600", severity="error")
+        if not event.value.strip():
+            return
+        try:
+            profile = resolve_target(event.value, self.store.load())
+        except KeyError as exc:
+            self.notify(exc.args[0], severity="error", markup=False)
             return
         event.input.value = ""
         self.open_tab(profile)
@@ -519,5 +543,5 @@ class TermdeckTUI(App, inherit_bindings=False):
         return True
 
 
-def run(start_profile: str | None = None) -> None:
+def run(start_profile: Profile | None = None) -> None:
     TermdeckTUI(start_profile).run()

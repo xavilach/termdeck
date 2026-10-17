@@ -122,3 +122,74 @@ async def test_markup_in_remote_and_profile_text_is_shown_literally(tmp_path):
         assert app.query(TerminalView)
         labels = " ".join(str(item.query_one(Label).render()) for item in app.query("ProfileItem"))
         assert "[RED]shown trail\\" in labels and "[/x] evil" in labels
+
+
+async def test_editor_reports_a_cleared_number_and_saves_a_typed_one(tmp_path):
+    store = _store(tmp_path)
+    app = TermdeckTUI(store=store)
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.press("n")
+        await pilot.pause()
+        editor = app.screen
+        editor.query_one("#profile--name", Input).value = "box"
+        editor.query_one("#ssh--host", Input).value = "box.example"
+        port = editor.query_one("#ssh--port", Input)
+        port.value = ""
+        await pilot.pause()
+        await pilot.click("#save")
+        await pilot.pause(0.3)
+        assert app.screen is editor
+        assert "Port: enter a number" in str(editor.query_one("#error", Label).render())
+        assert "box" not in store.load()
+        port.value = "2222"
+        await pilot.pause()
+        await pilot.click("#save")
+        await pilot.pause(0.3)
+        assert store.get("box").ssh.port == 2222
+        assert isinstance(store.get("box").ssh.port, int)
+
+
+async def test_quick_connect_with_a_mistyped_name_suggests_and_opens_no_tab(tmp_path):
+    app = TermdeckTUI(store=_store(tmp_path))
+    notes = []
+    app.notify = lambda message, **kw: notes.append((str(message), kw.get("severity")))
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.query_one("#quick", Input).focus()
+        await pilot.press(*"lop", "enter")
+        await pilot.pause(0.2)
+        assert any("did you mean 'loop'?" in m and sev == "error" for m, sev in notes)
+        assert not app.query(TerminalView)
+
+
+async def test_empty_quick_connect_does_nothing(tmp_path):
+    app = TermdeckTUI(store=_store(tmp_path))
+    notes = []
+    app.notify = lambda message, **kw: notes.append(str(message))
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.query_one("#quick", Input).focus()
+        await pilot.press("enter")
+        await pilot.press(*"  ", "enter")
+        await pilot.pause(0.2)
+        assert notes == []
+        assert not app.query(TerminalView)
+
+
+@pytest.mark.parametrize("field", ["ssh--keepalive", "ssh--connect_timeout"])
+async def test_editor_shows_advanced_and_focuses_a_cleared_advanced_number(tmp_path, field):
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.press("n")
+        await pilot.pause()
+        editor = app.screen
+        editor.query_one("#advanced", Switch).value = False
+        editor.query_one("#profile--name", Input).value = "box"
+        editor.query_one("#ssh--host", Input).value = "box.example"
+        editor.query_one(f"#{field}", Input).value = ""
+        await pilot.pause()
+        await pilot.click("#save")
+        await pilot.pause(0.3)
+        assert app.screen is editor
+        assert editor.query_one("#advanced", Switch).value is True
+        assert app.focused is editor.query_one(f"#{field}", Input)
+        assert "enter a number" in str(editor.query_one("#error", Label).render())
+        assert "box" not in app.store.load()

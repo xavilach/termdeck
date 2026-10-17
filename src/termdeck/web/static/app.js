@@ -289,11 +289,12 @@ function forwardsEditor(forwards) {
           const node = el("input", {
             type, placeholder, spellcheck: "false", disabled: f.kind === "dynamic" && key.startsWith("dest"),
             oninput: () => {
-              f[key] = type === "number" ? Number(node.value) : node.value;
+              // An empty number stays empty (null): 0 is a real port ("any free port").
+              f[key] = type !== "number" ? node.value : node.value === "" ? null : Number(node.value);
               warning.hidden = isLoopback(f.listen_host);
             },
           });
-          node.value = f[key] || (type === "number" ? "" : "");
+          node.value = f[key] ?? "";
           return node;
         };
         const kind = el("select", { onchange: () => { f.kind = kind.value; render(); } },
@@ -310,7 +311,7 @@ function forwardsEditor(forwards) {
       el("div", {},
         el("button", {
           type: "button",
-          onclick: () => { forwards.push({ kind: "local", listen_host: "localhost", listen_port: 0, dest_host: "", dest_port: 0 }); render(); },
+          onclick: () => { forwards.push({ kind: "local", listen_host: "localhost", listen_port: null, dest_host: "", dest_port: null }); render(); },
         }, "＋ Add forward")),
     );
   };
@@ -348,14 +349,24 @@ function profilePayload(v) {
   const payload = { name: v.name.trim(), kind: v.kind, group: v.group.trim(), terminal: v.terminal };
   payload[v.kind] = v[v.kind];
   if (v.kind === "ssh") {
-    payload.ssh = { ...v.ssh, forwards: v.ssh.forwards.filter((f) => f.listen_port) };
+    // Rows nobody filled in are dropped; half-filled ones are reported, never lost silently.
+    const forwards = v.ssh.forwards.filter((f) => f.listen_port != null || f.dest_host || f.dest_port != null);
+    forwards.forEach((f, i) => {
+      if (f.listen_port == null) throw new Error(`Port forward ${i + 1}: enter the listen port`);
+      if (f.kind === "dynamic") Object.assign(f, { dest_host: "", dest_port: 0 });
+      else if (f.dest_port == null) throw new Error(`Port forward ${i + 1}: enter the destination port`);
+    });
+    payload.ssh = { ...v.ssh, forwards };
   }
   return payload;
 }
 
 async function saveEditor(connectAfter) {
-  const payload = profilePayload(editing.values);
+  const buttons = [$("#editor-save"), $("#editor-save-connect")];
+  if (buttons[0].disabled) return;  // a save is already running (Enter pressed twice)
+  buttons.forEach((b) => { b.disabled = true; });
   try {
+    const payload = profilePayload(editing.values);
     const saved = editing.original === null
       ? await api("POST", "/api/profiles", payload)
       : await api("PUT", `/api/profiles/${encodeURIComponent(editing.original)}`, payload);
@@ -366,14 +377,19 @@ async function saveEditor(connectAfter) {
     const box = $("#editor-error");
     box.textContent = e.message;
     box.hidden = false;
+  } finally {
+    buttons.forEach((b) => { b.disabled = false; });
   }
 }
 
 // ---------- prompts (password, host key) ----------
 
 let promptQueue = Promise.resolve();
+let armTimer;
 
-function prompt({ title, body, input, okLabel = "OK", danger = false }) {
+// `danger` styles OK as destructive and focuses Cancel. `armDelay` also keeps OK
+// disabled for a moment, for prompts that can pop up while the user is typing.
+function prompt({ title, body, input, okLabel = "OK", danger = false, armDelay = false }) {
   const run = () => new Promise((resolve) => {
     const dialog = $("#prompt");
     $("#prompt-title").textContent = title;
@@ -385,6 +401,9 @@ function prompt({ title, body, input, okLabel = "OK", danger = false }) {
     const ok = $("#prompt-ok");
     ok.textContent = okLabel;
     ok.className = danger ? "danger" : "primary";
+    ok.disabled = armDelay;
+    clearTimeout(armTimer);
+    if (armDelay) armTimer = setTimeout(() => { ok.disabled = false; }, 1500);
     dialog.onclose = () => {
       const accepted = dialog.returnValue === "ok";
       resolve(accepted ? (field ? field.value : true) : (field ? null : false));
@@ -392,7 +411,7 @@ function prompt({ title, body, input, okLabel = "OK", danger = false }) {
     };
     dialog.returnValue = "";
     dialog.showModal();
-    (field || ok).focus();
+    (field || (danger || armDelay ? $("#prompt-cancel") : ok)).focus();
   });
   const result = promptQueue.then(run);
   promptQueue = result.catch(() => {});
@@ -400,25 +419,6 @@ function prompt({ title, body, input, okLabel = "OK", danger = false }) {
 }
 
 // ---------- tabs and terminals ----------
-
-function parseQuick(text) {
-  const serial = text.match(/^(COM\d+|\/dev\/\S+|\w+:\/\/\S*)(?:@(\d+))?$/i);
-  if (serial) {
-    const p = blankProfile("serial");
-    p.name = text;
-    p.serial.device = serial[1];
-    if (serial[2]) p.serial.baudrate = Number(serial[2]);
-    return p;
-  }
-  const ssh = text.match(/^(?:([^@\s]+)@)?(\[[^\]]+\]|[^:\s]+)(?::(\d+))?$/);
-  if (!ssh) return null;
-  const p = blankProfile("ssh");
-  p.name = text;
-  p.ssh.username = ssh[1] || "";
-  p.ssh.host = ssh[2].replace(/^\[|\]$/g, "");
-  if (ssh[3]) p.ssh.port = Number(ssh[3]);
-  return p;
-}
 
 function connect(profile, { saved = true } = {}) {
   const tab = {
@@ -493,6 +493,8 @@ function send(tab, message) {
 function openSocket(tab) {
   setStatus(tab, "connecting");
   tab.overlay?.remove();
+  tab.reconnectKey?.dispose();
+  tab.reconnectKey = null;
   tab.fit.fit();
   const ws = new WebSocket(`ws://${location.host}/api/terminal`, ["termdeck", `auth.${secret}`]);
   ws.binaryType = "arraybuffer";
@@ -517,13 +519,14 @@ function openSocket(tab) {
       activate(tab);
       const body = [
         m.changed
-          ? el("p", { class: "warning" }, "WARNING: the host key has changed. This can mean someone is intercepting the connection, or that the server was reinstalled.")
+          ? el("p", { class: "warning" }, `WARNING: the host key of ${m.host}:${m.port} has changed. This can mean someone is intercepting the connection, or that the server was reinstalled.`)
           : el("p", {}, `The server ${m.host}:${m.port} is not known yet. Check its key fingerprint before trusting it.`),
         el("div", { class: "fingerprint" }, m.fingerprint),
       ];
       const trusted = await prompt({
         title: m.changed ? "Host key changed" : "Unknown host", body,
         okLabel: m.changed ? "Trust new key" : "Trust and connect", danger: m.changed,
+        armDelay: true,  // a host key prompt can open while the user types in a terminal
       });
       send(tab, { type: "answer", id: m.id, value: trusted });
     } else if (m.type === "connected") {
@@ -552,8 +555,8 @@ function showReconnect(tab, message) {
     el("button", { class: "primary", onclick: () => openSocket(tab) }, "Reconnect"),
     el("button", { onclick: () => closeTab(tab) }, "Close tab"));
   tab.container.append(tab.overlay);
-  const onKey = tab.term.onKey(({ domEvent }) => {
-    if (tab.status === "closed" && domEvent.key === "Enter") { onKey.dispose(); openSocket(tab); }
+  tab.reconnectKey = tab.term.onKey(({ domEvent }) => {
+    if (tab.status === "closed" && domEvent.key === "Enter") openSocket(tab);
   });
 }
 
@@ -740,7 +743,9 @@ function fileRow(tab, entry) {
 async function download(tab, path) {
   try {
     const { url } = await api("POST", sftpUrl(tab, "/ticket"), { path });
-    window.location.href = url;  // single-use link, no secret in the download history
+    // Single-use link, no secret in the download history. An <a download> never
+    // navigates the app away, even when the server answers with an error.
+    el("a", { href: url, download: "" }).click();
   } catch (e) { toast(e.message, true); }
 }
 
@@ -798,13 +803,17 @@ function bindEvents() {
     } catch (e) { toast(e.message, true); }
   };
   $("#filter").oninput = renderProfiles;
-  $("#quick-connect").onsubmit = (e) => {
+  $("#quick-connect").onsubmit = async (e) => {
     e.preventDefault();
-    const text = $("#quick-input").value.trim();
-    const profile = parseQuick(text);
-    if (!profile) { toast("Use user@host:port, or a serial device like COM3@9600", true); return; }
-    connect(profile, { saved: false });
-    $("#quick-input").value = "";
+    const form = e.currentTarget;
+    if (!$("#quick-input").value.trim() || form.dataset.busy) return;
+    form.dataset.busy = "1";  // Enter pressed twice must not open two sessions
+    try {
+      // The server applies the core rules: a saved name, bob@host, host:22, COM3@9600...
+      const profile = await api("POST", "/api/target", { text: $("#quick-input").value });
+      connect(profile, { saved: profile.saved });
+      $("#quick-input").value = "";
+    } catch (err) { toast(err.message, true); } finally { delete form.dataset.busy; }
   };
 
   $("#advanced-toggle").checked = store.get("advanced", false);
@@ -813,6 +822,9 @@ function bindEvents() {
     document.body.classList.toggle("show-advanced", e.target.checked);
     store.set("advanced", e.target.checked);
   };
+  for (const button of document.querySelectorAll("dialog [data-close]")) {
+    button.onclick = () => button.closest("dialog").close(button.dataset.close);
+  }
   $("#editor-form").onsubmit = (e) => {
     const action = e.submitter?.value;
     if (action === "save" || action === "connect") {

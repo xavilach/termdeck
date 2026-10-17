@@ -40,6 +40,8 @@ button, .btn {
   padding: 4px 10px; cursor: pointer; white-space: nowrap;
 }
 button:hover, .btn:hover { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button:disabled:hover { border-color: var(--border); }
 button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 button.danger { color: var(--danger); }
 input, select, textarea {

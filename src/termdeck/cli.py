@@ -10,7 +10,7 @@ from dataclasses import fields
 from pathlib import PurePosixPath
 
 from . import __version__
-from .profiles import Profile, ProfileStore, SerialSettings, SSHSettings, parse_forward, parse_target
+from .profiles import Profile, ProfileStore, SerialSettings, SSHSettings, parse_forward, resolve_target
 from .session import describe_error, open_session
 
 
@@ -162,12 +162,7 @@ async def _ssh_connect(name: str, store: ProfileStore):
 
 def resolve_profile(target: str, store: ProfileStore) -> Profile:
     """A saved profile by name, else a quick target such as user@host or COM3@9600."""
-    profiles = store.load()
-    if target in profiles:
-        return profiles[target]
-    if profile := parse_target(target):
-        return profile
-    raise KeyError(f"no profile named {target!r}, and it is not user@host or a serial device")
+    return resolve_target(target, store.load())
 
 
 async def cmd_connect(args, store: ProfileStore) -> int:
@@ -239,7 +234,8 @@ def cmd_gui(args, store: ProfileStore) -> int:
 def cmd_tui(args, store: ProfileStore) -> int:
     from .tui.app import run
 
-    run(args.name)
+    # Resolved before the UI starts, so a typo is a plain error with a non-zero exit.
+    run(resolve_profile(args.name, store) if args.name else None)
     return 0
 
 
@@ -256,7 +252,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.set_defaults(func=cmd_tui, name=None)
 
     p = sub.add_parser("tui", help="interactive full-screen terminal UI (the default)")
-    p.add_argument("name", nargs="?", help="profile to connect to at start")
+    p.add_argument("name", nargs="?", help="profile name, user@host[:port], or DEVICE[@baud] to open at start")
     p.set_defaults(func=cmd_tui)
     p = sub.add_parser("connect", help="session in this terminal, like ssh (Ctrl+] q quits)")
     p.add_argument("target", help="profile name, user@host[:port], or DEVICE[@baud]")

@@ -120,3 +120,34 @@ def test_escape_aliases_from_extended_keyboard_modes():
     f = EscapeFilter()
     assert f.feed(b"\x1b[93;5uq") == (b"", ["quit"])
     assert f.feed(b"\x1b[27;5;93~b") == (b"", ["break"])
+
+
+def test_tui_with_unknown_profile_fails_before_starting_the_ui(monkeypatch, capsys):
+    monkeypatch.setattr("termdeck.tui.app.run", lambda *a: pytest.fail("the UI must not start"))
+    assert run(capsys, "add", "ssh", "web", "example.com")[0] == 0
+    code, out, err = run(capsys, "tui", "nosuch")
+    assert code == 2 and out == "" and "'nosuch' is not a profile" in err and "did you mean" not in err
+    code, _, err = run(capsys, "tui", "wbe")
+    assert code == 2 and "did you mean 'web'?" in err
+
+
+def test_tui_with_saved_profile_passes_the_profile(monkeypatch, capsys):
+    started = []
+    monkeypatch.setattr("termdeck.tui.app.run", lambda profile: started.append(profile))
+    run(capsys, "add", "ssh", "web", "example.com")
+    assert run(capsys, "tui", "web")[0] == 0
+    assert started[0].name == "web"
+
+
+async def test_connect_with_mistyped_profile_name_never_prompts(monkeypatch, capsys):
+    async def no_session(*a, **k):
+        pytest.fail("must not connect or prompt for a password")
+
+    monkeypatch.setattr(cli, "open_session", no_session)
+    monkeypatch.setattr(cli, "ConsolePrompter", lambda *a: pytest.fail("must not prompt"))
+    store = ProfileStore()
+    store.save(cli.Profile("web", "ssh", ssh=cli.SSHSettings(host="example.com")))
+    # main() uses asyncio.run, so call the pieces it uses
+    args = cli.build_parser().parse_args(["connect", "wbe"])
+    with pytest.raises(KeyError, match="did you mean 'web'"):
+        await cli.cmd_connect(args, store)

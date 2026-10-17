@@ -142,7 +142,8 @@ def test_options_declare_their_connection_kinds():
 
 @pytest.mark.parametrize("text, kind, attrs", [
     ("bob@host:2222", "ssh", {"username": "bob", "host": "host", "port": 2222}),
-    ("host", "ssh", {"username": "", "host": "host", "port": 22}),
+    ("host.example", "ssh", {"username": "", "host": "host.example", "port": 22}),
+    ("host:22", "ssh", {"username": "", "host": "host", "port": 22}),
     ("[::1]:2200", "ssh", {"host": "::1", "port": 2200}),
     ("COM3@9600", "serial", {"device": "COM3", "baudrate": 9600}),
     ("/dev/ttyUSB0", "serial", {"device": "/dev/ttyUSB0", "baudrate": 115200}),
@@ -162,6 +163,7 @@ def test_parse_target_rejects_garbage():
     from termdeck.profiles import parse_target
 
     assert parse_target("not a target") is None
+    assert parse_target("router") is None  # a bare word is a mistyped profile name, not a host
 
 
 def test_files_are_private(tmp_path):
@@ -239,3 +241,58 @@ def test_mistyped_profile_does_not_break_loading(tmp_path):
                                              {"name": "ok", "kind": "serial", "serial": {"device": "d"}}]}))
     store = ProfileStore(path)
     assert list(store.load()) == ["ok"] and len(store.invalid) == 1
+
+
+@pytest.mark.parametrize("text, is_ssh", [
+    ("router", False), ("bob@router", True), ("router:22", True), ("router.lan", True),
+])
+def test_parse_target_bare_word_is_not_a_host(text, is_ssh):
+    from termdeck.profiles import parse_target
+
+    profile = parse_target(text)
+    assert (profile is not None and profile.kind == "ssh") == is_ssh
+
+
+def test_resolve_target_saved_name_wins_over_quick_target():
+    from termdeck.profiles import resolve_target
+
+    saved = Profile("bob@host.example", "serial", serial=SerialSettings(device="loop://"))
+    profiles = {saved.name: saved}
+    assert resolve_target("bob@host.example", profiles) is saved
+    assert resolve_target("  bob@host.example ", profiles) is saved  # whitespace is ignored
+
+
+def test_resolve_target_parses_quick_targets():
+    from termdeck.profiles import resolve_target
+
+    ssh = resolve_target("bob@host.example:2200", {})
+    assert (ssh.kind, ssh.ssh.username, ssh.ssh.host, ssh.ssh.port) == ("ssh", "bob", "host.example", 2200)
+    serial = resolve_target("COM3@9600", {})
+    assert (serial.kind, serial.serial.device, serial.serial.baudrate) == ("serial", "COM3", 9600)
+
+
+def test_resolve_target_suggests_a_close_profile_name():
+    from termdeck.profiles import resolve_target
+
+    profiles = {"web": Profile("web", "ssh"), "router": Profile("router", "ssh")}
+    with pytest.raises(KeyError) as exc:
+        resolve_target("wev", profiles)
+    assert "did you mean 'web'?" in exc.value.args[0]
+
+
+def test_resolve_target_bare_word_without_a_match_explains_how_to_connect():
+    from termdeck.profiles import resolve_target
+
+    with pytest.raises(KeyError) as exc:
+        resolve_target("zzzzqq", {"web": Profile("web", "ssh")})
+    message = exc.value.args[0]
+    assert "zzzzqq:22 or user@zzzzqq" in message and "did you mean" not in message
+
+
+def test_resolve_target_garbage_gets_generic_help():
+    from termdeck.profiles import resolve_target
+
+    with pytest.raises(KeyError) as exc:
+        resolve_target("a b", {"web": Profile("web", "ssh")})
+    message = exc.value.args[0]
+    assert "user@host" in message and "COM3@9600" in message and "did you mean" not in message

@@ -77,10 +77,11 @@
     <div id="editor-body"></div>
     <p id="editor-error" class="error" hidden></p>
     <footer>
-      <button value="cancel" formnovalidate>Cancel</button>
       <span class="spacer"></span>
-      <button id="editor-save-connect" value="connect">Save &amp; connect</button>
+      <!-- The first submit button is the default: Enter in a field saves. -->
       <button id="editor-save" value="save" class="primary">Save</button>
+      <button id="editor-save-connect" value="connect">Save &amp; connect</button>
+      <button type="button" data-close="cancel">Cancel</button>
     </footer>
   </form>
 </dialog>
@@ -90,9 +91,9 @@
     <h2 id="prompt-title"></h2>
     <div id="prompt-body"></div>
     <footer>
-      <button value="cancel">Cancel</button>
       <span class="spacer"></span>
       <button value="ok" class="primary" id="prompt-ok">OK</button>
+      <button type="button" data-close="cancel" id="prompt-cancel">Cancel</button>
     </footer>
   </form>
 </dialog>

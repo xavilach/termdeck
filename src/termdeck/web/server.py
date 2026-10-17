@@ -26,7 +26,9 @@ from pathlib import Path, PurePosixPath
 import asyncssh
 from aiohttp import web
 
-from ..profiles import Profile, ProfileStore, SerialSettings, SSHSettings, TerminalSettings, describe_options
+from ..profiles import (
+    Profile, ProfileStore, SerialSettings, SSHSettings, TerminalSettings, describe_options, resolve_target,
+)
 from ..serialport import available_ports, update_identity
 from ..session import Session, describe_error, open_session
 
@@ -236,6 +238,17 @@ async def delete_profile(request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
+async def quick_target(request: web.Request) -> web.Response:
+    """Resolve quick-connect text with the core rules: a saved name or an unsaved profile."""
+    text = str((await request.json())["text"])
+    profiles = request.app[store_key].load()
+    try:
+        profile = resolve_target(text, profiles)
+    except KeyError as exc:
+        return _json_error(400, exc.args[0])
+    return web.json_response({**profile.to_dict(), "summary": profile.summary(), "saved": text.strip() in profiles})
+
+
 async def serial_ports(request: web.Request) -> web.Response:
     return web.json_response(await asyncio.to_thread(available_ports))
 
@@ -387,8 +400,17 @@ def _content_disposition(name: str) -> str:
 
 async def sftp_ticket(request: web.Request) -> web.Response:
     """Single-use download URL, so the browser can download without holding a secret."""
-    await _sftp(request)  # 404 now rather than at download time
+    sftp = await _sftp(request)  # 404 now rather than at download time
     path = str((await request.json())["path"])
+    try:
+        # Open it now so errors (missing, permission denied, a directory) become a
+        # message here: the browser's download UI would hide them.
+        async with await sftp.open(path, "rb"):
+            pass
+    except asyncssh.SFTPError as exc:
+        return _json_error(400, exc.reason)
+    except (asyncssh.Error, OSError) as exc:
+        return _json_error(400, describe_error(exc))
     ticket = request.app[auth_key].new_ticket(request.match_info["sid"], path)
     return web.json_response({"url": f"/api/download/{ticket}"})
 
@@ -476,6 +498,7 @@ def create_app(store: ProfileStore | None = None, token: str | None = None) -> w
     app.router.add_put("/api/profiles/{name}", save_profile)
     app.router.add_delete("/api/profiles/{name}", delete_profile)
     app.router.add_get("/api/serial-ports", serial_ports)
+    app.router.add_post("/api/target", quick_target)
     app.router.add_get("/api/terminal", terminal)
     app.router.add_get("/api/sessions/{sid}/sftp", sftp_list)
     app.router.add_post("/api/sessions/{sid}/sftp/ticket", sftp_ticket)
