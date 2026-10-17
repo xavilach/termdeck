@@ -26,22 +26,22 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
-| P1-10 | issue | High | feat, sec | config.py:21-35, session.py:85 | Opening a log file chmods its existing parent folder to 0700 (home, shared folders; fails on /tmp). | Only tighten termdeck's own folders; create missing log folders 0700, never chmod existing ones. | S | open |
-| P1-11 | issue | High | conv, feat, sec, win | session.py:84, profiles.py:153 | `log_file` uses `str.format`: `{x}` or a stray brace validates, then crashes the connection with a bare `'x'`. Windows reserved names (`con`, `nul`) not handled. | Substitute placeholders explicitly, validate in `Profile.validate`, sanitise reserved names. | S | open |
-| P1-12 | issue | High | conv, ui | profiles.py:328; all UIs | Profiles that fail validation vanish from every UI with no message. | Core helper; CLI prints warnings, TUI notifies, web shows them. | M | open |
-| P1-13 | issue | High | arch, ui | profiles.py:335, tui/app.py:355 | Corrupt profiles.json crashes the TUI and the CLI message has no path. | Raise a clear error with path and line; TUI starts with an error banner. | S | open |
-| P1-14 | issue | High | arch | profiles.py:346 | Duplicate profile names: the earlier entry is silently deleted on the next save. | Keep later duplicates as invalid entries ("duplicate name"). | S | open |
-| P1-15 | issue | High | arch | profiles.py:355, web/server.py:221, tui/app.py:248 | Create-vs-overwrite check is done by each UI and races; concurrent writers lose changes. | `store.create()` / `store.update()` in the core, with a cross-process file lock. | M | open |
-| P1-16 | issue | Medium | arch, sec | ssh.py:31-40, profiles.py:374 | known_hosts rewritten in place (not atomic); `os.replace` fails on Windows when the target is open. | `config.atomic_write` with retry on Windows; use for profiles and known_hosts. | S | open |
-| P1-17 | issue | Medium | conv, feat, ui | profiles.py:244-262 | Baud 0, font size 0, huge scrollback, names with newlines are accepted. | `min=`/`max=` in `option()`, exported to forms; reject control chars in name/group. | S | open |
-| P1-18 | issue | Medium | sec | profiles.py:182, ssh.py:113 | Jump host is validated on a different string than the one used: known_hosts injection possible; `h:notaport` crashes. | One `parse_jump()` used by both; validate host and port. | S | open |
-| P1-19 | issue | Medium | sec | ssh.py:120 | Agent and X11 forwarding, env and remote command are copied to the jump host. | Clear them in `jump_profile`. | S | open |
-| P1-20 | issue | Low | arch | ssh.py:100-122 | `env` parsed only at connect time. | Parse in `Profile.validate`. | S | open |
-| P1-21 | issue | Low | feat | profiles.py:19, 282 | Options in ssh/serial sections claim `kinds=("ssh","serial")`. | Derive `kinds` from the section in `describe_options`. | S | open |
-| P1-22 | issue | Medium | conv | cli.py:63 | `set` can write the hidden `usb_id`. | Exclude hidden options. | S | open |
-| P1-23 | improvement | Low | arch | profiles.py:373 | profiles.json has no format version. | Write `"version": 1`; refuse newer versions. | S | open |
-| P1-24 | issue | Medium | win | profiles.py:303, serialport.py:90-116 | COM names not normalised: `com3` never matches `COM3`; `\\.\COM10` parses as an SSH host. | Normalise on validation; accept `\\.\COMn` in quick targets. | S | open |
-| P1-25 | issue | Low | sec | profiles.py:127, serialport.py:157 | Any pyserial URL is accepted (`spy://` logs keystrokes to a file). | Allow a short list of URL schemes. | S | open |
+| P1-10 | issue | High | feat, sec | config.py:21-35, session.py:85 | Opening a log file chmods its existing parent folder to 0700 (home, shared folders; fails on /tmp). | Only tighten termdeck's own folders; create missing log folders 0700, never chmod existing ones. | S | fixed (a33c0b9) |
+| P1-11 | issue | High | conv, feat, sec, win | session.py:84, profiles.py:153 | `log_file` uses `str.format`: `{x}` or a stray brace validates, then crashes the connection with a bare `'x'`. Windows reserved names (`con`, `nul`) not handled. | Substitute placeholders explicitly, validate in `Profile.validate`, sanitise reserved names. | S | fixed (a33c0b9) |
+| P1-12 | issue | High | conv, ui | profiles.py:328; all UIs | Profiles that fail validation vanish from every UI with no message. | Core helper; CLI prints warnings, TUI notifies, web shows them. | M | fixed (a33c0b9) |
+| P1-13 | issue | High | arch, ui | profiles.py:335, tui/app.py:355 | Corrupt profiles.json crashes the TUI and the CLI message has no path. | Raise a clear error with path and line; TUI starts with an error banner. | S | fixed (a33c0b9) |
+| P1-14 | issue | High | arch | profiles.py:346 | Duplicate profile names: the earlier entry is silently deleted on the next save. | Keep later duplicates as invalid entries ("duplicate name"). | S | fixed (a33c0b9) |
+| P1-15 | issue | High | arch | profiles.py:355, web/server.py:221, tui/app.py:248 | Create-vs-overwrite check is done by each UI and races; concurrent writers lose changes. | `store.create()` / `store.update()` in the core, with a cross-process file lock. | M | fixed (a33c0b9) |
+| P1-16 | issue | Medium | arch, sec | ssh.py:31-40, profiles.py:374 | known_hosts rewritten in place (not atomic); `os.replace` fails on Windows when the target is open. | `config.atomic_write` with retry on Windows; use for profiles and known_hosts. | S | needs Windows (fixed in a33c0b9: save profiles from two termdeck processes at once; open profiles.json in another program while saving; check LF endings) |
+| P1-17 | issue | Medium | conv, feat, ui | profiles.py:244-262 | Baud 0, font size 0, huge scrollback, names with newlines are accepted. | `min=`/`max=` in `option()`, exported to forms; reject control chars in name/group. | S | fixed (a33c0b9) |
+| P1-18 | issue | Medium | sec | profiles.py:182, ssh.py:113 | Jump host is validated on a different string than the one used: known_hosts injection possible; `h:notaport` crashes. | One `parse_jump()` used by both; validate host and port. | S | fixed (a33c0b9) |
+| P1-19 | issue | Medium | sec | ssh.py:120 | Agent and X11 forwarding, env and remote command are copied to the jump host. | Clear them in `jump_profile`. | S | fixed (a33c0b9) |
+| P1-20 | issue | Low | arch | ssh.py:100-122 | `env` parsed only at connect time. | Parse in `Profile.validate`. | S | fixed (a33c0b9) |
+| P1-21 | issue | Low | feat | profiles.py:19, 282 | Options in ssh/serial sections claim `kinds=("ssh","serial")`. | Derive `kinds` from the section in `describe_options`. | S | fixed (a33c0b9) |
+| P1-22 | issue | Medium | conv | cli.py:63 | `set` can write the hidden `usb_id`. | Exclude hidden options. | S | fixed (a33c0b9) |
+| P1-23 | improvement | Low | arch | profiles.py:373 | profiles.json has no format version. | Write `"version": 1`; refuse newer versions. | S | fixed (a33c0b9) |
+| P1-24 | issue | Medium | win | profiles.py:303, serialport.py:90-116 | COM names not normalised: `com3` never matches `COM3`; `\\.\COM10` parses as an SSH host. | Normalise on validation; accept `\\.\COMn` in quick targets. | S | needs Windows (fixed in a33c0b9: com3, \\.\COM10, COM10@115200 resolve and open; redirected 'termdeck list > out.txt' with accented names) |
+| P1-25 | issue | Low | sec | profiles.py:127, serialport.py:157 | Any pyserial URL is accepted (`spy://` logs keystrokes to a file). | Allow a short list of URL schemes. | S | fixed (a33c0b9) |
 
 ### Sessions, transports, architecture
 
@@ -66,7 +66,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-46 | issue | Low | feat, arch | ssh.py:229 | Concurrent first SFTP requests open two clients. | Covered by P1-33 (lock). | S | open |
 | P1-47 | issue | Low | conv | server.py:495 | Uses private `site._server`. | `runner.addresses`. | S | open |
 | P1-48 | issue | Low | arch | tui/app.py:253 | TUI save catches only ValueError/TypeError; an OSError crashes the TUI. | Catch OSError. | S | open |
-| P1-49 | issue | Low | arch | pyproject.toml, cli.py:239 | Default command needs the `tui` extra; without it: "No module named 'textual'". | Make the TUI deps core dependencies. | S | open |
+| P1-49 | issue | Low | arch | pyproject.toml, cli.py:239 | Default command needs the `tui` extra; without it: "No module named 'textual'". | Make the TUI deps core dependencies. | S | fixed (a33c0b9) |
 
 ### SSH security and host keys
 
@@ -89,7 +89,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-60 | issue | High | feat | ssh.py | Proxy settings missing (SOCKS4/5, HTTP CONNECT, local proxy command, exclude list, proxy DNS). | `ssh.proxy_*` options; asyncssh `tunnel=` connector / `proxy_command`. | M | open |
 | P1-61 | issue | High | feat | cli.py:173, console.py:153 | Plink use impossible: `connect` refuses piped stdin, has no command argument, always exits 0, no batch mode. | Non-interactive mode, command arg, `-t/-T`, `--batch`, `-N`, remote exit status. | M | open |
 | P1-62 | issue | Medium | feat | ssh.py:43 | Expired password cannot be changed. | `password_change_requested` via the Prompter. | S | open |
-| P1-63 | issue | Low | feat | ssh.py:154 | `use_agent=False` silently disables agent forwarding. | Reject the combination in validate. | S | open |
+| P1-63 | issue | Low | feat | ssh.py:154 | `use_agent=False` silently disables agent forwarding. | Reject the combination in validate. | S | fixed (a33c0b9) |
 | P1-64 | issue | Low | feat | ssh.py:160 | Encrypted default keys skipped (password asked instead of passphrase). | Document in the key-file help. | S | open |
 | P1-65 | issue | Low | feat | ssh.py:171 | `~/.ssh/config` applied silently. | `ssh.use_ssh_config` option. | S | open |
 | P1-66 | issue | Medium | feat | ssh.py | `NoPTY` and `SshNoShell` not reachable from TUI/web (forwards-only session). | `ssh.allocate_pty`, `ssh.no_shell`. | S | open |
@@ -170,7 +170,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-134 | issue | Low | conv, ui | app.js:555 | Reconnect-on-Enter listener leaks, can reconnect twice. | Dispose in `openSocket`. | S | fixed (b782d71) |
 | P1-135 | issue | Low | ui | app.js:185, tui/app.py:320 | Native `confirm()` for delete; "Copy" vs "Duplicate"; "Folder" vs `--group`. | One dialog, one term. | S | open |
 | P1-136 | issue | Low | ui | gui.py:63 | Fixed dark window background; window geometry not saved. | Theme background; save geometry. | S | open |
-| P1-137 | issue | Medium | win | gui.py:69 | WebView2 cache in roaming %APPDATA%. | `data_dir()` → %LOCALAPPDATA%. | S | open |
+| P1-137 | issue | Medium | win | gui.py:69 | WebView2 cache in roaming %APPDATA%. | `data_dir()` → %LOCALAPPDATA%. | S | fixed (a33c0b9) |
 | P1-138 | issue | Low | conv | app.js:289 | Dead expression. | `f[key] ?? ""`. | S | fixed (b782d71) |
 | P1-139 | issue | Medium | win | gui.py, pyproject | "Open another window" uses `window.open` which does nothing in pywebview. | Hide it in the desktop app. | S | open |
 
@@ -194,26 +194,26 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
 | P1-150 | issue | High | ui | cli.py:163, profiles.py:286 | A mistyped profile name becomes an SSH host (password may go to the wrong machine). | No bare-word SSH target; "did you mean". | S | fixed (b782d71) |
-| P1-151 | issue | Medium | conv | cli.py:284 | CLI redefines defaults and choices of serial options. | Derive from the option metadata. | M | open |
+| P1-151 | issue | Medium | conv | cli.py:284 | CLI redefines defaults and choices of serial options. | Derive from the option metadata. | M | fixed (a33c0b9) |
 | P1-152 | issue | Medium | conv | console.py | console.py is UI code listed as core. | Document it as part of the CLI. | S | open |
-| P1-153 | issue | Medium | ui | cli.py:50 | `--set serial.baudrate=abc` error lacks the option name. | Re-raise with the key. | S | open |
+| P1-153 | issue | Medium | ui | cli.py:50 | `--set serial.baudrate=abc` error lacks the option name. | Re-raise with the key. | S | fixed (a33c0b9) |
 | P1-154 | issue | Medium | ui | cli.py:173, session.py:155 | `connect` silent until connected; errors lack the target. | "connecting to ..." on stderr; target in errors. | S | open |
 | P1-155 | issue | Medium | ui | ssh.py:147 | Username asked before connecting; empty answer reported as "Authentication failed". | Clear message. | S | open |
-| P1-156 | issue | Low | ui | cli.py:78 | Empty `list`/`ports` print nothing; no way to list option names. | Messages; `termdeck options`. | S | open |
+| P1-156 | issue | Low | ui | cli.py:78 | Empty `list`/`ports` print nothing; no way to list option names. | Messages; `termdeck options`. | S | fixed (a33c0b9) |
 | P1-157 | issue | Medium | win | console.py:87-110 | Console mode return values unchecked; handles truncated without argtypes; stdout not checked. | Check, declare argtypes, require a console. | S | open |
 | P1-158 | issue | Medium | win, arch | console.py:107, 137 | Windows stdin reader thread never stops (eats a key after quit); `call_soon_threadsafe` on a closed loop. | Cancellable read; guard the call. | M | open |
 | P1-159 | issue | Medium | win | console.py:165 | UTF-8 split across writes renders as U+FFFD on conhost. | Hold back partial sequences. | S | open |
 | P1-160 | issue | Medium | win | console.py:87 | Console code page/mode not restored on hard exit or Ctrl+Break. | atexit restore, ignore SIGBREAK. | S | open |
 | P1-161 | issue | Medium | win | console.py:112, cli.py:149 | `shutil.get_terminal_size` uses COLUMNS/LINES first. | `os.get_terminal_size`. | S | open |
-| P1-162 | issue | Low | win | cli.py | Redirected output on Windows uses the ANSI code page: UnicodeEncodeError. | Reconfigure stdout/stderr to UTF-8. | S | open |
+| P1-162 | issue | Low | win | cli.py | Redirected output on Windows uses the ANSI code page: UnicodeEncodeError. | Reconfigure stdout/stderr to UTF-8. | S | needs Windows (fixed in a33c0b9: com3, \\.\COM10, COM10@115200 resolve and open; redirected 'termdeck list > out.txt' with accented names) |
 
 ### Windows platform
 
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
 | P1-170 | issue | Medium | win, sec | config.py:21-36 | chmod is a no-op on Windows: files outside the profile keep inherited ACLs. | Owner-only ACL on Windows. | M | open |
-| P1-171 | improvement | Low | win | ssh.py:84 | Paths: quotes from "Copy as path", `%VAR%` not expanded. | Strip quotes, expandvars. | S | open |
-| P1-172 | improvement | Low | win | ssh.py:35 | known_hosts written with CRLF on Windows. | `newline="\n"`. | S | open |
+| P1-171 | improvement | Low | win | ssh.py:84 | Paths: quotes from "Copy as path", `%VAR%` not expanded. | Strip quotes, expandvars. | S | needs Windows (fixed in a33c0b9: log with {name}=con/nul/COM1; key and log paths pasted with quotes or %USERPROFILE%) |
+| P1-172 | improvement | Low | win | ssh.py:35 | known_hosts written with CRLF on Windows. | `newline="\n"`. | S | fixed (a33c0b9) |
 | P1-173 | improvement | Low | win | ssh.py:158 | No message when the Windows agent pipe is missing. | Document; notice. | S | proposed |
 | P1-174 | improvement | Low | win | gui.py, pyproject | No app icon/AppUserModelID; no gui-script; DPI awareness. | Icon, `gui-scripts`. | M | proposed |
 | P1-175 | improvement | Medium | feat, win | | No Windows installer or frozen build. | PyInstaller/MSIX build. | L | proposed |
@@ -259,24 +259,24 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-217 | issue | Low | conv, ui | cli.py | `tui NAME` help outdated. | Help text. | S | fixed (b782d71) |
 | P1-218 | issue | Low | sec | app.js forwardsEditor | New forward rows showed "0" ports. | Empty for 0. | S | fixed (b782d71) |
 | P1-220 | issue | Low | win | gui.py | Old WebView2 cache in %APPDATA% orphaned after moving to %LOCALAPPDATA%. | — | S | won't fix (new app: no existing installs to migrate) |
-| P1-221 | issue | Low | win | config.py file_lock | Windows lock could wait 30 s and the comment said 10 s. | One LK_LOCK call (~10 s); store calls run in threads. | S | open |
-| P1-222 | issue | Low | win | session.py | Superscript COM¹/LPT¹ device names not reserved. | Added. | S | open |
-| P1-223 | issue | Major | ui, feat | server.py list_profiles, app.js | Corrupt profiles.json broke the web UI start; missing #profile-problems element. | Return `error` with 200; persistent sidebar notice. | S | open |
-| P1-224 | issue | Major | ui | cli.py resolve_profile | Corrupt profiles.json blocked CLI quick connect. | Warn and continue with no profiles. | S | open |
-| P1-225 | issue | Minor | ui | profiles.py, cli.py | A skipped profile could not be repaired or removed from the CLI. | `get_raw` for `set`; `rm` removes skipped entries. | S | open |
-| P1-226 | issue | Minor | ui | profiles.py update | Rename onto the name of a skipped profile allowed. | Check skipped names. | S | open |
-| P1-227 | issue | Minor | ui | tui/app.py, app.js | Skipped-profile warnings repeated on every reload; web showed them as an error toast after saves. | Notify once (TUI); sidebar details (web). | S | open |
-| P1-228 | issue | Minor | ui | cli.py, profiles.py | `--set` range/choice errors lacked the key; choices not listed; "a number" for 22.5. | Check per option; list choices; "whole number". | S | open |
-| P1-229 | issue | Minor | ui | cli.py options | `options` output showed Python reprs, no ranges, unaligned. | true/false, ranges, (empty), aligned. | S | open |
-| P1-230 | issue | Cosmetic | ui | profiles.py, cli.py | Messages didn't use form labels; duplicate warning lacked the entry; path repeated. | Reworded. | S | open |
-| P1-231 | issue | Medium | sec, feat | ssh.py, config.py | Concurrent host-key saves lost keys (shared temp file, no lock). | Lock in remember_host_key; temp name per thread. | S | open |
-| P1-232 | issue | Medium | sec | profiles.py | Store kept skipped entries on the shared object: a concurrent load during a save dropped them from the file. | Per-call state (`_read`). | S | open |
-| P1-233 | issue | Low | sec, feat | server.py, tui/app.py | Delete took the file lock on the event loop. | `asyncio.to_thread`. | S | open |
-| P1-234 | issue | Medium | sec | config.py open_private | Logs in shared folders followed symlinks / took over others' files; fchmod on existing logs. | O_NOFOLLOW, owner/regular/nlink check, chmod only new files, close on error. | S | open |
-| P1-235 | issue | Medium | sec, feat | session.py | Buffered log not flushed while idle or after the session ended. | 1 s flush timer; flush when the pump ends. | S | open |
-| P1-236 | issue | Medium | feat | profiles.py normalize_device | `\\.\` stripped from non-COM devices (com0com CNCA0) which then fail to open. | Strip only for COMn. | S | open |
-| P1-237 | issue | Medium | feat | profiles.py delete | Deleting a duplicated name resurrected the other copy. | Delete removes every entry with the name. | S | open |
-| P1-238 | issue | Low | feat | profiles.py | Bare IPv6 jump host refused; cp2110:// refused. | Accept both. | S | open |
-| P1-239 | issue | Low | conv | server.py save/delete | OSError and ProfileFileError gave bare 500s. | JSON errors. | S | open |
-| P1-240 | issue | Low | conv | config.py | open_private("w", own_dir=False) truncated before checks; atomic_write left temp files on failure; log flush errors silent. | Append-only outside own dirs; unlink temp; stop logging with a notice. | S | open |
-| P1-241 | issue | Medium | test-writer | server.py quick_target | Web quick connect failed (500) with a corrupt profiles.json. | Fall back to no profiles. | S | open |
+| P1-221 | issue | Low | win | config.py file_lock | Windows lock could wait 30 s and the comment said 10 s. | One LK_LOCK call (~10 s); store calls run in threads. | S | needs Windows (fixed in a33c0b9: save profiles from two termdeck processes at once; open profiles.json in another program while saving; check LF endings) |
+| P1-222 | issue | Low | win | session.py | Superscript COM¹/LPT¹ device names not reserved. | Added. | S | needs Windows (fixed in a33c0b9: log with {name}=con/nul/COM1; key and log paths pasted with quotes or %USERPROFILE%) |
+| P1-223 | issue | Major | ui, feat | server.py list_profiles, app.js | Corrupt profiles.json broke the web UI start; missing #profile-problems element. | Return `error` with 200; persistent sidebar notice. | S | fixed (a33c0b9) |
+| P1-224 | issue | Major | ui | cli.py resolve_profile | Corrupt profiles.json blocked CLI quick connect. | Warn and continue with no profiles. | S | fixed (a33c0b9) |
+| P1-225 | issue | Minor | ui | profiles.py, cli.py | A skipped profile could not be repaired or removed from the CLI. | `get_raw` for `set`; `rm` removes skipped entries. | S | fixed (a33c0b9) |
+| P1-226 | issue | Minor | ui | profiles.py update | Rename onto the name of a skipped profile allowed. | Check skipped names. | S | fixed (a33c0b9) |
+| P1-227 | issue | Minor | ui | tui/app.py, app.js | Skipped-profile warnings repeated on every reload; web showed them as an error toast after saves. | Notify once (TUI); sidebar details (web). | S | fixed (a33c0b9) |
+| P1-228 | issue | Minor | ui | cli.py, profiles.py | `--set` range/choice errors lacked the key; choices not listed; "a number" for 22.5. | Check per option; list choices; "whole number". | S | fixed (a33c0b9) |
+| P1-229 | issue | Minor | ui | cli.py options | `options` output showed Python reprs, no ranges, unaligned. | true/false, ranges, (empty), aligned. | S | fixed (a33c0b9) |
+| P1-230 | issue | Cosmetic | ui | profiles.py, cli.py | Messages didn't use form labels; duplicate warning lacked the entry; path repeated. | Reworded. | S | fixed (a33c0b9) |
+| P1-231 | issue | Medium | sec, feat | ssh.py, config.py | Concurrent host-key saves lost keys (shared temp file, no lock). | Lock in remember_host_key; temp name per thread. | S | fixed (a33c0b9) |
+| P1-232 | issue | Medium | sec | profiles.py | Store kept skipped entries on the shared object: a concurrent load during a save dropped them from the file. | Per-call state (`_read`). | S | fixed (a33c0b9) |
+| P1-233 | issue | Low | sec, feat | server.py, tui/app.py | Delete took the file lock on the event loop. | `asyncio.to_thread`. | S | fixed (a33c0b9) |
+| P1-234 | issue | Medium | sec | config.py open_private | Logs in shared folders followed symlinks / took over others' files; fchmod on existing logs. | O_NOFOLLOW, owner/regular/nlink check, chmod only new files, close on error. | S | fixed (a33c0b9) |
+| P1-235 | issue | Medium | sec, feat | session.py | Buffered log not flushed while idle or after the session ended. | 1 s flush timer; flush when the pump ends. | S | fixed (a33c0b9) |
+| P1-236 | issue | Medium | feat | profiles.py normalize_device | `\\.\` stripped from non-COM devices (com0com CNCA0) which then fail to open. | Strip only for COMn. | S | fixed (a33c0b9) |
+| P1-237 | issue | Medium | feat | profiles.py delete | Deleting a duplicated name resurrected the other copy. | Delete removes every entry with the name. | S | fixed (a33c0b9) |
+| P1-238 | issue | Low | feat | profiles.py | Bare IPv6 jump host refused; cp2110:// refused. | Accept both. | S | fixed (a33c0b9) |
+| P1-239 | issue | Low | conv | server.py save/delete | OSError and ProfileFileError gave bare 500s. | JSON errors. | S | fixed (a33c0b9) |
+| P1-240 | issue | Low | conv | config.py | open_private("w", own_dir=False) truncated before checks; atomic_write left temp files on failure; log flush errors silent. | Append-only outside own dirs; unlink temp; stop logging with a notice. | S | fixed (a33c0b9) |
+| P1-241 | issue | Medium | test-writer | server.py quick_target | Web quick connect failed (500) with a corrupt profiles.json. | Fall back to no profiles. | S | fixed (a33c0b9) |
