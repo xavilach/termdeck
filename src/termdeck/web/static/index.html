@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>termdeck</title>
+  <link rel="stylesheet" href="/static/vendor/xterm.css">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <header class="brand">
+      <span class="logo">▍</span><span>termdeck</span>
+      <button id="new-profile" class="icon-btn" title="New profile (Ctrl+Shift+N)">＋</button>
+    </header>
+    <form id="quick-connect" autocomplete="off">
+      <input id="quick-input" placeholder="Quick connect: user@host:port or COM3@9600" spellcheck="false">
+    </form>
+    <input id="filter" type="search" placeholder="Filter profiles" spellcheck="false">
+    <nav id="profile-list"></nav>
+    <footer class="sidebar-footer">
+      <button id="new-window" title="Open termdeck in another browser window">Open another window</button>
+    </footer>
+  </aside>
+
+  <main id="main">
+    <div id="tabbar"><div id="tabs"></div></div>
+    <div id="toolbar" hidden>
+      <span id="tb-status" class="status-pill"></span>
+      <span id="tb-summary" class="muted"></span>
+      <span class="spacer"></span>
+      <button data-action="search" title="Find (Ctrl+Shift+F)">Find</button>
+      <button data-action="sftp" title="Files (SFTP)">Files</button>
+      <button data-action="break" title="Send serial break">Break</button>
+      <button data-action="font-down" title="Smaller text">A−</button>
+      <button data-action="font-up" title="Larger text">A＋</button>
+      <button data-action="reconnect" title="Reconnect">Reconnect</button>
+    </div>
+    <div id="searchbar" hidden>
+      <input id="search-input" placeholder="Find in scrollback" spellcheck="false">
+      <button data-search="prev" title="Previous (Shift+Enter)">↑</button>
+      <button data-search="next" title="Next (Enter)">↓</button>
+      <button data-search="close" title="Close (Esc)">✕</button>
+    </div>
+    <div id="workspace">
+      <div id="terminals"></div>
+      <section id="sftp" hidden>
+        <header>
+          <input id="sftp-path" spellcheck="false">
+          <button data-sftp="up" title="Parent folder">↑</button>
+          <button data-sftp="refresh" title="Refresh">⟳</button>
+          <button data-sftp="mkdir" title="New folder">＋📁</button>
+          <label class="btn" title="Upload files">⤒<input id="sftp-upload" type="file" multiple hidden></label>
+        </header>
+        <div id="sftp-list" class="drop-zone"></div>
+        <footer id="sftp-status" class="muted"></footer>
+      </section>
+    </div>
+    <div id="welcome">
+      <h1>termdeck</h1>
+      <p class="muted">SSH and serial terminals. Pick a profile, or press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd> to create one.</p>
+      <div id="welcome-cards"></div>
+    </div>
+    <footer id="statusbar"><span id="sb-left"></span><span id="sb-right"></span></footer>
+  </main>
+</div>
+
+<dialog id="editor">
+  <form method="dialog" id="editor-form" novalidate>
+    <header>
+      <h2 id="editor-title">New profile</h2>
+      <label class="switch" title="Show every option">
+        <input type="checkbox" id="advanced-toggle"><span class="slider"></span> Advanced
+      </label>
+    </header>
+    <div id="editor-body"></div>
+    <p id="editor-error" class="error" hidden></p>
+    <footer>
+      <button value="cancel" formnovalidate>Cancel</button>
+      <span class="spacer"></span>
+      <button id="editor-save-connect" value="connect">Save &amp; connect</button>
+      <button id="editor-save" value="save" class="primary">Save</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog id="prompt">
+  <form method="dialog" id="prompt-form">
+    <h2 id="prompt-title"></h2>
+    <div id="prompt-body"></div>
+    <footer>
+      <button value="cancel">Cancel</button>
+      <span class="spacer"></span>
+      <button value="ok" class="primary" id="prompt-ok">OK</button>
+    </footer>
+  </form>
+</dialog>
+
+<div id="menu" class="menu" hidden></div>
+<div id="toast" hidden></div>
+
+<script src="/static/vendor/xterm.js"></script>
+<script src="/static/vendor/addon-fit.js"></script>
+<script src="/static/vendor/addon-web-links.js"></script>
+<script src="/static/vendor/addon-search.js"></script>
+<script src="/static/vendor/addon-unicode11.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
