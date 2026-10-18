@@ -17,6 +17,7 @@ from .config import open_private, user_path
 from .errors import ProfileError, TermdeckError
 from .lineedit import LineEditor
 from .profiles import TRANSPORTS, Profile, TerminalSettings
+from .vt import PrintableLog, PrinterCapture, RemoteFilter, initial_modes, remap_keys
 
 log = logging.getLogger(__name__)
 
@@ -149,7 +150,10 @@ class TerminalSession(Session):
     its notices go wherever `on_notice` sends them.
     """
 
-    def __init__(self, inner: Session, settings: TerminalSettings, log: Path | None = None, raw: bool = False):
+    def __init__(self, inner: Session, settings: TerminalSettings, log=None, raw: bool = False,
+                 log_header: str = "", ssh_log=None):
+        """`log` is a path, or a log already opened by open_session (with `ssh_log`, its SSH
+        packet handler, started before the connection so the handshake is logged)."""
         self.inner = inner
         self._raw = raw
         self.title = inner.title
@@ -166,12 +170,23 @@ class TerminalSession(Session):
         self._failure: str | None = None
         self._editor = LineEditor() if settings.line_editing and not raw else None
         self._tail = ""  # end of the output, to spot password prompts
-        # The log's folder belongs to the user: create it if needed, never change its permissions.
-        self._log = open_private(log, "ab", own_dir=False) if log else None
+        self._log = open_log(log, settings, log_header) if isinstance(log, Path) else log
+        self._ssh_log = ssh_log
+        self._printable = PrintableLog() if settings.log_mode == "printable" else None
         self._flush_timer: asyncio.TimerHandle | None = None
+        self._release_timer: asyncio.TimerHandle | None = None
         self._held = b""  # a CR at the end of a chunk, until we know whether LF follows
+        self._filter = RemoteFilter(settings)
+        try:
+            self._printer = open_private(user_path(settings.printer), "ab", own_dir=False) if settings.printer else None
+        except BaseException:  # nothing half set up stays behind (the log, the process-wide SSH handler)
+            self._close_files()
+            raise
+        self._print = PrinterCapture(self._printed) if self._printer else None
         if not raw:
             inner.on_notice(self._local)
+            if modes := initial_modes(settings):
+                self._local(modes)
 
     def on_notice(self, show) -> None:
         self.inner.on_notice(show)
@@ -205,6 +220,11 @@ class TerminalSession(Session):
         s = self._settings
         if not self._utf8:
             data = self._decoder.decode(data).encode("utf-8")
+        if self._print:
+            data = self._print.feed(data)
+        data = self._filter.feed(data)  # what the remote side may not do (Remote control options)
+        if self._filter.holding and self._release_timer is None:  # a cut sequence: shown soon even if nothing follows
+            self._release_timer = asyncio.get_running_loop().call_later(0.05, self._release_held)
         if s.implicit_cr or s.implicit_lf:
             data, self._held = self._held + data, b""
             if s.implicit_lf and data.endswith(b"\r"):
@@ -215,6 +235,35 @@ class TerminalSession(Session):
             pattern = {(True, True): rb"\r\n|\r|\n", (True, False): rb"\r?\n", (False, True): rb"\r\n?"}
             data = re.sub(pattern[s.implicit_cr, s.implicit_lf], b"\r\n", data)
         return data
+
+    def _release_held(self) -> None:
+        self._release_timer = None
+        if data := self._filter.flush():
+            self._local(data)
+
+    def _printed(self, data: bytes) -> None:
+        """Remote printing: into the printer file, flushed at the end of each job."""
+        if not self._printer:
+            return
+        try:
+            self._printer.write(data)
+            self._printer.flush()
+        except OSError as exc:
+            self._printer.close()
+            self._printer = None
+            self._local(f"\r\n[termdeck] printing stopped: {describe_error(exc)}\r\n".encode())
+
+    def _close_files(self) -> None:
+        if self._ssh_log:
+            _end_ssh_logging(self._ssh_log)
+            self._ssh_log = None
+        for name in ("_log", "_printer"):
+            if (file := getattr(self, name, None)) is not None:
+                try:
+                    file.close()
+                except OSError:
+                    pass
+                setattr(self, name, None)
 
     def _release_cr(self) -> None:
         if self._held:
@@ -227,7 +276,7 @@ class TerminalSession(Session):
                 if self._log:
                     # Buffered, and flushed within a second, so `tail -f` keeps up without a write per chunk.
                     try:
-                        self._log.write(data)
+                        self._log.write(self._printable.feed(data) if self._printable else data)
                     except OSError as exc:
                         self._stop_logging(exc)
                     if self._log and self._flush_timer is None:
@@ -250,6 +299,8 @@ class TerminalSession(Session):
                 log.exception("session output failed")
             self._failure = describe_error(exc)
         finally:
+            if rest := self._filter.flush():
+                self._local(rest)
             if self._held:
                 self._local(b"\r\n")  # the held CR, with its implicit LF
             self._flush_log()  # the session ended: its last output is on disk now
@@ -288,7 +339,7 @@ class TerminalSession(Session):
             data = data.replace(b"\r", ENTER[s.enter_sends])
         if s.backspace_sends == "bs":
             data = data.replace(b"\x7f", b"\x08")
-        return data
+        return remap_keys(data, s)
 
     def _encode(self, data: bytes) -> bytes:
         """UTF-8 from the UI to the profile's character set (multibyte keys may span writes)."""
@@ -325,9 +376,66 @@ class TerminalSession(Session):
         if self._flush_timer:
             self._flush_timer.cancel()
             self._flush_timer = None
-        if self._log:
-            self._log.close()
-            self._log = None
+        if self._release_timer:
+            self._release_timer.cancel()
+            self._release_timer = None
+        self._close_files()
+
+
+def hide_secrets(record) -> bool:
+    """A logging filter: asyncssh logs environment variables with their values
+    ("[chan=0]   Env: %s=%s"), which may be tokens."""
+    if isinstance(record.msg, str) and "Env: %s=%s" in record.msg and record.args:
+        record.args = (*record.args[:-1], "(hidden)")
+    return True
+
+
+class _LogHandler(logging.Handler):
+    """SSH protocol messages into the session log (log mode "SSH packets")."""
+
+    def __init__(self, log):
+        super().__init__(logging.DEBUG)
+        self._file = log
+        self.addFilter(hide_secrets)
+        self.setFormatter(logging.Formatter("%(asctime)s ssh: %(message)s"))
+
+    def emit(self, record) -> None:
+        try:
+            self._file.write((self.format(record) + "\r\n").encode("utf-8", "replace"))
+        except (OSError, ValueError):
+            pass
+
+
+_SSH_LOGS: list = []  # session logs receiving asyncssh's messages, and the level to restore after the last
+_SAVED_LEVEL: list = []
+
+
+def _ssh_logging(log):
+    """Send asyncssh's messages to a session log. asyncssh logs process-wide: while such a log is
+    open it also gets the other SSH connections of this termdeck (the option help says so)."""
+    import asyncssh
+
+    handler = _LogHandler(log)
+    logger = logging.getLogger("asyncssh")
+    if not _SSH_LOGS:
+        _SAVED_LEVEL[:] = [logger.level]
+    _SSH_LOGS.append(handler)
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+    asyncssh.set_debug_level(2)  # packets and algorithms; level 3 (raw data) could contain typed secrets
+    return handler
+
+
+def _end_ssh_logging(handler) -> None:
+    import asyncssh
+
+    logger = logging.getLogger("asyncssh")
+    logger.removeHandler(handler)
+    if handler in _SSH_LOGS:
+        _SSH_LOGS.remove(handler)
+    if not _SSH_LOGS and _SAVED_LEVEL:  # the last one: back to how logging was
+        logger.setLevel(_SAVED_LEVEL.pop())
+        asyncssh.set_debug_level(1)
 
 
 # Each transport module (TRANSPORTS, in profiles.py) provides
@@ -378,14 +486,32 @@ async def open_raw_session(profile: Profile, prompter: Prompter, cols: int, rows
     return await transport.open_session(profile, prompter, cols, rows, scripted)
 
 
+def open_log(path: Path, settings: TerminalSettings, header: str):
+    """The session log: the folder belongs to the user (created if needed, permissions left alone)."""
+    log = open_private(path, "wb" if settings.log_exists == "overwrite" else "ab", own_dir=False)
+    if settings.log_header:
+        log.write(f"=~=~=~= termdeck log {datetime.now():%Y-%m-%d %H:%M:%S} {header} =~=~=~=\r\n".encode())
+    return log
+
+
 async def open_session(profile: Profile, prompter: Prompter, cols: int = 80, rows: int = 24,
                        raw: bool = False) -> Session:
     """Connect to `profile` and return a session with its terminal settings applied (`raw`: logging only)."""
     profile.validate()
-    inner = await open_raw_session(profile, prompter, cols, rows, scripted=raw)
+    t = profile.terminal
+    # The log is opened first: the SSH packet log must see the key exchange and the login.
+    log = open_log(log_path(t.log_file, profile), t, f"{profile.name} ({profile.summary()})") if t.log_file else None
+    ssh_log = _ssh_logging(log) if log and t.log_mode == "ssh" and profile.kind == "ssh" else None
     try:
-        log = log_path(profile.terminal.log_file, profile) if profile.terminal.log_file else None
-        return TerminalSession(inner, profile.terminal, log, raw=raw)
+        inner = await open_raw_session(profile, prompter, cols, rows, scripted=raw)
+    except BaseException:
+        if ssh_log:
+            _end_ssh_logging(ssh_log)
+        if log:
+            log.close()
+        raise
+    try:
+        return TerminalSession(inner, t, log, raw=raw, ssh_log=ssh_log)
     except BaseException:
         await inner.close()
         raise

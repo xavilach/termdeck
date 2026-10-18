@@ -3,6 +3,7 @@
 import asyncio
 
 import pyte
+from pyte.graphics import FG_BG_256
 from rich.segment import Segment
 from rich.style import Style
 from textual import events
@@ -12,14 +13,10 @@ from textual.widget import Widget
 
 from ..profiles import Profile
 from ..session import Session, describe_error, open_session
+from ..themes import ANSI, palette
+from ..vt import BellLimiter, clean_paste, clean_title
 
-# Default foreground/background per profile theme. Matches the web UI themes.
-THEMES = {
-    "dark": ("#e4e7ee", "#0f1218"),
-    "light": ("#1b1f27", "#ffffff"),
-    "solarized": ("#839496", "#002b36"),
-    "dracula": ("#f8f8f2", "#282a36"),
-}
+FEED_SLICE = 16384  # output parsed between two chances for the UI to run (pyte is slow on big floods)
 
 ESCAPE_KEY = "ctrl+right_square_bracket"
 # pyte stores private modes shifted by 5 bits.
@@ -60,26 +57,47 @@ def key_to_bytes(key: str, character: str | None, app_cursor: bool = False) -> b
     return None
 
 
-def _color(name: str, bright: bool = False) -> str | None:
+# pyte gives 256-colour indices 0-15 as its own fixed hex values: they are the theme's 16 colours.
+_ANSI_HEX = dict(zip(FG_BG_256[:16], ANSI))
+
+
+def _colour(colours: dict, name: str, bright: bool = False) -> str | None:
+    """A pyte colour (a name, or hex for 256 and true colours) as hex from the profile's palette."""
     if name == "default":
         return None
     if len(name) == 6 and all(c in "0123456789abcdefABCDEF" for c in name):
-        return f"#{name}"
+        return colours.get(_ANSI_HEX.get(name.lower(), ""), f"#{name}")
+    if name.startswith("bright"):  # before brown -> yellow: pyte calls bright yellow "brightbrown"
+        name, bright = name[6:].lstrip("_"), True
     name = {"brown": "yellow"}.get(name, name)
-    if name.startswith("bright"):
-        return f"bright_{name[6:]}"
-    return f"bright_{name}" if bright else name
+    key = f"bright{name.capitalize()}" if bright else name
+    return colours.get(key) or colours.get(name)
 
 
 class _Screen(pyte.HistoryScreen):
-    """pyte screen that sends terminal replies (cursor reports, device attributes) back."""
+    """pyte screen that sends terminal replies (cursor reports, device attributes) back,
+    and reports the bell and the window title."""
 
-    def __init__(self, columns, lines, history, reply):
+    def __init__(self, columns, lines, history, reply, on_bell, on_title):
         super().__init__(columns, lines, history=history, ratio=0.5)
-        self._reply = reply
+        self._reply, self._on_bell, self._on_title = reply, on_bell, on_title
+        self.pushed = 0  # lines that went into the scrollback so far
+
+    def index(self) -> None:
+        top, bottom = self.margins or (0, self.lines - 1)
+        if self.cursor.y == bottom:  # the top line goes into the history
+            self.pushed += 1
+        super().index()
 
     def write_process_input(self, data: str) -> None:
         self._reply(data.encode())
+
+    def bell(self, *args) -> None:
+        self._on_bell()
+
+    def set_title(self, param: str) -> None:
+        super().set_title(param)
+        self._on_title(param)
 
 
 class TerminalView(Widget, can_focus=True):
@@ -98,15 +116,36 @@ class TerminalView(Widget, can_focus=True):
     class EscapePressed(Message):
         pass
 
+    class CloseRequested(Message):
+        """The session ended and the profile closes the tab then (Close tab on exit)."""
+
+        def __init__(self, view: "TerminalView"):
+            super().__init__()
+            self.view = view
+
+    class TitleChanged(Message):
+        """The remote title changed, or the bell rang in a tab not shown."""
+
+        def __init__(self, view: "TerminalView"):
+            super().__init__()
+            self.view = view
+
     def __init__(self, profile: Profile, prompter, **kwargs):
         super().__init__(**kwargs)
         self.profile = profile
         self.prompter = prompter
         self.session: Session | None = None
         self.status = "connecting"
-        fg, bg = THEMES.get(profile.terminal.theme, THEMES["dark"])
-        self._default_style = Style(color=fg, bgcolor=bg)
-        self._vt = _Screen(80, 24, profile.terminal.scrollback, self._send_nowait)
+        t = profile.terminal
+        self._colours = palette(t.theme, t.colours)
+        self._default_style = Style(color=self._colours["foreground"], bgcolor=self._colours["background"])
+        self._styles: dict[tuple, Style] = {}  # a Style per cell look, built once
+        self.remote_title = ""
+        self.bell = False  # rang while the tab was not shown
+        self._bells = BellLimiter()
+        self._flash = False
+        self._offset = 0  # lines scrolled back into the history (0: the live screen)
+        self._vt = _Screen(80, 24, t.scrollback, self._send_nowait, self._ring, self._title)
         self._vt_stream = pyte.ByteStream(self._vt)
         self._conn_task: asyncio.Task | None = None
         # Keys and terminal replies go out through one queue, in the order they were made.
@@ -121,6 +160,7 @@ class TerminalView(Widget, can_focus=True):
         self._conn_task = asyncio.create_task(self._run())
 
     async def _run(self) -> None:
+        self.remote_title, self.bell = "", False  # from an earlier connection
         self._set_status("connecting")
         cols, rows = max(self.size.width, 2), max(self.size.height, 2)
         try:
@@ -136,7 +176,9 @@ class TerminalView(Widget, can_focus=True):
         reason = None
         try:
             while data := await self.session.read():
-                self._feed(data)
+                for start in range(0, len(data), FEED_SLICE):
+                    self._feed(data[start:start + FEED_SLICE])
+                    await asyncio.sleep(0)  # a flood must not freeze the other tabs and the keyboard
             reason = self.session.end_reason
         finally:
             self._writer.cancel()
@@ -146,6 +188,9 @@ class TerminalView(Widget, can_focus=True):
             ended = f"Session ended: {reason}" if reason else "Session ended"
             self._feed(f"\r\n\x1b[33m{ended}. Press Enter to reconnect.\x1b[0m\r\n".encode())
             self._set_status("closed")
+            when = self.profile.terminal.close_on_exit
+            if when == "always" or (when == "clean" and reason is None):
+                self.post_message(self.CloseRequested(self))
 
     async def _write_loop(self, session: Session) -> None:
         while True:
@@ -171,9 +216,40 @@ class TerminalView(Widget, can_focus=True):
         self.post_message(self.StatusChanged(self, status))
 
     def _feed(self, data: bytes) -> None:
-        self._scroll_to_bottom()
+        pushed = self._vt.pushed
         self._vt_stream.feed(data)
+        if self.profile.terminal.scroll_on_output:
+            self._offset = 0
+        elif self._offset:  # keep the lines the user is reading in place
+            self._offset = min(self._offset + self._vt.pushed - pushed, len(self._vt.history.top))
         self.refresh()
+
+    def _ring(self) -> None:
+        style = self.profile.terminal.bell
+        if style == "none" or not self._bells.allow():
+            return
+        if style in ("sound", "both"):
+            self.app.bell()
+        if style in ("visual", "both"):
+            self._flash = True
+            self.refresh()
+            self.set_timer(0.15, self._unflash)
+        if not self.is_on_screen and not self.bell:
+            self.bell = True
+            self.post_message(self.TitleChanged(self))  # the tab shows the bell
+
+    def _unflash(self) -> None:
+        self._flash = False
+        self.refresh()
+
+    def _title(self, title: str) -> None:
+        if (title := clean_title(title)) != self.remote_title:
+            self.remote_title = title
+            self.post_message(self.TitleChanged(self))
+
+    @property
+    def is_on_screen(self) -> bool:
+        return self.is_mounted and self.display and self.parent is not None and self.parent.display
 
     async def send(self, data: bytes) -> None:
         self._send_nowait(data)
@@ -195,7 +271,7 @@ class TerminalView(Widget, can_focus=True):
             self.post_message(self.EscapePressed())
             return
         if event.key in ("shift+pageup", "shift+pagedown"):
-            (self._vt.prev_page if event.key == "shift+pageup" else self._vt.next_page)()
+            self._page(up=event.key == "shift+pageup")
             self.refresh()
             return
         if self.status == "closed":
@@ -205,28 +281,34 @@ class TerminalView(Widget, can_focus=True):
         app_cursor = APP_CURSOR_MODE in self._vt.mode
         data = key_to_bytes(event.key, event.character, app_cursor)
         if data:
-            self._scroll_to_bottom()
+            if self.profile.terminal.scroll_on_key:
+                self._scroll_to_bottom()
             await self.send(data)
 
     async def on_paste(self, event: events.Paste) -> None:
         event.stop()
-        data = event.text.replace("\r\n", "\r").replace("\n", "\r").encode()
+        text = clean_paste(event.text, self.profile.terminal.paste_controls)
+        data = text.replace("\r\n", "\r").replace("\n", "\r").encode()
         if BRACKETED_PASTE in self._vt.mode:
             data = b"\x1b[200~" + data + b"\x1b[201~"
         await self.send(data)
 
     def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
-        self._vt.prev_page()
+        self._page(up=True)
         self.refresh()
 
     def on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
-        self._vt.next_page()
+        self._page(up=False)
         self.refresh()
 
+    def _page(self, up: bool) -> None:
+        step = max(1, self._vt.lines // 2)
+        offset = min(self._offset + (step if up else -step), len(self._vt.history.top))
+        # Paging down close to the live screen goes all the way (new output may have moved it a little).
+        self._offset = 0 if offset < (0 if up else step // 2) else offset
+
     def _scroll_to_bottom(self) -> None:
-        history = self._vt.history
-        while history.position < history.size and history.bottom:
-            self._vt.next_page()
+        self._offset = 0
 
     # ---- size and drawing ----
 
@@ -248,22 +330,40 @@ class TerminalView(Widget, can_focus=True):
         width = self.size.width
         if y >= screen.lines:
             return Strip([Segment(" " * width, self._default_style)], width)
-        row = screen.buffer[y]
+        if self._offset and y == screen.lines - 1:  # while reading the scrollback, say so
+            note = f" Scrolled back {self._offset} lines: a key or Shift+PgDn returns ".ljust(width)[:width]
+            return Strip([Segment(note, self._default_style + Style(reverse=True))], width)
+        if self._offset:  # the history above the screen, then the screen's top lines
+            top = screen.history.top
+            index = y - self._offset
+            row = top[len(top) + index] if index < 0 else screen.buffer[index]
+        else:
+            row = screen.buffer[y]
         cursor = screen.cursor
-        show_cursor = self.has_focus and not cursor.hidden and cursor.y == y
+        show_cursor = self.has_focus and not cursor.hidden and cursor.y == y and not self._offset
+        t = self.profile.terminal
         segments = []
         for x in range(min(screen.columns, width)):
             char = row[x]
-            fg, bg = _color(char.fg, char.bold), _color(char.bg)
-            if char.reverse:
-                fg, bg = bg or self._default_style.bgcolor.name, fg or self._default_style.color.name
-            style = self._default_style + Style(
-                color=fg, bgcolor=bg, bold=char.bold, italic=char.italics,
-                underline=char.underscore, strike=char.strikethrough, blink=char.blink,
-            )
-            if show_cursor and x == cursor.x:
-                style += Style(reverse=True)
+            look = (char.fg, char.bg, char.bold, char.italics, char.underscore, char.strikethrough,
+                    char.blink and t.blink_text, char.reverse, show_cursor and x == cursor.x, self._flash)
+            if (style := self._styles.get(look)) is None:
+                if len(self._styles) > 4096:  # true-colour gradients would grow it without end
+                    self._styles.clear()
+                style = self._styles[look] = self._style(*look)
             segments.append(Segment(char.data or " ", style))
         if width > screen.columns:
             segments.append(Segment(" " * (width - screen.columns), self._default_style))
         return Strip(Segment.simplify(segments), width)
+
+    def _style(self, fg, bg, bold, italics, underscore, strike, blink, reverse, cursor, flash) -> Style:
+        t = self.profile.terminal
+        bright = bold and t.bold_style in ("colour", "both")  # PuTTY: bold as a brighter colour, a bold font, or both
+        fg, bg = _colour(self._colours, fg, bright), _colour(self._colours, bg)
+        if reverse != flash:  # a visual bell inverts the screen for a moment
+            fg, bg = bg or self._colours["background"], fg or self._colours["foreground"]
+        style = self._default_style + Style(color=fg, bgcolor=bg, bold=bold and t.bold_style != "colour",
+                                            italic=italics, underline=underscore, strike=strike, blink=blink)
+        if cursor:  # a terminal cell cannot draw a bar: underline and bar both underline
+            style += Style(reverse=True) if t.cursor_style == "block" else Style(underline=True)
+        return style

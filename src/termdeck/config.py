@@ -61,9 +61,9 @@ def open_private(path: Path, mode: str = "w", *, own_dir: bool = True):
         private_dir(path.parent)
     else:
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if not own_dir and "a" not in mode:
-        raise ValueError("files outside termdeck's folders are only opened for appending")
-    flags = os.O_WRONLY | (os.O_APPEND if "a" in mode else os.O_TRUNC) | getattr(os, "O_BINARY", 0)
+    # Outside our folders the file is emptied ("w") only after the checks below.
+    truncate = not own_dir and "a" not in mode
+    flags = os.O_WRONLY | (os.O_APPEND if "a" in mode else 0 if truncate else os.O_TRUNC) | getattr(os, "O_BINARY", 0)
     if not own_dir:
         flags |= getattr(os, "O_NOFOLLOW", 0)
     try:
@@ -78,6 +78,8 @@ def open_private(path: Path, mode: str = "w", *, own_dir: bool = True):
                     raise PermissionError(f"refusing to write to {path}: not a plain file of yours")
             if own_dir or created:
                 os.fchmod(fd, 0o600)
+        if truncate:
+            os.ftruncate(fd, 0)
         # Text files keep LF line endings on every platform, as other tools expect.
         return os.fdopen(fd, mode, **({} if "b" in mode else {"encoding": "utf-8", "newline": "\n"}))
     except BaseException:

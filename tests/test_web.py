@@ -104,6 +104,43 @@ async def test_options(client):
     assert data["defaults"]["serial"]["baudrate"] == 115200
 
 
+async def test_options_carry_the_themes(client):
+    from termdeck.themes import COLOURS, THEMES
+
+    await login(client)
+    data = await (await client.get("/api/options")).json()
+    assert data["themes"] == THEMES and "putty" in data["themes"]
+    assert all(set(colours) == set(COLOURS) for colours in data["themes"].values())
+    theme = {o["key"]: o for o in data["options"]["terminal"]}["theme"]
+    assert ["putty", "PuTTY"] in theme["choices"]
+
+
+async def test_profiles_carry_their_palette(client):
+    from termdeck.themes import THEMES
+
+    await login(client)
+    body = {"name": "board", "kind": "serial", "serial": {"device": "loop://"},
+            "terminal": {"theme": "dracula", "colours": "background=#112233\nbright_blue=#ABCDEF"}}
+    saved = await (await client.post("/api/profiles", json=body)).json()
+    expected = {**THEMES["dracula"], "background": "#112233", "brightBlue": "#abcdef"}
+    assert saved["palette"] == expected
+    [listed] = (await (await client.get("/api/profiles")).json())["profiles"]
+    assert listed["palette"] == expected
+    quick = await (await client.post("/api/target", json={"text": "board"})).json()
+    assert quick["palette"] == expected
+    other = await (await client.post("/api/target", json={"text": "bob@host.example"})).json()
+    assert other["palette"] == THEMES["dark"]
+
+
+async def test_bad_colours_are_a_400_and_nothing_is_saved(client):
+    await login(client)
+    body = {"name": "board", "kind": "serial", "serial": {"device": "loop://"},
+            "terminal": {"colours": "red=notacolour"}}
+    r = await client.post("/api/profiles", json=body)
+    assert r.status == 400 and "invalid colour" in (await r.json())["error"]
+    assert (await (await client.get("/api/profiles")).json())["profiles"] == []
+
+
 async def _receive_until(ws, predicate, timeout=5):
     async def loop():
         output = b""
@@ -576,3 +613,40 @@ async def test_sftp_json_body_that_is_not_an_object_is_a_400(client, ssh_server,
     r = await client.post(f"/api/sessions/{sid}/sftp/{route}", json=body)
     assert r.status == 400 and "error" in await r.json()
     await ws.close()
+
+
+async def test_closed_message_is_clean_only_without_a_reason(client, ssh_server, patch_port):
+    import threading
+
+    import serial
+
+    await login(client)
+    remember_host_key("127.0.0.1", ssh_server.port, ssh_server.key)
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "profile": ssh_server.profile(remote_command="uptime").to_dict()})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "prompt")
+    await ws.send_json({"type": "answer", "id": m["id"], "value": "secret"})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "closed")
+    assert m["clean"] is True
+
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "profile": ssh_server.profile(remote_command="exit3").to_dict()})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "prompt")
+    await ws.send_json({"type": "answer", "id": m["id"], "value": "secret"})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "closed")
+    assert m["clean"] is False
+
+    gone = threading.Event()
+
+    def read(real, size=1):
+        if gone.wait(0.02):
+            raise serial.SerialException("port is gone")
+        return real(size)
+
+    patch_port(read=read)
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "profile": {"name": "loop", "kind": "serial", "serial": {"device": "loop://"}}})
+    await _receive_until(ws, lambda m, _: m and m["type"] == "connected")
+    gone.set()
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "closed")
+    assert m["clean"] is False

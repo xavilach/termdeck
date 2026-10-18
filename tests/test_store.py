@@ -554,7 +554,7 @@ async def _wait_for(predicate, timeout=5.0):
 async def test_log_reaches_disk_while_session_is_idle(tmp_path):
     log = tmp_path / "s.log"
     inner = _FakeInner()
-    session = TerminalSession(inner, TerminalSettings(), log)
+    session = TerminalSession(inner, TerminalSettings(log_header=False), log)
     try:
         inner.incoming.put_nowait("héllo 世界\r\n".encode())
         assert (await session.read()).startswith("héllo".encode())
@@ -568,7 +568,7 @@ async def test_log_reaches_disk_while_session_is_idle(tmp_path):
 async def test_log_is_flushed_when_the_remote_ends(tmp_path):
     log = tmp_path / "s.log"
     inner = _FakeInner()
-    session = TerminalSession(inner, TerminalSettings(), log)
+    session = TerminalSession(inner, TerminalSettings(log_header=False), log)
     try:
         inner.incoming.put_nowait(b"last words")
         inner.incoming.put_nowait(b"")

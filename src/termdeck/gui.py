@@ -79,6 +79,24 @@ def has_webview2() -> bool:
     return False
 
 
+def desktop_functions(window) -> list:
+    """What the page may ask of the desktop window (window.pywebview.api in app.js).
+
+    Plain functions given to window.expose, not a js_api object: pywebview resolves dotted
+    names on a js_api object with getattr, private ones included, so page script could walk
+    from it to the window and on to os.system. Exposed functions are found by exact name only.
+    """
+
+    def toggle_fullscreen() -> None:
+        window.toggle_fullscreen()
+
+    def set_on_top(on: bool) -> bool:
+        window.on_top = bool(on)
+        return bool(window.on_top)
+
+    return [toggle_fullscreen, set_on_top]
+
+
 def run() -> None:
     try:
         import webview
@@ -97,6 +115,7 @@ def run() -> None:
     url = server.start() + "&desktop=1"
     window = webview.create_window("termdeck", url, width=1280, height=800, min_size=(900, 560),
                                    text_select=True, background_color="#0f1218")
+    window.expose(*desktop_functions(window))
 
     confirmed = threading.Event()
 

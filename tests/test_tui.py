@@ -256,7 +256,8 @@ async def test_skipped_entry_warning_is_not_repeated_after_a_reload(tmp_path):
 
 def _screen_text(view):
     """The screen with rows joined, so a message wrapped over two rows is still found."""
-    return "".join(line.rstrip() + " " for line in view._vt.display)
+    lines = ("".join(segment.text for segment in view.render_line(y)) for y in range(view._vt.lines))
+    return "".join(line.rstrip() + " " for line in lines)  # what the view draws, scrollback included
 
 
 async def _wait_for_screen(pilot, view, text, timeout=5.0):
@@ -308,7 +309,9 @@ async def test_ended_session_says_why(tmp_path, patch_port):
 async def test_normal_end_has_no_reason(tmp_path):
     app = TermdeckTUI(store=_store(tmp_path))
     async with app.run_test(size=(120, 40)) as pilot:
-        app.open_tab(app.store.get("loop"))
+        profile = app.store.get("loop")
+        profile.terminal.close_on_exit = "never"  # the default closes the tab on a clean end
+        app.open_tab(profile)
         await pilot.pause(0.5)
         view = app.query_one(TerminalView)
         await view.session.close()
@@ -407,3 +410,289 @@ async def test_editor_shows_the_jump_command_only_with_a_jump_host(tmp_path):
         editor.query_one("#ssh--jump_host", Input).value = ""
         await pilot.pause()
         assert field.has_class("unused")
+
+
+# ---- terminal options: bell, title, scrolling, closing, colours, cursor, paste ----
+
+def _loop_profile(**terminal):
+    profile = Profile("loop", "serial", serial=SerialSettings(device="loop://"))
+    for key, value in terminal.items():
+        setattr(profile.terminal, key, value)
+    return profile
+
+
+async def _open(app, pilot, profile=None):
+    app.open_tab(profile or app.store.get("loop"))
+    await pilot.pause(0.3)
+    view = app.query_one(TerminalView) if len(app.query(TerminalView)) == 1 else list(app.query(TerminalView))[-1]
+    assert view.status == "connected"
+    return view
+
+
+async def _until(pilot, condition, timeout=5.0):
+    async def poll():
+        while not condition():
+            await pilot.pause(0.02)
+
+    await asyncio.wait_for(poll(), timeout)
+
+
+def _tab_label(app, view):
+    return str(app.query_one("#tabs").get_tab(view.parent.id).label)
+
+
+async def test_visual_bell_flashes_then_clears(tmp_path):
+    app = TermdeckTUI(store=_store(tmp_path))
+    rung = []
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot, _loop_profile(bell="visual"))
+        app.bell = lambda: rung.append(1)
+        await view.send(b"\x07")
+        await _until(pilot, lambda: view._flash)
+        await _until(pilot, lambda: not view._flash)
+        assert rung == []
+
+
+async def test_sound_bell_beeps_without_flashing(tmp_path):
+    app = TermdeckTUI(store=_store(tmp_path))
+    rung = []
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot, _loop_profile(bell="sound"))
+        app.bell = lambda: rung.append(1)
+        await view.send(b"\x07")
+        await _until(pilot, lambda: rung)
+        assert not view._flash
+
+
+async def test_no_bell_does_nothing(tmp_path):
+    app = TermdeckTUI(store=_store(tmp_path))
+    rung = []
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot, _loop_profile(bell="none"))
+        app.bell = lambda: rung.append(1)
+        await view.send(b"\x07x")
+        await _wait_for_screen(pilot, view, "x")
+        assert rung == [] and not view._flash and not view.bell
+
+
+async def test_bell_in_a_hidden_tab_marks_its_label_until_activated(tmp_path):
+    from textual.widgets import TabbedContent
+
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        first = await _open(app, pilot, _loop_profile(bell="visual"))
+        second = await _open(app, pilot, _loop_profile(bell="visual"))
+        tabs = app.query_one("#tabs", TabbedContent)
+        assert tabs.active == second.parent.id
+        await first.send(b"\x07")
+        await _until(pilot, lambda: " !" in _tab_label(app, first))
+        assert " !" not in _tab_label(app, second)
+        tabs.active = first.parent.id
+        await _until(pilot, lambda: " !" not in _tab_label(app, first))
+        assert not first.bell
+
+
+async def test_bell_in_the_shown_tab_does_not_mark_it(tmp_path):
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot, _loop_profile(bell="visual"))
+        await view.send(b"\x07")
+        await _until(pilot, lambda: view._flash)
+        assert " !" not in _tab_label(app, view)
+
+
+async def test_remote_title_shows_in_the_tab_label_and_is_not_markup(tmp_path):
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot, _loop_profile())
+        await view.send(b"\x1b]2;user@host: [bold]~/src\x07")
+        await _until(pilot, lambda: "~/src" in _tab_label(app, view))
+        assert "loop: user@host: [bold]~/src" in _tab_label(app, view)
+
+
+async def _fill_scrollback(app, pilot, **terminal):
+    view = await _open(app, pilot, _loop_profile(bell="sound", **terminal))
+    await view.send(b"".join(b"line%03d\r\n" % i for i in range(120)))
+    await _wait_for_screen(pilot, view, "line119")
+    return view
+
+
+async def _processed(app, pilot, view):
+    """Wait until what was sent before has been drawn: a bell sent after it rings."""
+    rung = []
+    app.bell = lambda: rung.append(1)
+    await view.send(b"\x07")
+    await _until(pilot, lambda: rung)
+
+
+@pytest.mark.parametrize("scroll_on_output", [False, True])
+async def test_scroll_on_output(tmp_path, scroll_on_output):
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _fill_scrollback(app, pilot, scroll_on_output=scroll_on_output)
+        await pilot.press("shift+pageup")
+        assert "line119" not in _screen_text(view)
+        await view.send(b"newer output\r\n")
+        await _processed(app, pilot, view)
+        if scroll_on_output:
+            assert "newer output" in _screen_text(view)
+        else:
+            assert "newer output" not in _screen_text(view) and "line119" not in _screen_text(view)
+            await pilot.press("shift+pagedown")
+            assert "newer output" in _screen_text(view)
+
+
+@pytest.mark.parametrize("on_key", [True, False])
+async def test_scroll_on_key_returns_to_the_bottom_unless_turned_off(tmp_path, on_key):
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _fill_scrollback(app, pilot, scroll_on_key=on_key)
+        await pilot.press("shift+pageup")
+        await pilot.press("z")
+        await _processed(app, pilot, view)
+        assert ("line119" in _screen_text(view)) == on_key
+
+
+async def test_close_on_exit_never_keeps_the_tab_after_a_clean_end(tmp_path):
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot, _loop_profile(close_on_exit="never"))
+        await view.session.close()
+        await _wait_for_screen(pilot, view, "Session ended")
+        await pilot.pause(0.3)
+        assert app.query(TerminalView) and view.status == "closed"
+
+
+@pytest.mark.parametrize("when", ["clean", "always"])
+async def test_close_on_exit_closes_the_tab_after_a_clean_end(tmp_path, when):
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot, _loop_profile(close_on_exit=when))
+        await view.session.close()
+        await _until(pilot, lambda: not app.query(TerminalView))
+
+
+def _pull_the_cable(patch_port):
+    import threading
+
+    import serial
+
+    gone = threading.Event()
+
+    def read(real, size=1):
+        if gone.wait(0.02):
+            raise serial.SerialException("cable pulled")
+        return real(size)
+
+    patch_port(read=read)
+    return gone
+
+
+@pytest.mark.parametrize("when, closes", [("never", False), ("clean", False), ("always", True)])
+async def test_close_on_exit_after_an_error_end(tmp_path, patch_port, when, closes):
+    gone = _pull_the_cable(patch_port)
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot, _loop_profile(close_on_exit=when))
+        gone.set()
+        if closes:
+            await _until(pilot, lambda: not app.query(TerminalView))
+        else:
+            await _wait_for_screen(pilot, view, "Session ended: ")  # the reason stays readable
+            await pilot.pause(0.3)
+            assert app.query(TerminalView) and view.status == "closed"
+
+
+async def _cell_style(view, text):
+    """The style of the first cell showing `text` in the view's first rendered rows."""
+    for y in range(view._vt.lines):
+        x = view._vt.display[y].find(text)
+        if x >= 0:
+            offset = 0
+            for segment in view.render_line(y):
+                if offset <= x < offset + len(segment.text):
+                    return segment.style
+                offset += len(segment.text)
+    raise AssertionError(f"{text!r} is not on the screen")
+
+
+@pytest.mark.parametrize("theme, red", [("dark", "#cd0000"), ("dracula", "#ff5555"), ("putty", "#bb0000")])
+async def test_palette_colours_a_red_sgr_as_the_themes_red(tmp_path, theme, red):
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot, _loop_profile(theme=theme))
+        await view.send(b"\x1b[31mRED\x1b[0m plain")
+        await _wait_for_screen(pilot, view, "plain")
+        style = await _cell_style(view, "RED")
+        assert style.color.get_truecolor().hex == red
+        plain = await _cell_style(view, "plain")
+        assert plain.color.get_truecolor().hex != red
+
+
+async def test_colour_overrides_apply_to_the_tui(tmp_path):
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot, _loop_profile(colours="red=#123456\nbackground=#010203"))
+        await view.send(b"\x1b[31mRED\x1b[0m")
+        await _wait_for_screen(pilot, view, "RED")
+        assert (await _cell_style(view, "RED")).color.get_truecolor().hex == "#123456"
+        assert (await _cell_style(view, "RED")).bgcolor.get_truecolor().hex == "#010203"
+
+
+async def _cursor_style(view):
+    cursor = view._vt.cursor
+    offset = 0
+    for segment in view.render_line(cursor.y):
+        if offset <= cursor.x < offset + len(segment.text):
+            return segment.style
+        offset += len(segment.text)
+
+
+@pytest.mark.parametrize("cursor_style, reverse, underline", [("block", True, False), ("underline", False, True),
+                                                              ("bar", False, True)])
+async def test_cursor_style_renders_in_the_cursor_cell(tmp_path, cursor_style, reverse, underline):
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot, _loop_profile(cursor_style=cursor_style))
+        await view.send(b"ab")
+        await _wait_for_screen(pilot, view, "ab")
+        assert app.focused is view
+        style = await _cursor_style(view)
+        assert bool(style.reverse) is reverse and bool(style.underline) is underline
+
+
+async def test_paste_cannot_end_a_bracketed_paste_early(tmp_path):
+    from textual import events
+
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot, _loop_profile(local_echo=False))
+        sent = []
+        real = view.session.write
+
+        async def record(data):
+            sent.append(data)
+            await real(data)
+
+        view.session.write = record
+        await view.on_paste(events.Paste("ok\x1b[201~rm -rf /\ttab\nnext"))
+        await _until(pilot, lambda: sent)
+        assert b"\x1b" not in b"".join(sent)
+        assert b"".join(sent) == b"ok[201~rm -rf /\ttab\rnext"
+
+
+async def test_paste_keeps_controls_when_the_profile_allows_it(tmp_path):
+    from textual import events
+
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot, _loop_profile(paste_controls=True))
+        sent = []
+
+        async def record(data):
+            sent.append(data)
+
+        view.session.write = record
+        await view.on_paste(events.Paste("a\x1bb"))
+        await _until(pilot, lambda: sent)
+        assert sent == [b"a\x1bb"]

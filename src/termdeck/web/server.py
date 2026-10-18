@@ -33,6 +33,7 @@ from ..serialport import available_ports
 from ..errors import SFTPFailure
 from ..session import HostKey, Session, describe_error, open_session
 from ..sftp import SFTP, join as sftp_join
+from ..themes import THEMES, palette
 
 STATIC = Path(__file__).parent / "static"
 AUTH_HEADER = "X-Termdeck-Auth"
@@ -222,7 +223,13 @@ async def get_options(request: web.Request) -> web.Response:
         "serial": asdict(SerialSettings()),
         "terminal": asdict(TerminalSettings()),
     }
-    return web.json_response({"options": describe_options(), "defaults": defaults})
+    return web.json_response({"options": describe_options(), "defaults": defaults, "themes": THEMES})
+
+
+def _described(profile: Profile) -> dict:
+    """A profile for the page, with what the core works out for it (summary, colours)."""
+    t = profile.terminal
+    return {**profile.to_dict(), "summary": profile.summary(), "palette": palette(t.theme, t.colours)}
 
 
 async def list_profiles(request: web.Request) -> web.Response:
@@ -233,7 +240,7 @@ async def list_profiles(request: web.Request) -> web.Response:
     except ProfileFileError as exc:  # the page still works for quick connect
         return web.json_response({"profiles": [], "warnings": [], "error": str(exc)})
     return web.json_response({
-        "profiles": [{**p.to_dict(), "summary": p.summary()} for p in profiles],
+        "profiles": [_described(p) for p in profiles],
         "warnings": store.warnings(),
         "path": str(store.path),
     })
@@ -256,7 +263,7 @@ async def save_profile(request: web.Request) -> web.Response:
         return _json_error(400, str(exc))
     except OSError as exc:
         return _json_error(500, f"could not save: {describe_error(exc)}")
-    return web.json_response({**profile.to_dict(), "summary": profile.summary()})
+    return web.json_response(_described(profile))
 
 
 async def delete_profile(request: web.Request) -> web.Response:
@@ -282,7 +289,7 @@ async def quick_target(request: web.Request) -> web.Response:
         profile = resolve_target(text, profiles)
     except KeyError as exc:
         return _json_error(400, exc.args[0])
-    return web.json_response({**profile.to_dict(), "summary": profile.summary(), "saved": text.strip() in profiles})
+    return web.json_response({**_described(profile), "saved": text.strip() in profiles})
 
 
 async def serial_ports(request: web.Request) -> web.Response:
@@ -382,7 +389,8 @@ async def terminal(request: web.Request) -> web.WebSocketResponse:
         await asyncio.wait({reader, output}, return_when=asyncio.FIRST_COMPLETED)
         if output.done() and not ws.closed:
             reason = session.end_reason
-            await ws.send_json({"type": "closed", "message": f"Session ended: {reason}" if reason else "Session ended"})
+            await ws.send_json({"type": "closed", "message": f"Session ended: {reason}" if reason else "Session ended",
+                                "clean": reason is None})  # for "Close tab on exit: only on clean exit"
         output.cancel()
         await asyncio.gather(output, return_exceptions=True)
     finally:

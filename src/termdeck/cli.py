@@ -19,7 +19,7 @@ from .profiles import (
     Profile, ProfileFileError, ProfileStore, SerialSettings, SSHSettings, check_option, describe_options, option_fields,
     parse_forward, parse_target, resolve_target,
 )
-from .session import HostKey, describe_error, is_expected, open_session, printable
+from .session import HostKey, describe_error, hide_secrets, is_expected, open_session, printable
 from .sftp import WILDCARDS
 
 
@@ -396,26 +396,18 @@ def _setup_logging(args) -> None:
     if args.verbose:
         handler = logging.StreamHandler(sys.stderr)
         handler.setFormatter(logging.Formatter("termdeck: %(name)s: %(message)s"))
-        handler.addFilter(_hide_env_values)
+        handler.addFilter(hide_secrets)
         logging.getLogger().addHandler(handler)
         logging.getLogger().setLevel(logging.DEBUG if args.verbose > 1 else logging.INFO)
     if args.ssh_log:
         handler = logging.StreamHandler(open_private(user_path(args.ssh_log), "a", own_dir=False))
         handler.setFormatter(logging.Formatter("%(asctime)s %(name)s: %(message)s"))
         handler.setLevel(logging.DEBUG)
-        handler.addFilter(_hide_env_values)
+        handler.addFilter(hide_secrets)
         logging.getLogger("asyncssh").addHandler(handler)
         logging.getLogger("asyncssh").setLevel(logging.DEBUG)
     if args.verbose > 1 or args.ssh_log:
         asyncssh.set_debug_level(2)  # packets and algorithms; level 3 (raw data) could show typed secrets
-
-
-def _hide_env_values(record) -> bool:
-    """asyncssh logs environment variables with their values ("[chan=0]   Env: %s=%s"), which may be tokens.
-    A handler filter: it must see records of every asyncssh child logger."""
-    if isinstance(record.msg, str) and "Env: %s=%s" in record.msg and record.args:
-        record.args = (*record.args[:-1], "(hidden)")
-    return True
 
 
 async def cmd_connect(args, store: ProfileStore) -> int:

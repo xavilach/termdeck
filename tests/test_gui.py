@@ -25,7 +25,7 @@ def test_run_opens_window_and_stops_server(monkeypatch):
             self.append(handler)
             return self
 
-    window = types.SimpleNamespace(events=types.SimpleNamespace(closing=Event()))
+    window = types.SimpleNamespace(events=types.SimpleNamespace(closing=Event()), expose=lambda *functions: None)
     fake = types.SimpleNamespace(
         create_window=lambda title, url, **kw: calls.update(title=title, url=url, window=kw) or window,
         start=lambda **kw: calls.update(start=kw),
@@ -50,7 +50,8 @@ class _Event(list):  # pywebview events take handlers with +=
 def _fake_webview(calls, answer=True):
     window = types.SimpleNamespace(
         events=types.SimpleNamespace(closing=_Event()),
-        create_confirmation_dialog=lambda title, text: calls.update(asked=(title, text)) or answer)
+        create_confirmation_dialog=lambda title, text: calls.update(asked=(title, text)) or answer,
+        expose=lambda *functions: None)
     return types.SimpleNamespace(create_window=lambda *a, **kw: window, start=lambda **kw: None,
                                  settings={}), window
 
@@ -136,3 +137,47 @@ def test_closing_elsewhere_asks_from_a_thread_then_closes(monkeypatch):
     assert closing() is False  # the window stays while the question is asked
     assert destroyed.wait(5)  # the user said yes: closed from the helper thread
     assert closing() is True  # and the close that follows is not asked again
+
+
+class _Window:
+    on_top = False
+
+    def __init__(self):
+        self.toggled = 0
+
+    def toggle_fullscreen(self):
+        self.toggled += 1
+
+
+def test_desktop_functions_toggle_fullscreen_and_pin_the_window():
+    class Window:
+        on_top = False
+        toggled = 0
+
+        def toggle_fullscreen(self):
+            self.toggled += 1
+
+    window = Window()
+    toggle_fullscreen, set_on_top = gui.desktop_functions(window)
+    toggle_fullscreen()
+    toggle_fullscreen()
+    assert window.toggled == 2
+    assert set_on_top(True) is True and window.on_top is True
+    assert set_on_top(0) is False and window.on_top is False
+
+
+def test_run_exposes_functions_not_an_object(monkeypatch):
+    """No js_api object: pywebview would let page script walk its attributes (even private ones)."""
+    calls = {}
+    fake, window = _fake_webview(calls)
+    window.toggle_fullscreen = lambda: calls.update(toggled=True)
+    window.expose = lambda *functions: calls.update(exposed=functions)
+    fake.create_window = lambda title, url, **kw: calls.update(kw=kw) or window
+    monkeypatch.setitem(sys.modules, "webview", fake)
+    gui.run()
+    assert "js_api" not in calls["kw"]
+    assert [f.__name__ for f in calls["exposed"]] == ["toggle_fullscreen", "set_on_top"]
+    calls["exposed"][0]()
+    assert calls["toggled"] is True
+
+

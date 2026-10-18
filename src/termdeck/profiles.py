@@ -16,6 +16,7 @@ from typing import Any, Literal
 
 from .config import atomic_write, config_dir, file_lock
 from .errors import ProfileError, ProfileNotFound
+from .themes import THEME_NAMES, parse_colours
 
 ForwardKind = Literal["local", "remote", "dynamic"]
 
@@ -273,24 +274,109 @@ class SerialSettings:
 
 @dataclass
 class TerminalSettings:
-    term_type: str = option("xterm-256color", "Terminal type", "Sent to the server as $TERM", advanced=True, kinds=("ssh",))
-    encoding: str = option("utf-8", "Character set", advanced=True)
-    enter_sends: str = option("cr", "Enter sends", choices={"cr": "CR", "crlf": "CR LF", "lf": "LF"}, advanced=True)
-    backspace_sends: str = option("del", "Backspace sends", choices={"del": "DEL (^?)", "bs": "BS (^H)"}, advanced=True)
+    # Most users need these
+    font_size: int = option(14, "Font size", "Web and desktop window; the TUI uses its own terminal's font",
+                            min=6, max=72)
+    theme: str = option("dark", "Color theme", choices=THEME_NAMES)
+    line_editing: bool = option(False, "Local line editing",
+                                "Edit lines here (arrows, history) and send them on Enter; for devices without a "
+                                "line editor. Turn the device echo off")
     implicit_cr: bool = option(False, "Implicit CR in every LF",
                                "For devices that end lines with LF only (output shifts right line after line)")
     implicit_lf: bool = option(False, "Implicit LF in every CR",
                                "For devices that end lines with CR only (each line overwrites the last)")
+    bell: str = option("visual", "Bell", "What the bell (BEL, Ctrl+G) does; a burst of bells is silenced",
+                       choices={
+        "none": "Nothing", "visual": "Flash the terminal", "sound": "Beep", "both": "Flash and beep"})
+    close_on_exit: str = option("clean", "Close tab on exit", "Clean: when the remote program ends normally",
+                                choices={"never": "Never", "clean": "Only on clean exit", "always": "Always"},
+                                kinds=("ssh",))
+
+    # Characters and keys
+    term_type: str = option("xterm-256color", "Terminal type", "Sent to the server as $TERM", advanced=True,
+                            kinds=("ssh",), group="Characters and keys")
+    encoding: str = option("utf-8", "Character set", advanced=True, group="Characters and keys")
+    enter_sends: str = option("cr", "Enter sends", choices={"cr": "CR", "crlf": "CR LF", "lf": "LF"}, advanced=True,
+                              group="Characters and keys")
+    backspace_sends: str = option("del", "Backspace sends", choices={"del": "DEL (^?)", "bs": "BS (^H)"},
+                                  advanced=True, group="Characters and keys")
+    # xterm, not PuTTY's ESC [1~: termdeck announces $TERM=xterm-256color, whose Home is ESC OH / ESC [H.
+    home_end: str = option("xterm", "Home and End keys", choices={
+        "standard": "Standard (ESC [1~ ESC [4~)", "xterm": "xterm (ESC [H ESC [F)", "rxvt": "rxvt (ESC [7~ ESC [8~)"},
+        advanced=True, group="Characters and keys")
+    function_keys: str = option("xterm", "Function keys", choices={
+        "xterm": "xterm (ESC OP...)", "vt400": "VT400 (ESC [11~...)", "linux": "Linux console (ESC [[A...)",
+        "vt100": "VT100+ (ESC OP... ESC OT...)", "sco": "SCO (ESC [M...)"}, advanced=True, group="Characters and keys")
+    app_cursor_keys: bool = option(False, "Application cursor keys at start", "Initial state; the remote side can "
+                                   "change it", advanced=True, group="Characters and keys")
+    app_keypad: bool = option(False, "Application keypad at start", "Initial state; the remote side can change it",
+                              advanced=True, group="Characters and keys")
+    local_echo: bool = option(False, "Local echo", "Show typed characters yourself, for devices that do not echo",
+                              advanced=True, group="Characters and keys")
     answerback: str = option("", "Answerback", "Sent when the remote side asks with ENQ (Ctrl+E); empty sends nothing",
-                             advanced=True)
-    local_echo: bool = option(False, "Local echo", "Show typed characters yourself, for devices that do not echo", advanced=True)
-    line_editing: bool = option(False, "Local line editing",
-                                "Edit lines here (arrows, history) and send them on Enter; for devices without a line editor. Turn the device echo off")
-    scrollback: int = option(10000, "Scrollback lines", advanced=True, min=0, max=1_000_000)
-    log_file: str = option("", "Log file", "Append session output to this file; {name}, {host} and {date} are "
-                           "replaced", advanced=True, widget="path")
-    font_size: int = option(14, "Font size", min=6, max=72)
-    theme: str = option("dark", "Color theme", choices={"dark": "Dark", "light": "Light", "solarized": "Solarized", "dracula": "Dracula"})
+                             advanced=True, group="Characters and keys")
+
+    # Display
+    font_family: str = option("", "Font", "Font families, comma-separated, tried in order (web and desktop "
+                              "window); empty for the default monospace", advanced=True, group="Display")
+    cursor_style: str = option("block", "Cursor", "In the TUI, Bar shows as an underline",
+                               choices={"block": "Block", "underline": "Underline", "bar": "Bar"},
+                               advanced=True, group="Display")
+    cursor_blink: bool = option(False, "Blinking cursor", "Web and desktop window", advanced=True, group="Display")
+    colours: str = option("", "Colors", "Override theme colors: NAME=#rrggbb per line (foreground, background, "
+                          "cursor, red, brightBlue...)", advanced=True, widget="multiline", group="Display")
+    bold_style: str = option("colour", "Bold text", choices={"font": "Bold font", "colour": "Brighter color",
+                                                           "both": "Both"}, advanced=True, group="Display")
+    blink_text: bool = option(False, "Blinking text", "Let text blink when asked to (TUI)", advanced=True,
+                              group="Display")
+    auto_wrap: bool = option(True, "Wrap long lines", "Initial auto wrap mode; the remote side can change it",
+                             advanced=True, group="Display")
+    origin_mode: bool = option(False, "DEC origin mode at start", advanced=True, group="Display")
+    scrollback: int = option(10000, "Scrollback lines", advanced=True, min=0, max=1_000_000, group="Display")
+    # Unlike PuTTY (off), on: typing after reading the scrollback shows what is typed, as xterm does.
+    scroll_on_key: bool = option(True, "Scroll to the bottom on a key", advanced=True, group="Display")
+    # Unlike PuTTY (on), off: reading the scrollback of a device that keeps printing must stay possible.
+    scroll_on_output: bool = option(False, "Scroll to the bottom on output", "Off keeps your place in the "
+                                    "scrollback while output arrives", advanced=True, group="Display")
+
+    # Selection and paste
+    word_chars: str = option("", "Word characters", "Punctuation selected with letters on a double click, in the "
+                             "web and desktop window; _-./~ always are", advanced=True, group="Selection and paste")
+    paste_controls: bool = option(False, "Paste control characters", "Off removes them (escape sequences in a "
+                                  "pasted text cannot run commands)", advanced=True, group="Selection and paste")
+
+    # What the remote side may do (PuTTY's Features panel)
+    allow_app_keys: bool = option(True, "Remote may switch cursor keys and keypad", advanced=True,
+                                  group="Remote control")
+    allow_mouse: bool = option(True, "Remote may use the mouse", "Off keeps the mouse for selecting text",
+                               advanced=True, group="Remote control")
+    allow_resize: bool = option(True, "Remote may resize the terminal", advanced=True, group="Remote control")
+    allow_alt_screen: bool = option(True, "Remote may use the alternate screen", advanced=True,
+                                    group="Remote control")
+    allow_title: bool = option(True, "Remote may set the title", advanced=True, group="Remote control")
+    allow_clear_scrollback: bool = option(True, "Remote may clear the scrollback", advanced=True,
+                                          group="Remote control")
+    allow_charset: bool = option(True, "Remote may switch character sets", "Line drawing characters",
+                                 advanced=True, group="Remote control")
+    allow_bracketed_paste: bool = option(True, "Remote may ask for bracketed paste", advanced=True,
+                                         group="Remote control")
+
+    # Printing
+    printer: str = option("", "Printer file", "Text the remote side sends to the printer (ESC [5i ... ESC [4i) is "
+                          "appended to this file; empty shows it in the terminal", advanced=True, widget="path",
+                          group="Printing")
+
+    # Logging
+    log_file: str = option("", "Log file", "Session log; {name}, {host} and {date} are replaced", advanced=True,
+                           widget="path", group="Logging")
+    log_mode: str = option("output", "Log", choices={"output": "All session output", "printable": "Printable text",
+                                                     "ssh": "SSH packets (and output; SSH profiles; all SSH "
+                                                            "connections open meanwhile)"},
+                           advanced=True, group="Logging", when=("log_file", None))
+    log_exists: str = option("append", "If the log file exists", choices={"append": "Append", "overwrite": "Overwrite"},
+                             advanced=True, group="Logging", when=("log_file", None))
+    log_header: bool = option(True, "Log header", "A line with the date and host at the start", advanced=True,
+                              group="Logging", when=("log_file", None))
 
 
 KINDS = {"ssh": "SSH", "serial": "Serial"}
@@ -464,6 +550,7 @@ class Profile:
             if sep and scheme.lower() not in SERIAL_URL_SCHEMES:
                 raise ProfileError(f"unsupported device URL {scheme}://, use one of: "
                                  + ", ".join(f"{s}://" for s in SERIAL_URL_SCHEMES))
+        parse_colours(self.terminal.colours)
         if _CONTROL_CHARS.search(self.terminal.answerback):
             raise ProfileError("answerback cannot contain control characters: an ENQ in the output "
                                "would make it type a command")

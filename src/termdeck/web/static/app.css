@@ -111,6 +111,8 @@ kbd { background: var(--panel-2); border: 1px solid var(--border); border-radius
 #terminals { flex: 1; position: relative; min-width: 0; }
 .term { position: absolute; inset: 0; padding: 6px 0 0 8px; }
 .term[hidden] { display: none; }
+.term.flash { filter: invert(.15); }
+.tab .bell { font-weight: 700; color: var(--warn); }
 .term .overlay {
   position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 5;
   background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);

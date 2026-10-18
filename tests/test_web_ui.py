@@ -306,3 +306,29 @@ async def test_proxy_host_field_appears_with_a_proxy_and_advanced_groups_have_su
     assert {"Session", "Proxy", "Authentication"} <= set(headings)
     for heading in await section.locator("h4.subsection").all():
         assert await heading.is_visible()
+
+
+async def test_page_takes_its_themes_from_the_server(page):
+    assert await page.evaluate("typeof THEMES") == "undefined"  # no copy of the themes in the page
+    assert await page.evaluate("Object.keys(state.themes).includes('putty')")
+    assert await page.evaluate("state.themes.dark.background") == "#0f1218"
+
+
+async def test_tab_uses_the_profiles_palette(page):
+    from termdeck.profiles import Profile, SerialSettings
+
+    profile = Profile("coloured", "serial", serial=SerialSettings(device="loop://"))
+    profile.terminal.colours = "background=#112233"
+    page.store.save(profile)
+    await page.fill("#quick-input", "coloured")
+    await page.press("#quick-input", "Enter")
+    await page.wait_for_selector(".tab")
+    background = await page.evaluate("getComputedStyle(document.querySelector('.term')).backgroundColor")
+    assert background == "rgb(17, 34, 51)"
+
+
+async def test_quick_connect_tab_uses_the_default_themes_background(page):
+    await page.fill("#quick-input", "bob@host.example")
+    await page.press("#quick-input", "Enter")
+    await page.wait_for_selector(".tab")
+    assert await page.evaluate("getComputedStyle(document.querySelector('.term')).backgroundColor") == "rgb(15, 18, 24)"

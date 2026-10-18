@@ -334,8 +334,12 @@ class ProfileItem(ListItem):
 STATUS_ICON = {"connecting": ("●", "yellow"), "connected": ("●", "green"), "closed": ("●", "red")}
 
 
-def tab_title(status: str, name: str) -> Content:
-    return Content.assemble(STATUS_ICON[status], " ", name)
+def tab_title(status: str, name: str, title: str = "", bell: bool = False) -> Content:
+    """Status dot, profile name, the remote title if any, and a mark when the bell rang unseen."""
+    label = f"{name}: {title}" if title else name
+    if len(label) > 30:  # the tab bar must hold several tabs
+        label = label[:29] + "…"
+    return Content.assemble(STATUS_ICON[status], " ", label, (" !", "bold yellow") if bell else "")
 
 
 class TermdeckTUI(App, inherit_bindings=False):
@@ -539,16 +543,34 @@ class TermdeckTUI(App, inherit_bindings=False):
 
     @on(TerminalView.StatusChanged)
     def status_changed(self, event: TerminalView.StatusChanged) -> None:
-        pane = event.view.parent
+        self._relabel(event.view)
+        self.update_toolbar()
+
+    @on(TerminalView.TitleChanged)
+    def title_changed(self, event: TerminalView.TitleChanged) -> None:
+        self._relabel(event.view)
+
+    def _relabel(self, view: TerminalView) -> None:
+        pane = view.parent
         if isinstance(pane, TabPane):
             tabs = self.query_one("#tabs", TabbedContent)
-            tabs.get_tab(pane.id).label = tab_title(event.status, event.view.profile.name)
-        self.update_toolbar()
+            tabs.get_tab(pane.id).label = tab_title(view.status, view.profile.name, view.remote_title, view.bell)
+
+    @on(TerminalView.CloseRequested)
+    async def close_requested(self, event: TerminalView.CloseRequested) -> None:
+        pane = event.view.parent
+        if isinstance(pane, TabPane):
+            await self.query_one("#tabs", TabbedContent).remove_pane(pane.id)
+            self.notify(f"{event.view.profile.name}: session ended, tab closed", markup=False)
+            self.update_toolbar()
 
     @on(TabbedContent.TabActivated)
     def tab_activated(self) -> None:
         self.update_toolbar()
         if view := self.active_view():
+            if view.bell:
+                view.bell = False
+                self._relabel(view)
             view.focus()
 
     def update_toolbar(self) -> None:

@@ -90,27 +90,7 @@ const store = {
 
 // ---------- terminal themes ----------
 
-const THEMES = {
-  dark: { background: "#0f1218", foreground: "#e4e7ee", cursor: "#5b9dff", selectionBackground: "#5b9dff55" },
-  light: {
-    background: "#ffffff", foreground: "#1b1f27", cursor: "#2f6fe0", selectionBackground: "#2f6fe033",
-    black: "#1b1f27", white: "#8b93a5", brightWhite: "#667085", yellow: "#a06b00", brightYellow: "#8a5d00",
-  },
-  solarized: {
-    background: "#002b36", foreground: "#839496", cursor: "#93a1a1", selectionBackground: "#073642",
-    black: "#073642", red: "#dc322f", green: "#859900", yellow: "#b58900", blue: "#268bd2",
-    magenta: "#d33682", cyan: "#2aa198", white: "#eee8d5", brightBlack: "#002b36", brightRed: "#cb4b16",
-    brightGreen: "#586e75", brightYellow: "#657b83", brightBlue: "#839496", brightMagenta: "#6c71c4",
-    brightCyan: "#93a1a1", brightWhite: "#fdf6e3",
-  },
-  dracula: {
-    background: "#282a36", foreground: "#f8f8f2", cursor: "#f8f8f2", selectionBackground: "#44475a",
-    black: "#21222c", red: "#ff5555", green: "#50fa7b", yellow: "#f1fa8c", blue: "#bd93f9",
-    magenta: "#ff79c6", cyan: "#8be9fd", white: "#f8f8f2", brightBlack: "#6272a4", brightRed: "#ff6e6e",
-    brightGreen: "#69ff94", brightYellow: "#ffffa5", brightBlue: "#d6acff", brightMagenta: "#ff92df",
-    brightCyan: "#a4ffff", brightWhite: "#ffffff",
-  },
-};
+// Colour themes come from the server (themes.py): state.themes and each profile's palette.
 
 // ---------- state ----------
 
@@ -482,12 +462,23 @@ function connect(profile, { saved = true } = {}) {
     fontSize: profile.terminal?.font_size || 14,
   };
   const t = tab.profile.terminal;
+  const colours = profile.palette || state.themes[t.theme] || state.themes.dark;
+  const mono = getComputedStyle(document.body).getPropertyValue("--mono");
   tab.term = new Terminal({
-    fontFamily: getComputedStyle(document.body).getPropertyValue("--mono"),
+    // Each family quoted on its own: "Cascadia Mono, Consolas" is two fonts, tried in order.
+    fontFamily: t.font_family
+      ? [...t.font_family.split(",").map((f) => f.trim().replace(/["\\]/g, "")).filter(Boolean).map((f) => `"${f}"`), mono].join(", ")
+      : mono,
     fontSize: tab.fontSize,
     scrollback: t.scrollback,
-    theme: THEMES[t.theme] || THEMES.dark,
-    cursorBlink: true,
+    theme: colours,
+    cursorStyle: t.cursor_style,
+    cursorBlink: t.cursor_blink,
+    fontWeightBold: t.bold_style === "colour" ? "normal" : "bold",
+    drawBoldTextInBrightColors: t.bold_style !== "font",
+    scrollOnUserInput: t.scroll_on_key,
+    // PuTTY lists the characters that belong to words; xterm.js the ones that separate them.
+    wordSeparator: [...WORD_SEPARATORS].filter((c) => !(t.word_chars || "").includes(c)).join(""),
     allowProposedApi: true,
     rightClickSelectsWord: false,
   });
@@ -499,10 +490,18 @@ function connect(profile, { saved = true } = {}) {
   tab.term.loadAddon(new Unicode11Addon.Unicode11Addon());
   tab.term.unicode.activeVersion = "11";
 
-  tab.container = el("div", { class: "term", style: `background:${(THEMES[t.theme] || THEMES.dark).background}` });
+  tab.container = el("div", { class: "term", style: `background:${colours.background}` });
   $("#terminals").append(tab.container);
   tab.term.open(tab.container);
   setupClipboard(tab);
+  tab.term.onBell(() => ringBell(tab));
+  tab.term.onTitleChange((title) => { tab.remoteTitle = cleanTitle(title); renderTabs(); });
+  // Every paste (Shift+Insert, the browser's Paste, middle click...) is cleaned, not only ours.
+  tab.container.addEventListener("paste", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    pasteText(tab, e.clipboardData?.getData("text/plain") || "");
+  }, true);
   tab.term.onData((data) => send(tab, { type: "input", data }));
   tab.term.onResize(({ cols, rows }) => { send(tab, { type: "resize", cols, rows }); updateStatusbar(); });
   tab.resizer = new ResizeObserver(() => { if (!tab.container.hidden) tab.fit.fit(); });
@@ -514,6 +513,51 @@ function connect(profile, { saved = true } = {}) {
   return tab;
 }
 
+// Double click selects words: all ASCII punctuation separates them, except _-./~ and the profile's word characters.
+const WORD_SEPARATORS = " !\"#$%&'()*+,:;<=>?@[\\]^`{|}";
+let audio = null;
+
+// Same rules as vt.BellLimiter: one bell per 250 ms, silence for 5 s after more than 5 in 2 s.
+function bellAllowed(tab) {
+  const now = performance.now();
+  tab.bells = (tab.bells || []).filter((t) => now - t < 2000).concat(now);
+  if (tab.bells.length > 5) tab.bellQuiet = now + 5000;
+  if (now < (tab.bellQuiet || 0) || now - (tab.lastBell || -1e9) < 250) return false;
+  tab.lastBell = now;
+  return true;
+}
+
+// Same rules as vt.clean_title: one line, no control or direction characters, short.
+function cleanTitle(title) {
+  title = title.replace(/[\x00-\x1f\x7f-\x9f\u061c\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, " ").split(/\s+/).filter(Boolean).join(" ");
+  return title.length <= 60 ? title : title.slice(0, 59) + "…";
+}
+
+function ringBell(tab) {
+  const style = tab.profile.terminal.bell;
+  if (style === "none" || !bellAllowed(tab)) return;
+  if (style === "visual" || style === "both") {
+    tab.container.classList.add("flash");
+    setTimeout(() => tab.container.classList.remove("flash"), 150);
+  }
+  if (style === "sound" || style === "both") {
+    try {  // a short beep; no sound file needed
+      audio ??= new AudioContext();
+      const tone = audio.createOscillator(), gain = audio.createGain();
+      tone.frequency.value = 880; gain.gain.value = 0.08;
+      tone.connect(gain).connect(audio.destination);
+      tone.start(); tone.stop(audio.currentTime + 0.12);
+    } catch { /* no audio */ }
+  }
+  if (tab !== state.active && !tab.bell) { tab.bell = true; renderTabs(); }  // shown until the tab is opened
+}
+
+function pasteText(tab, text) {
+  // Same rule as vt.clean_paste: no control characters (an ESC could end bracketed paste), unless allowed.
+  if (!tab.profile.terminal.paste_controls) text = text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g, "");
+  if (text) tab.term.paste(text);
+}
+
 function setupClipboard(tab) {
   const term = tab.term;
   // PuTTY habits: selecting copies, right click pastes. Ctrl+Shift+C/V also work.
@@ -521,13 +565,20 @@ function setupClipboard(tab) {
     const text = term.getSelection();
     if (text) navigator.clipboard?.writeText(text).catch(() => {});
   });
-  const paste = () => navigator.clipboard?.readText().then((text) => text && term.paste(text)).catch(() => toast("Clipboard not available", true));
+  const paste = () => navigator.clipboard?.readText().then((text) => pasteText(tab, text))
+    .catch(() => toast("Clipboard not available", true));
   tab.container.addEventListener("contextmenu", (e) => { e.preventDefault(); paste(); });
   term.attachCustomKeyEventHandler((e) => {
+    // F11 in the desktop window is full screen, not a key for the remote (xterm.js would send it).
+    if (desktop && e.key === "F11") {
+      if (e.type === "keydown") toolbarActions.fullscreen();
+      e.preventDefault();
+      return false;
+    }
     if (e.type !== "keydown" || !e.ctrlKey || !e.shiftKey) return true;
     const key = e.key.toLowerCase();
     if (key === "c") { navigator.clipboard?.writeText(term.getSelection()); return false; }
-    if (key === "v") { paste(); return false; }
+    if (key === "v") { e.preventDefault(); paste(); return false; }  // no second, native paste
     if (key === "f") { openSearch(); return false; }
     return true;
   });
@@ -538,6 +589,8 @@ function send(tab, message) {
 }
 
 function openSocket(tab) {
+  tab.remoteTitle = "";  // from the previous connection
+  tab.bell = false;
   setStatus(tab, "connecting");
   tab.overlay?.remove();
   tab.reconnectKey?.dispose();
@@ -555,6 +608,7 @@ function openSocket(tab) {
   ws.onmessage = async (event) => {
     if (typeof event.data !== "string") {
       tab.term.write(new Uint8Array(event.data));
+      if (tab.profile.terminal.scroll_on_output) tab.term.scrollToBottom();
       return;
     }
     const m = JSON.parse(event.data);
@@ -591,12 +645,20 @@ function openSocket(tab) {
       if (tab.sftpOpen) refreshSftp();
     } else if (m.type === "error" || m.type === "closed") {
       tab.ended = m.message;
+      // Close tab on exit: always, or only when the remote program ended normally.
+      const when = tab.profile.terminal.close_on_exit;
+      tab.closeOnEnd = m.type === "closed" && (when === "always" || (when === "clean" && m.clean));
       if (m.type === "error") tab.term.write(`\r\n\x1b[31m${m.message}\x1b[0m\r\n`);
     }
   };
   ws.onclose = () => {
     if (tab.ws !== ws) return;
     tab.session = null;
+    if (tab.closeOnEnd) {
+      toast(`${tab.profile.name}: session ended, tab closed`);
+      closeTab(tab);
+      return;
+    }
     setStatus(tab, "closed");
     showReconnect(tab, tab.ended || "Disconnected");
     tab.ended = null;
@@ -623,6 +685,7 @@ function setStatus(tab, status) {
 
 function activate(tab) {
   state.active = tab;
+  if (tab) tab.bell = false;
   for (const t of state.tabs) t.container.hidden = t !== tab;
   $("#welcome").hidden = Boolean(tab);
   $("#workspace").hidden = !tab;
@@ -653,12 +716,13 @@ function renderTabs() {
   $("#tabs").replaceChildren(...state.tabs.map((tab) =>
     el("div", {
       class: `tab ${tab === state.active ? "active" : ""}`,
-      title: tab.profile.name,
+      title: tab.remoteTitle ? `${tab.profile.name}: ${tab.remoteTitle}` : tab.profile.name,  // the full label
       onclick: () => activate(tab),
       onauxclick: (e) => { if (e.button === 1) closeTab(tab); },
     },
       el("span", { class: `dot ${tab.status}` }),
-      el("span", { class: "label" }, tab.profile.name),
+      el("span", { class: "label" }, tab.remoteTitle ? `${tab.profile.name}: ${tab.remoteTitle}` : tab.profile.name),
+      tab.bell ? el("span", { class: "bell", title: "Bell rang" }, "!") : null,
       el("button", { class: "close", title: "Close", onclick: (e) => { e.stopPropagation(); closeTab(tab); } }, "✕"))));
 }
 
@@ -697,6 +761,15 @@ const toolbarActions = {
   "font-up": () => setFont(1),
   "font-down": () => setFont(-1),
   search: () => openSearch(),
+  // Desktop window only (gui.py DesktopApi), like PuTTY's Always on top and full screen.
+  fullscreen: () => window.pywebview?.api.toggle_fullscreen(),
+  ontop: async () => {
+    const button = $("[data-action=ontop]");
+    const on = Boolean(await window.pywebview?.api.set_on_top(button.getAttribute("aria-pressed") !== "true"));
+    button.classList.toggle("on", on);
+    button.setAttribute("aria-pressed", String(on));
+    button.textContent = on ? "On top ✓" : "On top";
+  },
   sftp: () => toggleSftp(),
 };
 
@@ -909,6 +982,7 @@ function bindEvents() {
   $("#new-profile").onclick = () => openEditor();
   // In the desktop window there is no browser to open another window in.
   $(".sidebar-footer").hidden = desktop;
+  for (const action of ["fullscreen", "ontop"]) $(`[data-action=${action}]`).hidden = !desktop;
   $("#new-window").onclick = async () => {
     try {
       const { url } = await api("POST", "/api/link");
@@ -973,6 +1047,11 @@ function bindEvents() {
 
   document.addEventListener("click", (e) => { if (!e.target.closest("#menu")) $("#menu").hidden = true; });
   document.addEventListener("keydown", (e) => {
+    if (desktop && e.key === "F11") {  // outside a terminal (inside, its key handler takes it)
+      e.preventDefault();
+      toolbarActions.fullscreen();
+      return;
+    }
     if (!(e.ctrlKey && e.shiftKey)) return;
     const key = e.key.toLowerCase();
     if (key === "n") { e.preventDefault(); openEditor(); }
@@ -991,8 +1070,8 @@ function bindEvents() {
 async function main() {
   bindEvents();
   await login();
-  const { options, defaults } = await api("GET", "/api/options");
-  Object.assign(state, { options, defaults });
+  const { options, defaults, themes } = await api("GET", "/api/options");
+  Object.assign(state, { options, defaults, themes });
   await loadProfiles();
   activate(null);
 }

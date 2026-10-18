@@ -96,7 +96,7 @@ async def test_terminal_charset_conversion():
 
 
 async def test_terminal_local_echo_and_log(tmp_path):
-    session = await _loop_session(local_echo=True, log_file=str(tmp_path / "logs" / "{name}.log"))
+    session = await _loop_session(local_echo=True, log_header=False, log_file=str(tmp_path / "logs" / "{name}.log"))
     try:
         await session.write(b"hi\r")
         # Local echo comes first, then the loopback.

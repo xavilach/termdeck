@@ -22,9 +22,11 @@ ESCAPE = 0x1D  # Ctrl+]
 # Ctrl+] as sent by terminals in kitty keyboard / modifyOtherKeys mode, which a
 # remote program can switch on. Without these the escape key could be disabled.
 ESCAPE_ALIASES = (b"\x1b[93;5u", b"\x1b[27;5;93~")
-# Undo modes a remote program may have left on: kitty keys, modifyOtherKeys,
-# mouse reporting, bracketed paste, alternate screen; then show the cursor.
-RESET_MODES = b"\x1b[<u\x1b[>4;0m\x1b[?1000;1002;1003;1006;2004l\x1b[?1049l\x1b[?25h"
+# Undo modes a remote program or the profile's start modes may have left on: kitty keys,
+# modifyOtherKeys, mouse reporting, bracketed paste, alternate screen, cursor keys and
+# keypad, origin mode and no-wrap; then show the cursor.
+RESET_MODES = (b"\x1b[<u\x1b[>4;0m\x1b[?1000;1002;1003;1006;2004l\x1b[?1049l\x1b[?1l\x1b>\x1b[?6l\x1b[?7h"
+               b"\x1b[?25h")
 ESCAPE_HELP = "Ctrl+] then q: quit, b: break, ]: send Ctrl+]"
 
 
