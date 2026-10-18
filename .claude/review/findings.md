@@ -329,3 +329,29 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-288 | issue | Low | conv | cli.py | In a terminal, a command without a PTY ran in raw interactive mode (no echo, key mapping). | Runs like `ssh host cmd`: terminal untouched, data passed unchanged. | S | fixed (48bc35c) |
 | P1-289 | issue | Low | test-writer | cli.py | The environment-value log filter never matched (channel prefix) and sat on the parent logger. | Match "Env: %s=%s" anywhere; filter on the handlers. | S | fixed (48bc35c) |
 | P1-290 | issue | Low | test-writer | cli.py PasswordFilePrompter | A jump host with the same user@host as the target (another port) would get the file's password. | Include the port in the prompt label. | S | open |
+| P1-291 | issue | High | win | cli.py sftp shell | shlex ate backslashes in Windows paths. | No escapes on Windows. | S | open |
+| P1-292 | issue | Medium | win | cli.py sftp | ~ not expanded in local paths after lcd. | user_path per argument. | S | open |
+| P1-293 | issue | Low | win, conv | sftp.py get | Remote names Windows cannot store (a:b → alternate stream, con, x.) in downloads. | Refused with the list (single files too). | S | open |
+| P1-294 | issue | Low | win, feat | cli.py | Piped sftp scripts decoded with the ANSI code page. | stdin UTF-8 (BOM allowed). | S | open |
+| P1-295 | issue | Critical | ui, sec, feat, test-writer | sftp.py | `-> list[str]` inside class SFTP (method `list`) crashed the import: every SSH path broken. | Quoted annotations. | S | open |
+| P1-296 | issue | Major | ui | app.js | Refreshing the SFTP listing wiped upload progress and Cancel. | #sftp-info and #sftp-transfer. | S | open |
+| P1-297 | issue | Major | ui, sec, feat, conv | cli.py | --force after the command ignored; -rf dropped; unknown flags dropped; no `--`. | Leading option parser per command. | S | open |
+| P1-298 | issue | Minor | ui | app.js | Drops during an upload vanished; progress numbers disagreed; no "finishing" state. | Toast; e.total; "Finishing upload". | S | open |
+| P1-299 | issue | Minor | ui | app.js, cli.py, sftp.py | Recursive delete: no feedback (web), no question (shell); link to folder failed. | "Deleting…"; shell asks; links unlinked. | S | open |
+| P1-300 | issue | Minor | ui | cli.py | Progress line wrapped; raw byte counts; ls without dates; script errors without line. | Fitted line, sizes and rate, mtime, "line N:". | S | open |
+| P1-301 | issue | Cosmetic | ui | gui.py, app.js | Close prompt wording; empty sidebar strip in the desktop window. | Reworded; footer hidden. | S | open |
+| P1-302 | issue | Medium | sec, conv | cli.py | Remote names and paths printed without cleaning (ls, pwd, prompt, progress, cd error). | printable. | S | open |
+| P1-303 | issue | Low | sec, conv | sftp.py write | exists-then-"wb" race could replace a file. | Temporary name, then rename. | S | open |
+| P1-304 | issue | Low | sec, conv | server.py, cli.py | Bad chmod modes gave 500 / ended the shell; non-object JSON bodies gave 500. | Range checked in the core; 400. | S | open |
+| P1-305 | issue | High | feat | cli.py | Extra arguments silently dropped (rm a b c removed a). | Every argument handled; usage errors. | S | open |
+| P1-306 | issue | Medium | feat | sftp.py rename | mv FILE DIR failed. | Moves into the folder; several sources. | S | open |
+| P1-307 | issue | Medium | feat | sftp.py, cli.py | No wildcards, mget/mput. | glob, mget/mput. | M | open |
+| P1-308 | issue | Medium | feat | sftp.py write | A cancelled upload left a half file / destroyed the original on Replace. | Temporary name, rename when complete. | S | open |
+| P1-309 | issue | Medium | feat | gui.py | Close confirmation would deadlock on GTK/Cocoa (dialog waits on the GUI thread). | Ask from a helper thread, then destroy. | S | open |
+| P1-310 | issue | Medium | feat | cli.py | psftp aliases (dir, del, ren...) and # comments missing: psftp -b scripts failed. | Aliases; comments skipped. | S | open |
+| P1-311 | issue | Low | feat | sftp.py | No reget/reput. | Added. | S | open |
+| P1-312 | issue | Low | feat | sftp.py | Only octal chmod modes. | Symbolic modes. | S | open |
+| P1-313 | issue | Low | feat | cli.py | No -b FILE / -bc / -be. | -b, --echo, --keep-going. | S | open |
+| P1-314 | issue | Low | feat | sftp.py | A dead SFTP channel stayed cached. | Dropped on asyncssh errors. | S | open |
+| P1-315 | issue | Low | feat | README.md | sftp docs out of date. | Updated. | S | open |
+| P1-316 | improvement | Low | feat | app.js | chmod not reachable from the web panel. | Permissions… menu item. | S | open |

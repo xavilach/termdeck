@@ -131,10 +131,10 @@ async def test_sftp_put_and_get(ssh_server, tmp_path):
     local.write_text("payload")
     conn = await SSHConnection.connect(ssh_server.profile(), FakePrompter())
     try:
-        async with conn.sftp() as sftp:
-            await sftp.put(str(local), "/remote.txt")
-            assert "remote.txt" in await sftp.listdir("/")
-            await sftp.get("/remote.txt", str(tmp_path / "back.txt"))
+        files = conn.sftp()
+        await files.put(local, "/remote.txt")
+        assert "remote.txt" in [e.name for e in (await files.list("/"))[1]]
+        await files.get("/remote.txt", tmp_path / "back.txt")
     finally:
         conn.close()
     assert (ssh_server.root / "remote.txt").read_text() == "payload"
@@ -247,7 +247,7 @@ async def test_keyboard_interactive_prompts_are_labelled_and_instructions_shown(
     prompter = FakePrompter(answers=["secret"])
     conn = await SSHConnection.connect(ssh_server.profile(), prompter)
     conn.close()
-    assert prompter.asked == ["(alice@127.0.0.1) Code: "]
+    assert prompter.asked == [f"(alice@127.0.0.1:{ssh_server.port}) Code: "]  # the port when it is not 22
     assert prompter.notices == ["MFA\nEnter the code from your phone"]
 
 
@@ -312,8 +312,8 @@ async def test_expired_password_asks_for_a_new_one_twice(ssh_server):
     prompter = FakePrompter(answers=["secret", "fresh", "fresh"])
     conn = await SSHConnection.connect(ssh_server.profile(), prompter)
     conn.close()
-    assert prompter.asked == ["alice@127.0.0.1 password: ", "New password for alice@127.0.0.1: ",
-                              "New password again for alice@127.0.0.1: "]
+    label = f"alice@127.0.0.1:{ssh_server.port}"
+    assert prompter.asked == [f"{label} password: ", f"New password for {label}: ", f"New password again for {label}: "]
     assert ssh_server.changes == [("secret", "fresh")]
     assert any("expired" in n for n in prompter.notices)
 
@@ -324,7 +324,8 @@ async def test_mismatched_new_passwords_are_asked_again(ssh_server):
     prompter = FakePrompter(answers=["secret", "one", "two", "three", "three"])
     conn = await SSHConnection.connect(ssh_server.profile(), prompter)
     conn.close()
-    assert [a for a in prompter.asked if a.startswith("New password for")] == ["New password for alice@127.0.0.1: "] * 2
+    label = f"alice@127.0.0.1:{ssh_server.port}"
+    assert [a for a in prompter.asked if a.startswith("New password for")] == [f"New password for {label}: "] * 2
     assert ssh_server.changes == [("secret", "three")]
     assert "The passwords do not match." in prompter.notices
 

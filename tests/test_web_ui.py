@@ -214,3 +214,76 @@ async def test_invalid_entry_is_counted_and_saving_shows_no_error(page_with_file
     assert await page.is_hidden("#toast")
     assert "1 profile skipped" in await page.text_content("#profile-problems")
     assert [e["name"] for e in json.loads(page.store.path.read_text())["profiles"]] == ["fine", "bad"]
+
+
+async def test_uploading_an_existing_file_asks_and_cancel_leaves_it_unchanged(page, ssh_server):
+    from termdeck.ssh import remember_host_key
+
+    remember_host_key("127.0.0.1", ssh_server.port, ssh_server.key)
+    (ssh_server.root / "keep.txt").write_text("original")
+    await page.fill("#quick-input", f"alice@127.0.0.1:{ssh_server.port}")
+    await page.press("#quick-input", "Enter")
+    await page.wait_for_selector("#prompt[open] input")  # the password question
+    await page.keyboard.type("secret")
+    await page.keyboard.press("Enter")
+    await page.wait_for_function("() => !document.querySelector('[data-action=sftp]').disabled")
+    await page.click("[data-action=sftp]")
+    await page.wait_for_function("() => document.querySelector('#sftp-status').textContent.includes('items')")
+
+    upload = "void (window.uploaded = sftpUpload([new File(['replacement'], 'keep.txt')]))"
+    await page.evaluate(upload)
+    await page.wait_for_selector("#prompt[open]")
+    assert "Replace files?" in await page.text_content("#prompt")
+    assert "keep.txt" in await page.text_content("#prompt")
+    await page.click("#prompt-cancel")
+    await page.evaluate("() => window.uploaded")  # the upload function returned: nothing was sent
+    assert (ssh_server.root / "keep.txt").read_text() == "original"
+
+    await page.evaluate(upload)  # and Replace does replace
+    await page.wait_for_selector("#prompt[open]")
+    await page.click("#prompt-ok")
+    await page.evaluate("() => window.uploaded")
+    await page.wait_for_function("() => !document.querySelector('#toast').hidden")
+    assert (ssh_server.root / "keep.txt").read_text() == "replacement"
+
+
+async def test_sftp_status_keeps_listing_and_upload_progress_apart(page, ssh_server):
+    from termdeck.ssh import remember_host_key
+
+    remember_host_key("127.0.0.1", ssh_server.port, ssh_server.key)
+    (ssh_server.root / "one.txt").write_text("1")
+    await page.fill("#quick-input", f"alice@127.0.0.1:{ssh_server.port}")
+    await page.press("#quick-input", "Enter")
+    await page.wait_for_selector("#prompt[open] input")
+    await page.keyboard.type("secret")
+    await page.keyboard.press("Enter")
+    await page.wait_for_function("() => !document.querySelector('[data-action=sftp]').disabled")
+    await page.click("[data-action=sftp]")
+    await page.wait_for_function("() => document.querySelector('#sftp-info').textContent === '1 items'")
+    assert await page.text_content("#sftp-transfer") == ""
+
+    # Hold the upload request back, so the transfer stays in progress while the page is inspected.
+    await page.evaluate("""() => {
+        const send = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.send = function (body) { window.release = () => send.call(this, body); };
+    }""")
+    await page.evaluate("void (window.first = sftpUpload([new File(['data'], 'new.txt')]))")
+    await page.wait_for_function("() => typeof window.release === 'function'")
+    assert "Uploading 1 file" in await page.text_content("#sftp-transfer")
+    assert await page.is_visible("#sftp-transfer button")
+    assert await page.text_content("#sftp-info") == "1 items"  # the listing text is not wiped
+
+    await page.evaluate("() => refreshSftp()")  # a listing refresh must not wipe the transfer either
+    await page.wait_for_function("() => document.querySelector('#sftp-info').textContent === '1 items'")
+    assert "Uploading 1 file" in await page.text_content("#sftp-transfer")
+
+    await page.evaluate("void sftpUpload([new File(['more'], 'other.txt')])")  # a second drop
+    await page.wait_for_function("() => !document.querySelector('#toast').hidden")
+    assert "already running" in await page.text_content("#toast")
+    assert not (ssh_server.root / "other.txt").exists()
+
+    await page.evaluate("() => window.release()")
+    await page.evaluate("() => window.first")
+    await page.wait_for_function("() => document.querySelector('#sftp-transfer').textContent === ''")
+    await page.wait_for_function("() => document.querySelector('#sftp-info').textContent === '2 items'")
+    assert (ssh_server.root / "new.txt").read_text() == "data"

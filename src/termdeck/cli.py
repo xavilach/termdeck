@@ -3,21 +3,24 @@
 import argparse
 import asyncio
 import getpass
+import glob
 import json
 import os
 import sys
 import threading
+import time
 import traceback
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from . import __version__
 from .config import open_private, user_path
-from .errors import ConnectError
+from .errors import ConnectError, SFTPFailure, TermdeckError
 from .profiles import (
     Profile, ProfileFileError, ProfileStore, SerialSettings, SSHSettings, check_option, describe_options, option_fields,
     parse_forward, parse_target, resolve_target,
 )
-from .session import HostKey, describe_error, is_expected, open_session
+from .session import HostKey, describe_error, is_expected, open_session, printable
+from .sftp import WILDCARDS
 
 
 def _open_terminal():
@@ -265,7 +268,7 @@ def cmd_ports(args, store: ProfileStore) -> int:
 async def _ssh_connect(name: str, store: ProfileStore):
     from .ssh import SSHConnection
 
-    profile = store.get(name)
+    profile = resolve_profile(name, store)  # a saved name or a quick target, as for connect
     if profile.kind != "ssh":
         raise ValueError(f"{name!r} is not an SSH profile")
     return await SSHConnection.connect(profile, ConsolePrompter())
@@ -309,8 +312,8 @@ class PasswordFilePrompter:
 
     def __init__(self, inner, path: str, host: str):
         self._inner = inner
-        self._for = f"@{host} password: "  # the prompt of ssh._Client.password_auth_requested
-        self._kbdint = f"@{host}) "         # keyboard-interactive prompts are prefixed "(user@host) "
+        self._for = f"@{host} password: "  # the prompt of ssh._Client.password_auth_requested (host[:port])
+        self._kbdint = f"@{host}) "         # keyboard-interactive prompts are prefixed "(user@host[:port]) "
         lines = _read_text(path, "password file").splitlines()
         if not lines or not lines[0]:
             raise ValueError(f"password file {path} is empty")
@@ -413,7 +416,8 @@ async def cmd_connect(args, store: ProfileStore) -> int:
         _setup_logging(args)
     prompter = BatchPrompter() if args.batch else ConsolePrompter()
     if args.password_file:
-        prompter = PasswordFilePrompter(prompter, args.password_file, profile.ssh.host)
+        s = profile.ssh
+        prompter = PasswordFilePrompter(prompter, args.password_file, s.host + (f":{s.port}" if s.port != 22 else ""))
     # A terminal session needs a remote terminal; a command without one runs like `ssh host cmd`:
     # the local terminal stays as it is (its own echo and line editing) and data passes unchanged.
     remote_tty = profile.kind != "ssh" or profile.ssh.pty
@@ -473,22 +477,271 @@ async def cmd_tunnel(args, store: ProfileStore) -> int:
         conn.close()
 
 
+def _size(n: float) -> str:
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+
+
+def _progress():
+    """A one-line progress display on stderr (percent, size, rate, name), only on a terminal."""
+    if not sys.stderr.isatty():
+        return None
+    started = {}
+
+    def show(name: str, done: int, total: int) -> None:
+        start = started.setdefault(name, time.monotonic())
+        rate = done / max(time.monotonic() - start, 0.001)
+        percent = f"{done * 100 // total:3d}%" if total else "    "
+        line = f"{percent} {_size(done):>9} of {_size(total)}  {_size(rate)}/s  "
+        width = os.get_terminal_size(sys.stderr.fileno()).columns - 1 if sys.stderr.isatty() else 79
+        room = max(width - len(line), 8)
+        line += name if len(name) <= room else "…" + name[-(room - 1):]  # one line, or \r cannot redraw it
+        end = "\n" if done >= total else ""
+        print(f"\r{line.ljust(width)}", end=end, file=sys.stderr, flush=True)
+
+    return show
+
+
+SFTP_ALIASES = {"dir": "ls", "del": "rm", "delete": "rm", "ren": "mv", "rename": "mv", "md": "mkdir",
+                "rd": "rmdir", "mget": "get", "mput": "put", "bye": "quit", "exit": "quit"}
+# -f: replace existing files (get, put, mv); for rm, as in a shell: no question, no error if missing.
+SFTP_FLAGS = {"get": {"-r", "-f"}, "put": {"-r", "-f"}, "rm": {"-r", "-f"}, "mv": {"-f"}}
+LONG_FLAGS = {"--force": "-f", "--recursive": "-r"}
+
+
+def _options(command: str, words: list[str]) -> tuple[set[str], list[str]]:
+    """Leading options of an SFTP command (-r, -f, -rf, --force, --recursive; -- ends them)."""
+    allowed, flags = SFTP_FLAGS.get(command, set()), set()
+    while words and words[0].startswith("-") and len(words[0]) > 1:
+        word = words.pop(0)
+        if word == "--":  # what follows is a name, even if it starts with "-"
+            break
+        letters = [LONG_FLAGS[word]] if word in LONG_FLAGS else [f"-{c}" for c in word[1:]] \
+            if not word.startswith("--") else [word]
+        for flag in letters:
+            if flag not in allowed:
+                hint = f" (it takes {' '.join(sorted(allowed))})" if allowed else ""
+                raise ValueError(f"{command}: unknown option {flag}{hint}")
+            flags.add(flag)
+    return flags, words
+
+
+async def _sftp_command(files, words: list[str], cwd: list[str], force: bool = False, confirm=None) -> None:
+    """One SFTP command, as in `termdeck sftp TARGET CMD...` and the shell (psftp's commands).
+
+    `cwd` is [remote dir, local dir]; cd and lcd change it. Remote and local names may
+    use wildcards. `confirm(question)` asks before a recursive delete (interactive shell).
+    """
+    if not words:
+        return
+    command = SFTP_ALIASES.get(words[0], words[0])
+    flags, rest = _options(command, words[1:])
+    recursive, force = "-r" in flags, force or "-f" in flags
+    remote = lambda path: path if path.startswith("/") else PurePosixPath(cwd[0], path).as_posix()  # noqa: E731
+    local = lambda path: Path(cwd[1], user_path(path))  # noqa: E731  (~, $VAR and %VAR% expanded)
+    show = printable  # names come from the server: no escape sequences reach the terminal
+
+    def need(low: int, usage: str, high: int | None = None) -> None:
+        if len(rest) < low or (high is not None and len(rest) > high):
+            raise ValueError(f"usage: {words[0]} {usage}")
+
+    async def remotes(names) -> list[str]:
+        return [path for name in names for path in await files.glob(remote(name))]
+
+    def locals_(names) -> list[Path]:
+        found = []
+        for name in names:
+            matches = sorted(glob.glob(str(local(name)))) if WILDCARDS.search(name) else [str(local(name))]
+            if not matches:
+                raise ValueError(f"{name}: no local match")
+            found += [Path(m) for m in matches]
+        return found
+
+    if command == "ls":
+        need(0, "[DIR]", 1)
+        path, entries = await files.list(remote(rest[0]) if rest else cwd[0])
+        for e in entries:
+            when = time.strftime("%Y-%m-%d %H:%M", time.localtime(e.mtime)) if e.mtime else " " * 16
+            kind = "/" if e.is_dir else "@" if e.is_link else ""
+            print(f"{e.mode or '?':10} {_size(e.size):>8} {when} {show(e.name)}{kind}")
+    elif command == "pwd":
+        print(show(cwd[0]))
+    elif command == "cd":
+        need(0, "[DIR]", 1)
+        target = await files.realpath(remote(rest[0]) if rest else ".")
+        if not await files.is_dir(target):
+            raise SFTPFailure(f"{target} is not a folder")
+        cwd[0] = target
+    elif command == "lpwd":
+        print(cwd[1])
+    elif command == "lcd":
+        need(1, "LOCAL_DIR", 1)
+        if not local(rest[0]).is_dir():
+            raise ValueError(f"{rest[0]} is not a local folder")
+        cwd[1] = str(local(rest[0]).resolve())
+    elif command in ("get", "reget"):
+        need(1, "[-r] [-f] REMOTE... [LOCAL]  (a LOCAL name only with one remote file)")
+        sources = await remotes(rest if words[0] == "mget" or len(rest) == 1 else rest[:1])
+        target = local(rest[1]) if len(rest) == 2 and words[0] != "mget" else Path(cwd[1])
+        if len(rest) > 2 and words[0] != "mget":
+            sources, target = await remotes(rest[:-1]), local(rest[-1])
+        for source in sources:
+            if command == "reget":
+                await files.reget(source, target, progress=_progress())
+            else:
+                await files.get(source, target, recursive=recursive, overwrite=force, progress=_progress())
+    elif command in ("put", "reput"):
+        need(1, "[-r] [-f] LOCAL... [REMOTE]  (a REMOTE name only with one local file)")
+        many = words[0] == "mput" or len(rest) > 2
+        sources = locals_(rest if words[0] == "mput" else rest[:-1] if many else rest[:1])
+        target = cwd[0] if words[0] == "mput" or len(rest) == 1 else remote(rest[-1])
+        for source in sources:
+            if command == "reput":
+                await files.reput(source, target, progress=_progress())
+            else:
+                await files.put(source, target, recursive=recursive, overwrite=force, progress=_progress())
+    elif command == "mkdir":
+        need(1, "DIR...")
+        for name in rest:
+            await files.mkdir(remote(name))
+    elif command == "rm":
+        need(1, "[-r] [-f] PATH...")
+        try:
+            targets = await remotes(rest)
+        except SFTPFailure:
+            if force:
+                return
+            raise
+        for target in targets:
+            if force and not await files.exists(target):
+                continue
+            if recursive and confirm and not force and await files.is_dir(target):
+                if not await confirm(f"Delete the folder {show(target)} and everything in it? [y/N] "):
+                    continue
+            await files.remove(target, recursive=recursive)
+    elif command == "rmdir":
+        need(1, "DIR...")
+        for target in await remotes(rest):
+            await files.rmdir(target)
+    elif command == "mv":
+        need(2, "[-f] PATH... NEW_PATH_OR_FOLDER")
+        sources, target = await remotes(rest[:-1]), remote(rest[-1])
+        if len(sources) > 1 and not await files.is_dir(target):
+            raise ValueError(f"mv: moving several files needs a folder, and {rest[-1]} is not one")
+        for source in sources:
+            await files.rename(source, target, overwrite=force)
+    elif command == "chmod":
+        need(2, "MODE PATH...  (MODE like 644, u+x or go-w)")
+        for target in await remotes(rest[1:]):
+            await files.chmod(target, rest[0])
+    elif command in ("help", "?"):
+        print(SFTP_HELP)
+    else:
+        raise ValueError(f"unknown command {words[0]!r}; try help")
+
+
+def _split_words(line: str) -> list[str]:
+    """Shell-like words with quotes. On Windows a backslash is a path separator, not an escape."""
+    import shlex
+
+    lexer = shlex.shlex(line, posix=True)
+    lexer.whitespace_split, lexer.commenters = True, ""
+    if sys.platform == "win32":
+        lexer.escape = ""
+    return list(lexer)
+
+
+SFTP_HELP = """Commands, as in psftp (paths are remote unless noted; wildcards * ? [..] allowed):
+  ls [DIR]  cd [DIR]  pwd             remote folder (dir = ls)
+  lcd DIR   lpwd                      local folder
+  get [-r] [-f] REMOTE [LOCAL]        download (mget: several, into the local folder)
+  put [-r] [-f] LOCAL [REMOTE]        upload (mput: several, into the remote folder)
+  reget REMOTE [LOCAL]  reput LOCAL [REMOTE]   continue an interrupted transfer
+  mkdir DIR...  rmdir DIR...  rm [-r] PATH...  mv [-f] PATH... NEW  chmod MODE PATH...
+  -r: folders too; -f: replace existing files; MODE: 644, u+x, go-w...   quit
+Lines starting with # are comments."""
+
+
 async def cmd_sftp(args, store: ProfileStore) -> int:
+    """One command, or a shell; with -b (or stdin not a terminal), a script that stops at its first error."""
+    words = list(args.words)
+    while words[:1] in (["--force"], ["-f"]):  # termdeck sftp HOST --force get x
+        args.force = True
+        words.pop(0)
     conn = await _ssh_connect(args.name, store)
     try:
-        async with conn.sftp() as sftp:
-            if args.action == "ls":
-                for name in sorted(await sftp.listdir(args.path or ".")):
-                    if name not in (".", ".."):
-                        print(name)
-            elif args.action == "get":
-                local = args.dest or PurePosixPath(args.source).name
-                await sftp.get(args.source, local, recurse=args.recursive, preserve=True)
-            elif args.action == "put":
-                await sftp.put(args.source, args.dest or ".", recurse=args.recursive, preserve=True)
+        files = conn.sftp()
+        cwd = [await files.realpath("."), os.getcwd()]
+        if words:
+            await _sftp_command(files, words, cwd, args.force)
+            return 0
+        if args.batch_file:
+            script = _read_text(args.batch_file, "batch file").splitlines()
+        elif not sys.stdin.isatty():
+            script = (await asyncio.to_thread(sys.stdin.read)).splitlines()
+        else:
+            script = None
+        return await (_sftp_script(files, cwd, script, args) if script is not None else _sftp_shell(files, cwd, conn))
+    except FileExistsError as exc:
+        raise ValueError(f"{printable(exc.args[0])} already exists (use -f to replace it)") from None
     finally:
         conn.close()
-    return 0
+
+
+def _sftp_problem(exc: Exception) -> str | None:
+    if isinstance(exc, FileExistsError):
+        return f"{printable(exc.args[0])} already exists (use -f to replace it)"
+    if isinstance(exc, (ValueError, TermdeckError, OSError)):
+        return str(exc) if isinstance(exc, ValueError) else describe_error(exc)
+    return None
+
+
+async def _sftp_script(files, cwd: list[str], lines: list[str], args) -> int:
+    """psftp -b: run each line; stop at the first error unless --keep-going (-be); --echo shows each (-bc)."""
+    failed = 0
+    for number, line in enumerate(lines, 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if args.echo:
+            print(f"sftp> {line}", file=sys.stderr)
+        try:
+            words = _split_words(line)
+            if SFTP_ALIASES.get(words[0], words[0]) == "quit":
+                break
+            await _sftp_command(files, words, cwd)
+        except Exception as exc:
+            if (problem := _sftp_problem(exc)) is None:
+                raise
+            print(f"termdeck: line {number}: {problem}", file=sys.stderr)
+            failed = 1
+            if not args.keep_going:
+                return 1
+    return failed
+
+
+async def _sftp_shell(files, cwd: list[str], conn) -> int:
+    print(f"connected to {conn.profile.summary()}; help lists the commands", file=sys.stderr)
+    while True:
+        line = await ConsolePrompter().ask(f"sftp {printable(cwd[0])}> ", secret=False)
+        if line is None:
+            return 0
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        try:
+            words = _split_words(line)
+            if SFTP_ALIASES.get(words[0], words[0]) == "quit":
+                return 0
+            await _sftp_command(files, words, cwd, confirm=_yes)
+        except Exception as exc:
+            if (problem := _sftp_problem(exc)) is None:
+                raise
+            print(f"termdeck: {problem}", file=sys.stderr)
+
+
+async def _yes(question: str) -> bool:
+    return ((await ConsolePrompter().ask(question, secret=False)) or "").strip().lower() in ("y", "yes")
 
 
 def cmd_web(args, store: ProfileStore) -> int:
@@ -614,16 +867,14 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("tunnel", help="open a profile's port forwards without a shell")
     p.add_argument("name")
     p.set_defaults(func=cmd_tunnel)
-    p = sub.add_parser("sftp", help="file transfer over a saved SSH profile")
-    p.add_argument("name")
-    actions = p.add_subparsers(dest="action", required=True, metavar="ACTION")
-    a = actions.add_parser("ls", help="list a remote directory")
-    a.add_argument("path", nargs="?")
-    for action, source, dest in (("get", "REMOTE", "LOCAL"), ("put", "LOCAL", "REMOTE")):
-        a = actions.add_parser(action, help=f"copy {source.lower()} to {dest.lower()}")
-        a.add_argument("source", metavar=source)
-        a.add_argument("dest", nargs="?", metavar=dest)
-        a.add_argument("-r", "--recursive", action="store_true")
+    p = sub.add_parser("sftp", help="file transfer: one command, or a shell (like psftp)",
+                       description=SFTP_HELP, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("name", metavar="TARGET", help="profile name or user@host[:port]")
+    p.add_argument("words", nargs=argparse.REMAINDER, metavar="COMMAND", help="e.g. get -r /var/log logs")
+    p.add_argument("--force", action="store_true", help="replace existing files")
+    p.add_argument("-b", dest="batch_file", metavar="FILE", help="run the commands in FILE (like psftp -b)")
+    p.add_argument("--echo", action="store_true", help="show each script command as it runs (psftp -bc)")
+    p.add_argument("--keep-going", action="store_true", help="continue a script after an error (psftp -be)")
     p.set_defaults(func=cmd_sftp)
     return parser
 
@@ -654,9 +905,9 @@ def _split_command(parser: argparse.ArgumentParser, argv: list[str]) -> tuple[li
 def main(argv: list[str] | None = None) -> int:
     if sys.platform == "win32":
         # Redirected output would otherwise use the ANSI code page and fail on accents.
-        for stream in (sys.stdout, sys.stderr):
-            if hasattr(stream, "reconfigure"):
-                stream.reconfigure(encoding="utf-8", errors="replace")
+        for stream, encoding in ((sys.stdin, "utf-8-sig"), (sys.stdout, "utf-8"), (sys.stderr, "utf-8")):
+            if hasattr(stream, "reconfigure"):  # piped scripts in UTF-8 (a BOM allowed) too
+                stream.reconfigure(encoding=encoding, errors="replace")
     parser = build_parser()
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["connect"]:

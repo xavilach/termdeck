@@ -313,7 +313,7 @@ async def test_password_file_does_not_answer_the_jump_host(ssh_server, password_
     code, out, err = await run_cli(ssh_server, "--batch", "--password-file", str(password_file),
                                    "--set", f"ssh.jump_host={USER}@localhost:{ssh_server.port}", None, "x")
     assert code == 1 and b"ran" not in out
-    assert f"{USER}@localhost password:" in err and "needs an answer" in err  # the jump host's question failed
+    assert f"{USER}@localhost:{ssh_server.port} password:" in err and "needs an answer" in err  # the jump host's question failed
 
 
 async def test_password_file_does_not_answer_a_key_passphrase(ssh_server, password_file, tmp_path):
@@ -609,3 +609,22 @@ async def test_nc_cannot_be_combined_with_a_command_or_forwards(ssh_server):
         assert code == 2 and "--nc replaces the shell" in err
     code, out, err = await run_cli(ssh_server, "--nc", "127.0.0.1:9", None, "uptime")
     assert code == 2 and "--nc replaces the shell" in err
+
+
+async def test_password_file_label_includes_a_non_default_port(ssh_server, password_file):
+    """Jump host alice@localhost:PORT and target alice@127.0.0.1:PORT have different labels: the
+    file answers only the target."""
+    from termdeck import cli
+    from termdeck.ssh import remember_host_key
+
+    for host in ("localhost", "127.0.0.1"):
+        remember_host_key(host, ssh_server.port, ssh_server.key)
+    inner = FakePrompter(answers=["secret"])  # what the user types for the jump host
+    prompter = cli.PasswordFilePrompter(inner, str(password_file), f"127.0.0.1:{ssh_server.port}")
+    profile = ssh_server.profile(jump_host=f"{USER}@localhost:{ssh_server.port}")
+    session = await open_session(profile, prompter)
+    try:
+        assert b"hello" in await read_until(session, b"\n")
+    finally:
+        await session.close()
+    assert inner.asked == [f"{USER}@localhost:{ssh_server.port} password: "]  # the file went to the target

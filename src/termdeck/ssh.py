@@ -12,6 +12,7 @@ from .config import atomic_write, config_dir, file_lock, open_private, user_path
 from .errors import ConnectError
 from .profiles import Profile, check_host, parse_env, parse_jump
 from .session import HostKey, Prompter, Session, describe_error as _describe, notify, printable
+from .sftp import SFTP
 
 MAX_PASSWORD_TRIES = 3
 ERRORS = (asyncssh.Error,)  # connection failures, as opposed to bugs (see session.is_expected)
@@ -186,7 +187,7 @@ class SSHConnection:
         self.profile = profile
         self.jump = jump
         self.listeners: list[asyncssh.SSHListener] = []
-        self._sftp: asyncssh.SFTPClient | None = None
+        self._files: SFTP | None = None
 
     @classmethod
     async def connect(cls, profile: Profile, prompter: Prompter) -> "SSHConnection":
@@ -222,7 +223,7 @@ class SSHConnection:
             options["encryption_algs"] = _csv(s.ciphers)
         if s.kex_algs:
             options["kex_algs"] = _csv(s.kex_algs)
-        label = f"{username}@{s.host}"
+        label = f"{username}@{s.host}" + (f":{s.port}" if s.port != 22 else "")
 
         for _ in range(2):
             client = _Client(prompter, label)
@@ -299,17 +300,15 @@ class SSHConnection:
         reader, writer = await self.conn.open_connection(host, port)
         return SSHStream(self, reader, writer, f"{host}:{port}")
 
-    def sftp(self):
-        """Return an async context manager yielding an asyncssh SFTPClient."""
-        return self.conn.start_sftp_client()
-
-    async def sftp_client(self) -> asyncssh.SFTPClient:
-        """SFTP client shared by the UI for this connection, opened on first use."""
-        if self._sftp is None:
-            self._sftp = await self.conn.start_sftp_client()
-        return self._sftp
+    def sftp(self) -> SFTP:
+        """File transfer on this connection; the SFTP channel opens on first use."""
+        if self._files is None:
+            self._files = SFTP(self.conn)
+        return self._files
 
     def close(self) -> None:
+        if self._files:
+            self._files.close()
         self.conn.close()
         if self.jump:
             self.jump.close()
@@ -387,6 +386,9 @@ class SSHShell(Session):
         if self.connection.profile.ssh.pty:  # no terminal, no size
             self._process.change_terminal_size(cols, rows)
 
+    def sftp(self) -> SFTP:
+        return self.connection.sftp()
+
     async def close(self) -> None:
         self.connection.close()
         await self.connection.wait_closed()
@@ -414,6 +416,9 @@ class SSHForwards(Session):
 
     async def write_eof(self) -> bool:
         return True  # input ending (stdin from /dev/null) must not close the forwards
+
+    def sftp(self) -> SFTP:
+        return self.connection.sftp()
 
     async def close(self) -> None:
         self.connection.close()
@@ -444,6 +449,9 @@ class SSHStream(Session):
         if not self._writer.is_closing():
             self._writer.write_eof()
         return True
+
+    def sftp(self) -> SFTP:
+        return self.connection.sftp()
 
     async def close(self) -> None:
         self.connection.close()

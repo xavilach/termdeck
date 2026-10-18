@@ -27,6 +27,14 @@ function el(tag, attrs = {}, ...children) {
 const AUTH_HEADER = "X-Termdeck-Auth";
 let secret = null;
 
+// The desktop window (gui.py) adds desktop=1 to the start link.
+const desktop = (() => {
+  try {
+    if (new URLSearchParams(location.hash.slice(1)).get("desktop") === "1") sessionStorage.setItem("termdeck-desktop", "1");
+    return sessionStorage.getItem("termdeck-desktop") === "1";
+  } catch { return new URLSearchParams(location.hash.slice(1)).get("desktop") === "1"; }
+})();
+
 async function login() {
   const token = new URLSearchParams(location.hash.slice(1)).get("token");
   if (token) {
@@ -725,16 +733,16 @@ function parentPath(path) {
 async function refreshSftp(path) {
   const tab = state.active;
   if (!tab?.session || !tab.hasSftp) return;
-  $("#sftp-status").textContent = "Loading…";
+  $("#sftp-info").textContent = "Loading…";
   try {
     const data = await api("GET", sftpUrl(tab, "", { path: path ?? tab.sftpPath ?? "." }));
     if (tab !== state.active) return;
     tab.sftpPath = data.path;
     $("#sftp-path").value = data.path;
     $("#sftp-list").replaceChildren(...data.entries.map((entry) => fileRow(tab, entry)));
-    $("#sftp-status").textContent = `${data.entries.length} items`;
+    $("#sftp-info").textContent = `${data.entries.length} items`;
   } catch (e) {
-    $("#sftp-status").textContent = e.message;
+    $("#sftp-info").textContent = e.message;
   }
 }
 
@@ -753,6 +761,7 @@ function fileRow(tab, entry) {
       showMenu(e.clientX, e.clientY, [
         [entry.dir ? "Open" : "Download", open],
         ["Rename…", () => sftpRename(tab, path, entry.name)],
+        ["Permissions…", () => sftpChmod(tab, path, entry)],
         ["Delete", () => sftpDelete(tab, path, entry), "danger"],
       ]);
     },
@@ -771,11 +780,14 @@ async function download(tab, path) {
   } catch (e) { toast(e.message, true); }
 }
 
-async function sftpOp(tab, body) {
+async function sftpOp(tab, body, busy = "") {
+  const panel = $("#sftp");
+  if (busy) { $("#sftp-info").textContent = busy; panel.classList.add("sftp-busy"); }
   try {
     await api("POST", sftpUrl(tab, "/op"), body);
-    refreshSftp();
   } catch (e) { toast(e.message, true); }
+  panel.classList.remove("sftp-busy");
+  refreshSftp();
 }
 
 async function sftpRename(tab, path, name) {
@@ -784,24 +796,76 @@ async function sftpRename(tab, path, name) {
 }
 
 async function sftpDelete(tab, path, entry) {
-  const ok = await prompt({ title: "Delete", body: el("p", {}, `Delete ${entry.name}${entry.dir ? " (must be empty)" : ""}?`), okLabel: "Delete", danger: true });
-  if (ok) sftpOp(tab, { op: entry.dir ? "rmdir" : "remove", path });
+  const what = entry.dir ? `the folder ${entry.name} and everything in it` : entry.name;
+  const ok = await prompt({ title: "Delete", body: el("p", {}, `Delete ${what}? This cannot be undone.`), okLabel: "Delete", danger: true });
+  if (ok) sftpOp(tab, { op: "remove", path, recursive: entry.dir }, `Deleting ${entry.name}…`);
 }
+
+async function sftpChmod(tab, path, entry) {
+  const mode = await prompt({
+    title: "Permissions", body: el("p", {}, `New mode for ${entry.name} (now ${entry.mode}): octal like 644, or u+x, go-w`),
+    input: {},
+  });
+  if (mode) sftpOp(tab, { op: "chmod", path, mode });
+}
+
+let upload = null;  // the running upload's XMLHttpRequest, so it can be cancelled
+let uploading = false;  // from the conflict question to the end
 
 async function sftpUpload(files) {
   const tab = state.active;
   if (!tab?.session || !files.length) return;
+  if (uploading) { toast("An upload is already running: wait for it or cancel it", true); return; }
+  uploading = true;
+  try { await runUpload(tab, files); } finally { uploading = false; }
+}
+
+async function runUpload(tab, files) {
+  const directory = tab.sftpPath;
+  let overwrite = false;
+  try {
+    // Never replace a remote file silently: ask first, naming the files.
+    const { existing } = await api("POST", sftpUrl(tab, "/check"), { path: directory, names: files.map((f) => f.name) });
+    if (existing.length) {
+      const list = existing.length > 5 ? `${existing.slice(0, 5).join(", ")} and ${existing.length - 5} more` : existing.join(", ");
+      overwrite = await prompt({
+        title: "Replace files?", body: el("p", {}, `${list} already exist${existing.length === 1 ? "s" : ""} in ${directory}.`),
+        okLabel: "Replace", danger: true,
+      });
+      if (!overwrite) return;
+    }
+  } catch (e) { toast(e.message, true); return; }
   const form = new FormData();
   for (const file of files) form.append("file", file, file.name);
-  $("#sftp-status").textContent = `Uploading ${files.length} file(s)…`;
-  try {
-    const response = await fetch(sftpUrl(tab, "/upload", { path: tab.sftpPath }), {
-      method: "POST", body: form, headers: { [AUTH_HEADER]: secret },
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-    toast(`Uploaded ${data.uploaded.length} file(s)`);
-  } catch (e) { toast(`Upload failed: ${e.message}`, true); }
+  const total = files.reduce((n, f) => n + f.size, 0);
+  const status = $("#sftp-transfer");  // the listing (#sftp-info) may refresh meanwhile
+  const cancel = el("button", { type: "button", onclick: () => upload?.abort() }, "Cancel");
+  const label = el("span", {}, `Uploading ${files.length} file(s)…`);
+  status.replaceChildren(label, " ", cancel);
+  upload = new XMLHttpRequest();
+  const done = new Promise((resolve) => {
+    upload.upload.onprogress = (e) => {
+      const size = e.lengthComputable ? e.total : total;
+      label.textContent = e.loaded >= size
+        ? `Finishing upload of ${files.length} file(s)…`  // sent; the server is still writing it
+        : `Uploading ${files.length} file(s): ${formatSize(e.loaded)} of ${formatSize(size)} (${Math.floor((e.loaded / size) * 100)}%)`;
+    };
+    upload.onload = () => {
+      let data = {};
+      try { data = JSON.parse(upload.responseText); } catch { /* not JSON */ }
+      if (upload.status === 200) toast(`Uploaded ${data.uploaded.length} file(s)`);
+      else toast(`Upload failed: ${data.error || upload.statusText}`, true);
+      resolve();
+    };
+    upload.onerror = () => { toast("Upload failed: connection lost", true); resolve(); };
+    upload.onabort = () => { toast("Upload cancelled; a partly sent file may remain on the server", true); resolve(); };
+  });
+  upload.open("POST", sftpUrl(tab, "/upload", { path: directory, overwrite: overwrite ? "1" : "0" }));
+  upload.setRequestHeader(AUTH_HEADER, secret);
+  upload.send(form);
+  await done;
+  upload = null;
+  status.replaceChildren();
   refreshSftp();
 }
 
@@ -818,6 +882,8 @@ const sftpActions = {
 
 function bindEvents() {
   $("#new-profile").onclick = () => openEditor();
+  // In the desktop window there is no browser to open another window in.
+  $(".sidebar-footer").hidden = desktop;
   $("#new-window").onclick = async () => {
     try {
       const { url } = await api("POST", "/api/link");

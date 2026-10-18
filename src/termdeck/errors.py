@@ -23,3 +23,7 @@ class ProfileNotFound(TermdeckError, KeyError):
 
 class ConnectError(TermdeckError):
     """Connecting failed for a reason the message explains (no username, cancelled...)."""
+
+
+class SFTPFailure(TermdeckError):
+    """A file transfer or remote file operation failed (the message names the path)."""

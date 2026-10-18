@@ -22,7 +22,7 @@ The core, CLI and TUI need `asyncssh`, `bcrypt`, `pyserial`, `textual` and `pyte
 
 - **SSH**: password, keyboard-interactive, keys (with passphrase), agent; jump host; keepalive, compression, agent and X11 forwarding, environment, cipher and key-exchange lists, remote command.
 - **Port forwards**: local `-L`, remote `-R`, SOCKS `-D`. Forwards listening on a non-loopback address are flagged.
-- **SFTP**: file panel in the web and desktop UIs (browse, upload by drag and drop, download, rename, delete, new folder); `termdeck sftp NAME ls|get|put` on the command line.
+- **SFTP**: file panel in the web and desktop UIs (browse, upload by drag and drop, download, rename, delete, new folder); `termdeck sftp TARGET [COMMAND]` on the command line: the psftp commands (ls, cd, get, put, mget, mput, reget, reput, mkdir, rm, rmdir, mv, chmod, lcd...) with wildcards, never replacing files without `-f`.
 - **Serial**: any pyserial device or URL (`COM3`, `/dev/ttyUSB0`, `rfc2217://host:port`); speed, data bits, parity, stop bits, flow control, DTR/RTS, break.
 - **Follow the device**: a serial profile remembers its USB adapter (VID:PID, serial number, USB socket) and finds it again when its port name changes. It never guesses between adapters it cannot tell apart, and refuses to connect if the old port name now belongs to a different adapter.
 - **Local line editing**: for devices without a line editor. Edit the line here (arrows, Home/End, Ctrl+U/K/W, history with Up/Down) and send it on Enter. After a prompt such as `Password:` the line is not echoed and not kept in history.
@@ -44,7 +44,8 @@ termdeck connect web uptime          # run a command; its exit status is ours (l
 tar c dir | termdeck connect web "tar x"   # with pipes: stdin/stdout pass through, no terminal
 termdeck connect --batch -N -L 8080:db:5432 web   # never prompt; forwards only
 termdeck tunnel web                  # forwards only, no shell
-termdeck sftp web get /var/log/syslog
+termdeck sftp web get /var/log/syslog   # one command, or no command for a psftp-like shell
+termdeck sftp web -b script.txt         # a script (also from stdin); stops at the first error
 termdeck ports                       # serial ports with their USB identity
 termdeck forget-host host.example     # forget a host's key after a server was reinstalled
 ```

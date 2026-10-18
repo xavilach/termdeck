@@ -138,7 +138,10 @@ kbd { background: var(--panel-2); border: 1px solid var(--border); border-radius
 .file:hover { background: var(--panel-2); }
 .file .fname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file .fsize { color: var(--muted); font-size: 11px; font-family: var(--mono); }
-#sftp-status { padding: 6px 10px; font-size: 11px; border-top: 1px solid var(--border); }
+#sftp-status { padding: 6px 10px; font-size: 11px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; }
+#sftp-transfer:empty { display: none; }
+#sftp-transfer button { padding: 0 6px; font-size: 11px; margin-left: 6px; }
+.sftp-busy #sftp-list { opacity: .5; pointer-events: none; }
 
 /* Dialogs */
 dialog { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 12px; padding: 0; width: min(640px, 94vw); box-shadow: 0 20px 60px #0008; }

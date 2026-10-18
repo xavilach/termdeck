@@ -105,6 +105,10 @@ class Session(ABC):
         """Tell the remote side input has ended. False if it cannot know (a serial port)."""
         return False
 
+    def sftp(self):
+        """File transfer on the same connection (sftp.SFTP), or None (serial)."""
+        return None
+
     def resize(self, cols: int, rows: int) -> None:
         """Report the new terminal size. Ignored by sessions without one."""
 
@@ -188,6 +192,9 @@ class TerminalSession(Session):
 
     async def write_eof(self) -> bool:
         return await self.inner.write_eof()
+
+    def sftp(self):
+        return self.inner.sftp()
 
     def _local(self, data: bytes) -> None:
         """Show bytes that did not come from the remote side (echo, notices)."""

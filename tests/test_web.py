@@ -471,3 +471,108 @@ async def test_a_bug_in_a_handler_is_a_500_not_a_400(client, monkeypatch):
     monkeypatch.setattr(ProfileStore, "load", broken)
     await login(client)
     assert (await client.get("/api/profiles")).status == 500
+
+
+async def _upload(client, sid, name, data, query="path=/"):
+    form = FormData()
+    form.add_field("file", data, filename=name)
+    return await client.post(f"/api/sessions/{sid}/sftp/upload?{query}", data=form)
+
+
+async def test_sftp_check_returns_existing_names(client, ssh_server):
+    ws, sid = await _sftp_session(client, ssh_server)
+    (ssh_server.root / "here.txt").write_text("x")
+    r = await client.post(f"/api/sessions/{sid}/sftp/check", json={"path": "/", "names": ["here.txt", "new.txt", "../here.txt"]})
+    assert r.status == 200
+    assert (await r.json())["existing"] == ["here.txt", "../here.txt"]  # the page's names, judged by base name
+    r = await client.post(f"/api/sessions/{sid}/sftp/check", json={"path": "/", "names": [".."]})
+    assert r.status == 400
+    await ws.close()
+
+
+async def test_upload_to_an_existing_name_is_a_409_unless_overwrite(client, ssh_server):
+    ws, sid = await _sftp_session(client, ssh_server)
+    (ssh_server.root / "f.txt").write_bytes(b"old")
+    r = await _upload(client, sid, "f.txt", b"new")
+    assert r.status == 409 and "already exists" in (await r.json())["error"]
+    assert (ssh_server.root / "f.txt").read_bytes() == b"old"
+    r = await _upload(client, sid, "f.txt", b"new", "path=/&overwrite=0")
+    assert r.status == 409
+    r = await _upload(client, sid, "f.txt", b"new", "path=/&overwrite=1")
+    assert r.status == 200 and (await r.json())["uploaded"] == ["f.txt"]
+    assert (ssh_server.root / "f.txt").read_bytes() == b"new"
+    await ws.close()
+
+
+async def test_upload_names_are_reduced_to_the_base_name(client, ssh_server):
+    ws, sid = await _sftp_session(client, ssh_server)
+    (ssh_server.root / "sub").mkdir()
+    # Sent as is: aiohttp's FormData would percent-encode the slash.
+    for raw, saved in [("../escape.txt", "escape.txt"), ("a/b/../../deep.txt", "deep.txt")]:
+        body = f'--B\r\nContent-Disposition: form-data; name="file"; filename="{raw}"\r\n\r\nx\r\n--B--\r\n'.encode()
+        r = await client.post(f"/api/sessions/{sid}/sftp/upload?path=/sub", data=body,
+                              headers={"Content-Type": "multipart/form-data; boundary=B"})
+        assert r.status == 200 and (await r.json())["uploaded"] == [saved]
+        assert (ssh_server.root / "sub" / saved).read_bytes() == b"x"
+    assert sorted(p.name for p in ssh_server.root.iterdir()) == ["sub"]  # nothing escaped the folder
+    r = await _upload(client, sid, "..", b"x", "path=/sub")
+    assert r.status == 400
+    await ws.close()
+
+
+async def test_sftp_remove_recursive_and_chmod(client, ssh_server):
+    ws, sid = await _sftp_session(client, ssh_server)
+    (ssh_server.root / "d").mkdir()
+    (ssh_server.root / "d" / "f").write_text("x")
+    (ssh_server.root / "m").write_text("x")
+    op = f"/api/sessions/{sid}/sftp/op"
+    r = await client.post(op, json={"op": "remove", "path": "/d"})
+    assert r.status == 400 and (ssh_server.root / "d").exists()
+    r = await client.post(op, json={"op": "remove", "path": "/d", "recursive": True})
+    assert r.status == 200 and not (ssh_server.root / "d").exists()
+    r = await client.post(op, json={"op": "chmod", "path": "/m", "mode": "644"})
+    assert r.status == 200 and (ssh_server.root / "m").stat().st_mode & 0o777 == 0o644
+    r = await client.post(op, json={"op": "chmod", "path": "/m", "mode": "89"})  # not octal
+    assert r.status == 400
+    r = await client.post(op, json={"op": "nope", "path": "/m"})
+    assert r.status == 400
+    await ws.close()
+
+
+async def test_api_and_downloads_are_not_cached_but_static_files_are_allowed_to_be(client, ssh_server):
+    ws, sid = await _sftp_session(client, ssh_server)
+    (ssh_server.root / "f").write_bytes(b"data")
+    r = await client.get("/api/profiles")
+    assert r.headers["Cache-Control"] == "no-store"
+    assert (await client.get(f"/api/sessions/{sid}/sftp?path=/")).headers["Cache-Control"] == "no-store"
+    ticket = await (await client.post(f"/api/sessions/{sid}/sftp/ticket", json={"path": "/f"})).json()
+    r = await client.get(ticket["url"])
+    assert await r.read() == b"data" and r.headers["Cache-Control"] == "no-store"
+    r = await client.get("/static/app.js")
+    assert r.status == 200 and r.headers.get("Cache-Control") != "no-store"
+    await ws.close()
+
+
+async def test_sftp_chmod_accepts_symbolic_modes_and_rejects_bad_ones(client, ssh_server):
+    ws, sid = await _sftp_session(client, ssh_server)
+    target = ssh_server.root / "m"
+    target.write_text("x")
+    target.chmod(0o644)
+    op = f"/api/sessions/{sid}/sftp/op"
+    r = await client.post(op, json={"op": "chmod", "path": "/m", "mode": "u+x"})
+    assert r.status == 200 and target.stat().st_mode & 0o777 == 0o744
+    r = await client.post(op, json={"op": "chmod", "path": "/m", "mode": "bad"})
+    assert r.status == 400 and "mode" in (await r.json())["error"]
+    r = await client.post(op, json={"op": "chmod", "path": "/m"})  # no mode at all
+    assert r.status == 400
+    assert target.stat().st_mode & 0o777 == 0o744
+    await ws.close()
+
+
+@pytest.mark.parametrize("route", ["op", "check"])
+@pytest.mark.parametrize("body", [[], "text", 5, None])
+async def test_sftp_json_body_that_is_not_an_object_is_a_400(client, ssh_server, route, body):
+    ws, sid = await _sftp_session(client, ssh_server)
+    r = await client.post(f"/api/sessions/{sid}/sftp/{route}", json=body)
+    assert r.status == 400 and "error" in await r.json()
+    await ws.close()

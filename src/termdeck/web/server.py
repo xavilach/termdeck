@@ -17,7 +17,6 @@ import itertools
 import json
 import re
 import secrets
-import stat
 import time
 from urllib.parse import quote
 from dataclasses import asdict
@@ -31,7 +30,9 @@ from ..profiles import (
     resolve_target,
 )
 from ..serialport import available_ports
+from ..errors import SFTPFailure
 from ..session import HostKey, Session, describe_error, open_session
+from ..sftp import SFTP, join as sftp_join
 
 STATIC = Path(__file__).parent / "static"
 AUTH_HEADER = "X-Termdeck-Auth"
@@ -182,6 +183,15 @@ async def security(request: web.Request, handler):
 
 async def _security_headers(request: web.Request, response: web.StreamResponse) -> None:
     response.headers.update(SECURITY_HEADERS)
+    if request.path.startswith("/api/"):  # profiles, listings and file contents stay out of the disk cache
+        response.headers["Cache-Control"] = "no-store"
+
+
+def _object(body) -> dict:
+    """A JSON request body that must be an object (anything else is the client's error: 400)."""
+    if not isinstance(body, dict):
+        raise ValueError("the request body must be a JSON object")
+    return body
 
 
 def _json_error(status: int, message: str) -> web.Response:
@@ -385,41 +395,36 @@ async def terminal(request: web.Request) -> web.WebSocketResponse:
     return ws
 
 
-# SFTP, reusing the authenticated connection of an open SSH tab.
+# SFTP, reusing the authenticated connection of an open SSH tab (core: sftp.py).
 
-async def _sftp(request: web.Request, sid: str | None = None) -> asyncssh.SFTPClient:
+def _sftp(request: web.Request, sid: str | None = None) -> SFTP:
     session = request.app[sessions_key].get(sid or request.match_info["sid"])
-    connection = getattr(getattr(session, "inner", None), "connection", None)
-    if connection is None:
+    files = session.sftp() if session else None
+    if files is None:
         raise web.HTTPNotFound(text="no SSH session with this id")
-    return await connection.sftp_client()
+    return files
 
 
-def _entry(name: str, attrs: asyncssh.SFTPAttrs) -> dict:
-    mode = attrs.permissions or 0
-    return {
-        "name": name,
-        "dir": stat.S_ISDIR(mode),
-        "link": stat.S_ISLNK(mode),
-        "size": attrs.size or 0,
-        "mtime": attrs.mtime or 0,
-        "mode": stat.filemode(mode) if mode else "",
-    }
+def _entry(entry) -> dict:
+    return {"name": entry.name, "dir": entry.is_dir, "link": entry.is_link, "size": entry.size,
+            "mtime": entry.mtime, "mode": entry.mode}
+
+
+def _sftp_error(exc: Exception) -> web.Response:
+    if isinstance(exc, FileExistsError):
+        return _json_error(409, f"{exc.args[0]} already exists")
+    return _json_error(400, describe_error(exc))
+
+
+SFTP_ERRORS = (SFTPFailure, FileExistsError, asyncssh.Error, OSError)
 
 
 async def sftp_list(request: web.Request) -> web.Response:
-    sftp = await _sftp(request)
     try:
-        path = await sftp.realpath(request.query.get("path") or ".")
-        entries = [
-            _entry(e.filename, e.attrs)
-            for e in await sftp.readdir(path)
-            if e.filename not in (".", "..")
-        ]
-    except asyncssh.SFTPError as exc:
-        return _json_error(400, exc.reason)
-    entries.sort(key=lambda e: (not e["dir"], e["name"].lower()))
-    return web.json_response({"path": path, "entries": entries})
+        path, entries = await _sftp(request).list(request.query.get("path") or ".")
+    except SFTP_ERRORS as exc:
+        return _sftp_error(exc)
+    return web.json_response({"path": path, "entries": [_entry(e) for e in entries]})
 
 
 def _content_disposition(name: str) -> str:
@@ -430,17 +435,15 @@ def _content_disposition(name: str) -> str:
 
 async def sftp_ticket(request: web.Request) -> web.Response:
     """Single-use download URL, so the browser can download without holding a secret."""
-    sftp = await _sftp(request)  # 404 now rather than at download time
+    files = _sftp(request)  # 404 now rather than at download time
     path = str((await request.json())["path"])
     try:
-        # Open it now so errors (missing, permission denied, a directory) become a
+        # Open it now so errors (missing, permission denied, a folder) become a
         # message here: the browser's download UI would hide them.
-        async with await sftp.open(path, "rb"):
-            pass
-    except asyncssh.SFTPError as exc:
-        return _json_error(400, exc.reason)
-    except (asyncssh.Error, OSError) as exc:
-        return _json_error(400, describe_error(exc))
+        _, remote = await files.open_read(path)
+        await remote.close()
+    except SFTP_ERRORS as exc:
+        return _sftp_error(exc)
     ticket = request.app[auth_key].new_ticket(request.match_info["sid"], path)
     return web.json_response({"url": f"/api/download/{ticket}"})
 
@@ -450,12 +453,10 @@ async def sftp_download(request: web.Request) -> web.StreamResponse:
     if found is None:
         return _json_error(403, "download link expired, try again")
     sid, path = found
-    sftp = await _sftp(request, sid)
     try:
-        size = (await sftp.stat(path)).size
-        remote = await sftp.open(path, "rb")
-    except asyncssh.SFTPError as exc:
-        return _json_error(400, exc.reason)
+        size, remote = await _sftp(request, sid).open_read(path)
+    except SFTP_ERRORS as exc:
+        return _sftp_error(exc)
     response = web.StreamResponse(headers={
         "Content-Disposition": _content_disposition(PurePosixPath(path).name),
         "Content-Type": "application/octet-stream",
@@ -471,41 +472,61 @@ async def sftp_download(request: web.Request) -> web.StreamResponse:
 
 
 async def sftp_upload(request: web.Request) -> web.Response:
-    sftp = await _sftp(request)
+    """Multipart upload into `path`. Without `overwrite=1` an existing file stops the upload
+    with a 409 (files before it are written); the page asks first with `check`."""
+    files = _sftp(request)
     directory = request.query["path"]
+    overwrite = request.query.get("overwrite") == "1"
     reader = await request.multipart()
     names = []
     try:
         while part := await reader.next():
-            name = PurePosixPath(part.filename or "").name
-            if not name:
+            if not part.filename:
                 continue
-            async with sftp.open(str(PurePosixPath(directory) / name), "wb") as remote:
+            target = sftp_join(directory, part.filename)
+
+            async def chunks(part=part):
                 while chunk := await part.read_chunk(CHUNK):
-                    await remote.write(chunk)
-            names.append(name)
-    except asyncssh.SFTPError as exc:
-        return _json_error(400, exc.reason)
+                    yield chunk
+
+            await files.write(target, chunks(), overwrite=overwrite)
+            names.append(PurePosixPath(target).name)
+    except SFTP_ERRORS as exc:
+        return _sftp_error(exc)
     return web.json_response({"uploaded": names})
 
 
+async def sftp_check(request: web.Request) -> web.Response:
+    """Which of `names` already exist in `path`, so the page can ask before uploading."""
+    files = _sftp(request)
+    body = _object(await request.json())
+    directory, names = str(body["path"]), [str(n) for n in body["names"]]
+    try:
+        existing = [name for name in names if await files.exists(sftp_join(directory, name))]
+    except SFTP_ERRORS as exc:
+        return _sftp_error(exc)
+    return web.json_response({"existing": existing})
+
+
 async def sftp_operation(request: web.Request) -> web.Response:
-    sftp = await _sftp(request)
-    body = await request.json()
-    op, path = body.get("op"), body.get("path", "")
+    files = _sftp(request)
+    body = _object(await request.json())
+    op, path = body.get("op"), str(body.get("path", ""))
     try:
         if op == "mkdir":
-            await sftp.mkdir(path)
+            await files.mkdir(path)
         elif op == "rename":
-            await sftp.rename(path, body["to"])
+            await files.rename(path, str(body["to"]))
         elif op == "remove":
-            await sftp.remove(path)
+            await files.remove(path, recursive=bool(body.get("recursive")))
         elif op == "rmdir":
-            await sftp.rmdir(path)
+            await files.rmdir(path)
+        elif op == "chmod":
+            await files.chmod(path, str(body.get("mode", "")))  # octal or symbolic, checked by the core
         else:
             return _json_error(400, f"unknown operation {op!r}")
-    except asyncssh.SFTPError as exc:
-        return _json_error(400, exc.reason)
+    except SFTP_ERRORS as exc:
+        return _sftp_error(exc)
     return web.json_response({"ok": True})
 
 
@@ -534,6 +555,7 @@ def create_app(store: ProfileStore | None = None, token: str | None = None) -> w
     app.router.add_post("/api/sessions/{sid}/sftp/ticket", sftp_ticket)
     app.router.add_get("/api/download/{ticket}", sftp_download)
     app.router.add_post("/api/sessions/{sid}/sftp/upload", sftp_upload)
+    app.router.add_post("/api/sessions/{sid}/sftp/check", sftp_check)
     app.router.add_post("/api/sessions/{sid}/sftp/op", sftp_operation)
     return app
 
@@ -545,7 +567,7 @@ async def start(port: int = 0, store: ProfileStore | None = None) -> tuple[web.A
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", port)
     await site.start()
-    actual = site._server.sockets[0].getsockname()[1]
+    actual = runner.addresses[0][1]
     return runner, f"http://127.0.0.1:{actual}/#token={app[auth_key].new_link()}"
 
 

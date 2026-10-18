@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import re
 import sys
 import time
 
@@ -8,6 +9,7 @@ import pytest
 
 from termdeck import cli
 from termdeck.console import EscapeFilter
+from termdeck.errors import SFTPFailure
 from termdeck.profiles import ProfileStore
 from termdeck.ssh import remember_host_key
 
@@ -75,7 +77,7 @@ async def test_sftp_command(ssh_server, tmp_path, monkeypatch, capsys):
     parser = cli.build_parser()
     await cli.cmd_sftp(parser.parse_args(["sftp", "srv", "put", str(local), "/up.txt"]), store)
     await cli.cmd_sftp(parser.parse_args(["sftp", "srv", "ls", "/"]), store)
-    assert capsys.readouterr().out.split() == ["up.txt"]
+    assert capsys.readouterr().out.split()[-1] == "up.txt"  # mode, size, name
     await cli.cmd_sftp(parser.parse_args(["sftp", "srv", "get", "/up.txt", str(tmp_path / "down.txt")]), store)
     assert (tmp_path / "down.txt").read_text() == "data"
 
@@ -353,3 +355,332 @@ def test_expected_exception_exits_1_without_a_traceback(monkeypatch, capsys):
     monkeypatch.setattr(cli, "cmd_list", refused)
     code, out, err = run(capsys, "list")
     assert code == 1 and "Connection refused" in err and "Traceback" not in err
+
+
+
+
+@pytest.fixture
+def sftp_cli(ssh_server, tmp_path, monkeypatch):
+    """sftp_cli(*words, target=..., stdin=None) runs `termdeck sftp TARGET WORDS...`; returns the exit code."""
+    remember_host_key("127.0.0.1", ssh_server.port, ssh_server.key)
+    monkeypatch.setattr(cli, "ConsolePrompter", FakePrompter)
+    store = ProfileStore()
+    store.save(ssh_server.profile("srv"))
+    monkeypatch.chdir(tmp_path)
+
+    async def run_sftp(*words, target="srv", stdin=None, force=False, options=()):
+        if stdin is not None:
+            monkeypatch.setattr(sys, "stdin", io.StringIO(stdin))
+        argv = ["sftp", *(["--force"] if force else []), *options, target, *words]
+        return await cli.cmd_sftp(cli.build_parser().parse_args(argv), store)
+
+    return run_sftp
+
+
+async def test_sftp_ls_long_format_and_quick_target(sftp_cli, ssh_server, capsys):
+    (ssh_server.root / "dir").mkdir()
+    (ssh_server.root / "f.txt").write_text("12345")
+    target = f"alice@127.0.0.1:{ssh_server.port}"
+    assert await sftp_cli("ls", "/", target=target) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert [l.split()[-1] for l in lines] == ["dir/", "f.txt"]  # folders first
+    assert lines[0].split()[0].startswith("d")
+    # mode, size, modification time, name
+    assert re.fullmatch(r"-[rwx-]{9} +\d+(?: \w+)? +\d{4}-\d\d-\d\d \d\d:\d\d f\.txt", lines[1]), lines[1]
+
+
+async def test_sftp_get_refuses_to_overwrite_a_local_file_unless_forced(sftp_cli, ssh_server, tmp_path):
+    (ssh_server.root / "r.txt").write_text("remote")
+    local = tmp_path / "r.txt"
+    local.write_text("local")
+    with pytest.raises(ValueError, match="already exists.*-f"):
+        await sftp_cli("get", "/r.txt", str(local))
+    assert local.read_text() == "local"
+    assert await sftp_cli("get", "-f", "/r.txt", str(local)) == 0
+    assert local.read_text() == "remote"
+
+
+async def test_sftp_force_flag_replaces(sftp_cli, ssh_server, tmp_path):
+    (ssh_server.root / "r.txt").write_text("remote")
+    local = tmp_path / "r.txt"
+    local.write_text("local")
+    assert await sftp_cli("get", "/r.txt", str(local), force=True) == 0
+    assert local.read_text() == "remote"
+
+
+async def test_sftp_put_recursive_folder(sftp_cli, ssh_server, tmp_path):
+    src = tmp_path / "tree"
+    (src / "inner").mkdir(parents=True)
+    (src / "a.txt").write_text("a")
+    (src / "inner" / "b.txt").write_text("世界")
+    with pytest.raises(Exception):  # a folder needs -r
+        await sftp_cli("put", str(src), "/tree")
+    assert await sftp_cli("put", "-r", str(src), "/tree") == 0
+    assert (ssh_server.root / "tree" / "a.txt").read_text() == "a"
+    assert (ssh_server.root / "tree" / "inner" / "b.txt").read_text(encoding="utf-8") == "世界"
+
+
+async def test_sftp_remote_file_commands(sftp_cli, ssh_server):
+    root = ssh_server.root
+    assert await sftp_cli("mkdir", "/d") == 0 and (root / "d").is_dir()
+    (root / "d" / "f").write_text("x")
+    with pytest.raises(Exception):
+        await sftp_cli("rmdir", "/d")  # not empty
+    assert await sftp_cli("mv", "/d/f", "/d/g") == 0 and (root / "d" / "g").exists()
+    (root / "d" / "h").write_text("h")
+    with pytest.raises(ValueError, match="already exists"):
+        await sftp_cli("mv", "/d/g", "/d/h")
+    assert await sftp_cli("mv", "/d/g", "/d/i") == 0
+    (root / "d" / "h").write_text("x")
+    assert await sftp_cli("chmod", "600", "/d/h") == 0
+    assert (root / "d" / "h").stat().st_mode & 0o777 == 0o600
+    assert await sftp_cli("rm", "-r", "/d") == 0 and not (root / "d").exists()
+    assert await sftp_cli("mkdir", "/e") == 0 and await sftp_cli("rmdir", "/e") == 0 and not (root / "e").exists()
+
+
+async def test_sftp_mv_force_replaces_the_target(sftp_cli, ssh_server):
+    (ssh_server.root / "g").write_text("g")
+    (ssh_server.root / "h").write_text("h")
+    assert await sftp_cli("mv", "-f", "/g", "/h") == 0
+    assert (ssh_server.root / "h").read_text() == "g"
+
+
+async def test_sftp_unknown_command_and_bad_chmod_mode(sftp_cli, ssh_server):
+    (ssh_server.root / "f").write_text("x")
+    with pytest.raises(ValueError, match="unknown command 'frobnicate'"):
+        await sftp_cli("frobnicate")
+    with pytest.raises((ValueError, SFTPFailure), match="octal"):
+        await sftp_cli("chmod", "rwx", "/f")
+    with pytest.raises((ValueError, SFTPFailure), match="octal"):
+        await sftp_cli("chmod", "789", "/f")
+    with pytest.raises(ValueError, match="usage"):
+        await sftp_cli("get")
+
+
+async def test_sftp_shell_reads_commands_from_a_pipe(sftp_cli, ssh_server, tmp_path, capsys):
+    (ssh_server.root / "sub").mkdir()
+    (tmp_path / "x").write_text("payload")
+    script = "cd sub\nput x\nls\npwd\nquit\nmkdir never\n"
+    assert await sftp_cli(stdin=script) == 0
+    out = capsys.readouterr().out
+    assert (ssh_server.root / "sub" / "x").read_text() == "payload"
+    assert out.splitlines()[-2].split()[-1] == "x" and out.splitlines()[-1] == "/sub"
+    assert not (ssh_server.root / "never").exists()  # nothing runs after quit
+
+
+async def test_sftp_shell_local_folder_commands(sftp_cli, ssh_server, tmp_path, capsys):
+    (tmp_path / "dl").mkdir()
+    (ssh_server.root / "r.txt").write_text("remote")
+    assert await sftp_cli(stdin="lcd dl\nlpwd\nget /r.txt\n") == 0
+    assert capsys.readouterr().out.strip() == str((tmp_path / "dl").resolve())
+    assert (tmp_path / "dl" / "r.txt").read_text() == "remote"
+
+
+async def test_sftp_script_stops_at_the_first_failure(sftp_cli, ssh_server, capsys):
+    code = await sftp_cli(stdin="mkdir /one\nrmdir /missing\nmkdir /two\nquit\n")
+    assert code == 1
+    assert (ssh_server.root / "one").is_dir() and not (ssh_server.root / "two").exists()
+    assert "/missing" in capsys.readouterr().err
+
+
+async def test_sftp_script_reports_existing_files_and_cd_to_a_file(sftp_cli, ssh_server, tmp_path, capsys):
+    (ssh_server.root / "f").write_text("x")
+    (tmp_path / "f").write_text("local")
+    assert await sftp_cli(stdin="get /f\n") == 1
+    assert "already exists (use -f to replace it)" in capsys.readouterr().err
+    assert await sftp_cli(stdin="cd /f\n") == 1
+    assert "not a folder" in capsys.readouterr().err
+    assert await sftp_cli(stdin="cd /nope\n") == 1
+    assert "/nope" in capsys.readouterr().err
+    assert await sftp_cli(stdin="") == 0  # end of input ends the shell
+
+
+@pytest.mark.parametrize("alias, words, check", [
+    ("dir", ["/"], lambda root, out: "f.txt" in out),
+    ("del", ["/f.txt"], lambda root, out: not (root / "f.txt").exists()),
+    ("ren", ["/f.txt", "/g.txt"], lambda root, out: (root / "g.txt").exists() and not (root / "f.txt").exists()),
+    ("md", ["/newdir"], lambda root, out: (root / "newdir").is_dir()),
+    ("rd", ["/emptydir"], lambda root, out: not (root / "emptydir").exists()),
+    ("mget", ["/f.txt"], lambda root, out: True),
+])
+async def test_sftp_psftp_aliases(sftp_cli, ssh_server, tmp_path, capsys, alias, words, check):
+    root = ssh_server.root
+    (root / "f.txt").write_text("x")
+    (root / "emptydir").mkdir()
+    assert await sftp_cli(alias, *words) == 0
+    assert check(root, capsys.readouterr().out)
+    if alias == "mget":
+        assert (tmp_path / "f.txt").read_text() == "x"
+
+
+async def test_sftp_mput_uploads_into_the_remote_folder(sftp_cli, ssh_server, tmp_path):
+    (tmp_path / "a.log").write_text("a")
+    (tmp_path / "b.log").write_text("b")
+    (tmp_path / "c.txt").write_text("c")
+    (ssh_server.root / "up").mkdir()
+    assert await sftp_cli(stdin="cd /up\nmput *.log\n") == 0
+    assert sorted(p.name for p in (ssh_server.root / "up").iterdir()) == ["a.log", "b.log"]
+    with pytest.raises(ValueError, match="no local match"):
+        await sftp_cli("mput", "*.nothing")
+
+
+async def test_sftp_script_skips_comments_and_blank_lines(sftp_cli, ssh_server):
+    assert await sftp_cli(stdin="# comment\n\n   # indented comment\nmkdir /one\n#mkdir /two\n") == 0
+    assert (ssh_server.root / "one").is_dir() and not (ssh_server.root / "two").exists()
+
+
+async def test_sftp_rm_mkdir_chmod_take_several_names(sftp_cli, ssh_server):
+    root = ssh_server.root
+    for name in "abc":
+        (root / name).write_text(name)
+    assert await sftp_cli("chmod", "600", "/a", "/b") == 0
+    assert (root / "a").stat().st_mode & 0o777 == 0o600 and (root / "b").stat().st_mode & 0o777 == 0o600
+    assert await sftp_cli("chmod", "u+x", "/a", "/b") == 0
+    assert (root / "a").stat().st_mode & 0o777 == 0o700
+    assert await sftp_cli("rm", "/a", "/b", "/c") == 0
+    assert list(root.iterdir()) == []
+    assert await sftp_cli("mkdir", "/x", "/y") == 0
+    assert (root / "x").is_dir() and (root / "y").is_dir()
+
+
+async def test_sftp_mv_several_files_into_a_folder(sftp_cli, ssh_server):
+    root = ssh_server.root
+    for name in ("a", "b"):
+        (root / name).write_text(name)
+    (root / "dir").mkdir()
+    (root / "plain").write_text("p")
+    with pytest.raises(ValueError, match="needs a folder"):
+        await sftp_cli("mv", "/a", "/b", "/plain")
+    assert (root / "a").exists() and (root / "b").exists() and (root / "plain").read_text() == "p"
+    with pytest.raises(ValueError, match="needs a folder"):
+        await sftp_cli("mv", "/a", "/b", "/missing")
+    assert await sftp_cli("mv", "/a", "/b", "/dir/") == 0
+    assert sorted(p.name for p in (root / "dir").iterdir()) == ["a", "b"]
+    assert not (root / "a").exists() and not (root / "b").exists()
+
+
+async def test_sftp_wildcards_for_get_and_rm(sftp_cli, ssh_server, tmp_path):
+    root = ssh_server.root
+    for name in ("a.txt", "b.txt", "c.log", "x.tmp", "y.tmp"):
+        (root / name).write_text(name)
+    (tmp_path / "dl").mkdir()
+    assert await sftp_cli(stdin="lcd dl\nget /*.txt\n") == 0
+    assert sorted(p.name for p in (tmp_path / "dl").iterdir()) == ["a.txt", "b.txt"]
+    assert await sftp_cli("rm", "/*.tmp") == 0
+    assert sorted(p.name for p in root.iterdir()) == ["a.txt", "b.txt", "c.log"]
+    with pytest.raises(SFTPFailure, match=r"/\*\.tmp"):
+        await sftp_cli("rm", "/*.tmp")
+
+
+async def test_sftp_unknown_option_and_double_dash(sftp_cli, ssh_server):
+    root = ssh_server.root
+    (root / "f").write_text("x")
+    (root / "-dash").write_text("d")
+    with pytest.raises(ValueError, match="unknown option -x"):
+        await sftp_cli("rm", "-x", "/f")
+    assert (root / "f").exists()
+    with pytest.raises(ValueError, match="unknown option"):
+        await sftp_cli("ls", "-l")
+    assert await sftp_cli("rm", "--", "-dash") == 0
+    assert not (root / "-dash").exists() and (root / "f").exists()
+
+
+async def test_sftp_force_in_every_position(sftp_cli, ssh_server, tmp_path):
+    (ssh_server.root / "x").write_text("remote")
+    local = tmp_path / "x"
+    local.write_text("local")
+    with pytest.raises(ValueError, match="already exists"):
+        await sftp_cli("get", "/x")
+    assert await sftp_cli("get", "--force", "/x") == 0 and local.read_text() == "remote"
+    local.write_text("local")
+    assert await sftp_cli("--force", "get", "/x") == 0 and local.read_text() == "remote"  # termdeck sftp T --force get x
+    local.write_text("local")
+    assert await sftp_cli("get", "-rf", "/x") == 0 and local.read_text() == "remote"  # combined letters
+    local.write_text("local")
+    assert await sftp_cli("get", "--recursive", "--force", "/x") == 0 and local.read_text() == "remote"
+
+
+async def test_sftp_rm_recursive_removes_a_folder(sftp_cli, ssh_server):
+    (ssh_server.root / "dir" / "sub").mkdir(parents=True)
+    (ssh_server.root / "dir" / "sub" / "f").write_text("x")
+    with pytest.raises(SFTPFailure):
+        await sftp_cli("rm", "/dir")
+    assert await sftp_cli("rm", "-r", "/dir") == 0
+    assert not (ssh_server.root / "dir").exists()
+
+
+async def test_sftp_rm_with_combined_flags_rf(sftp_cli, ssh_server):
+    (ssh_server.root / "dir").mkdir()
+    (ssh_server.root / "dir" / "f").write_text("x")
+    assert await sftp_cli("rm", "-rf", "/dir") == 0
+    assert not (ssh_server.root / "dir").exists()
+
+
+async def test_sftp_script_file_with_b(sftp_cli, ssh_server, tmp_path):
+    script = tmp_path / "script.txt"
+    script.write_text("mkdir /fromfile\n", encoding="utf-8")
+    assert await sftp_cli(options=["-b", str(script)]) == 0
+    assert (ssh_server.root / "fromfile").is_dir()
+    with pytest.raises(Exception, match="batch file"):
+        await sftp_cli(options=["-b", str(tmp_path / "missing.txt")])
+
+
+async def test_sftp_echo_prints_each_command_to_stderr(sftp_cli, ssh_server, capsys):
+    assert await sftp_cli(stdin="# skipped\nmkdir /e\npwd\n", options=["--echo"]) == 0
+    captured = capsys.readouterr()
+    assert captured.err.splitlines() == ["sftp> mkdir /e", "sftp> pwd"]
+    assert captured.out.strip() == "/"
+    assert await sftp_cli(stdin="pwd\n") == 0
+    assert "sftp>" not in capsys.readouterr().err
+
+
+async def test_sftp_keep_going_continues_and_exits_1(sftp_cli, ssh_server, capsys):
+    script = "mkdir /one\nrmdir /missing\nmkdir /two\n"
+    assert await sftp_cli(stdin=script, options=["--keep-going"]) == 1
+    assert (ssh_server.root / "one").is_dir() and (ssh_server.root / "two").is_dir()
+    err = capsys.readouterr().err
+    assert "line 2:" in err and "/missing" in err and "line 3" not in err
+
+
+async def test_sftp_script_without_keep_going_names_the_failing_line(sftp_cli, ssh_server, capsys):
+    assert await sftp_cli(stdin="# c\nmkdir /one\nrmdir /missing\nmkdir /two\n") == 1
+    err = capsys.readouterr().err
+    assert "line 3:" in err and not (ssh_server.root / "two").exists()
+
+
+async def test_sftp_script_reports_a_bad_option_with_the_line(sftp_cli, ssh_server, capsys):
+    assert await sftp_cli(stdin="mkdir /ok\nrm -x /ok\n") == 1
+    assert "line 2:" in capsys.readouterr().err and (ssh_server.root / "ok").exists()
+
+
+async def test_sftp_names_from_the_server_never_carry_escape_sequences(sftp_cli, ssh_server, capsys):
+    evil = "evil\x1b[2Jname"
+    (ssh_server.root / evil).write_text("x")
+    (ssh_server.root / "dir\x1b]0;title\x07").mkdir()
+    assert await sftp_cli("ls", "/") == 0
+    out = capsys.readouterr().out
+    assert "\x1b" not in out and "\x07" not in out and "evil" in out and "name" in out
+    (ssh_server.root / "dir\x1b]0;title\x07" / "f").write_text("x")
+    assert await sftp_cli(stdin="cd /dir\x1b]0;title\x07\npwd\n") == 0
+    assert "\x1b" not in capsys.readouterr().out
+    assert await sftp_cli("get", "/evil\x1b[2Jname") == 0
+    with pytest.raises(ValueError, match="already exists") as caught:
+        await sftp_cli("get", "/evil\x1b[2Jname")
+    assert "\x1b" not in str(caught.value)
+
+
+async def test_sftp_prompt_names_are_cleaned(sftp_cli, ssh_server, monkeypatch):
+    (ssh_server.root / "d\x1b[31m").mkdir()
+    prompts = []
+
+    class Recording(FakePrompter):
+        async def ask(self, prompt, secret=True):
+            if not secret:
+                prompts.append(prompt)
+                return "cd /d\x1b[31m" if len(prompts) == 1 else None
+            return await super().ask(prompt, secret)
+
+    monkeypatch.setattr(cli, "ConsolePrompter", Recording)
+    monkeypatch.setattr(sys, "stdin", type("Tty", (io.StringIO,), {"isatty": lambda self: True})())
+    assert await sftp_cli() == 0
+    assert len(prompts) == 2 and all("\x1b" not in p for p in prompts) and "d" in prompts[1]
