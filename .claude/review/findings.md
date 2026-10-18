@@ -16,11 +16,11 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-01 | issue | Critical | ui | web/static/index.html:92, app.js:376 | Enter in the password prompt submits the first button (Cancel): login is aborted. | Cancel is `type="button"`; form submit means OK. | S | fixed (b782d71) |
 | P1-02 | issue | Critical | ui | index.html:80, app.js:816 | Enter in any profile editor field submits as Cancel and discards the edits. | Same pattern: Enter saves, Cancel is a plain button. | S | fixed (b782d71) |
 | P1-03 | issue | High | sec, ui | app.js:395, 513-527 | Changed-host-key dialog focuses "Trust new key"; one stray Enter trusts an attacker's key. Message omits host:port. `activate()` steals focus from typing. | Focus Cancel on danger dialogs, delay enabling the danger button, show host:port. | S | fixed (b782d71) |
-| P1-04 | issue | High | ui | ssh.py:184, session.py:33 | Host key prompt shows only the SHA256 fingerprint: no key type, no previous key, no file. | Pass algorithm and old fingerprint through the Prompter; show them in every UI. | M | open |
+| P1-04 | issue | High | ui | ssh.py:184, session.py:33 | Host key prompt shows only the SHA256 fingerprint: no key type, no previous key, no file. | Pass algorithm and old fingerprint through the Prompter; show them in every UI. | M | fixed (218591c) |
 | P1-05 | issue | High | ui, feat | app.js:581,600,854; tui/app.py:483-510; gui.py | Live sessions close without confirmation (tab close, Ctrl+Shift+W, TUI w/q/Ctrl+Q, window close). PuTTY WarnOnClose. | Confirm when a connected session would close, in every UI; `confirm_close=True` in the GUI. | M | open |
 | P1-06 | issue | Medium | ui | app.js:337, tui/app.py:258 | Esc/Cancel discards profile edits without asking. | Compare with a snapshot; ask "Discard changes?". | S | open |
 | P1-07 | issue | Medium | ui | app.js:638, tui/app.py:491 | Break is sent on one click and "Break sent" shows even on failure. | Report errors; TUI break needs a second key. | S | open |
-| P1-08 | issue | Medium | sec, ui | ssh.py:76, app.js:512, session.py:20 | Server-supplied kbd-int prompts look like local ones (phishing a passphrase), bidi chars not stripped, prompt dialog steals focus from other tabs. | Prefix server prompts with (user@host), show name/instructions, strip bidi/format chars in `printable`. | S | open |
+| P1-08 | issue | Medium | sec, ui | ssh.py:76, app.js:512, session.py:20 | Server-supplied kbd-int prompts look like local ones (phishing a passphrase), bidi chars not stripped, prompt dialog steals focus from other tabs. | Prefix server prompts with (user@host), show name/instructions, strip bidi/format chars in `printable`. | S | fixed (218591c) |
 
 ### Profiles and store (core)
 
@@ -47,22 +47,22 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
-| P1-30 | issue | High | arch | session.py:77,99 | Unbounded output queue defeats flow control (124 MB queued in 0.5 s). | Bounded queue; local echo in a separate deque. | S | open |
-| P1-31 | issue | High | arch, ui | ssh.py:261, serialport.py:187, session.py:89, server.py:335 | The reason a session ended is lost; unplug and disconnect show "Session ended". | `Session.end_reason`, shown by every UI via `describe_error`. | M | open |
+| P1-30 | issue | High | arch | session.py:77,99 | Unbounded output queue defeats flow control (124 MB queued in 0.5 s). | Bounded queue; local echo in a separate deque. | S | fixed (218591c) |
+| P1-31 | issue | High | arch, ui | ssh.py:261, serialport.py:187, session.py:89, server.py:335 | The reason a session ended is lost; unplug and disconnect show "Session ended". | `Session.end_reason`, shown by every UI via `describe_error`. | M | fixed (218591c) |
 | P1-32 | issue | High | arch | ssh.py:86,31; session.py:91; tui/app.py:251 | Blocking calls on the event loop (key decryption 0.7 s, log flush per chunk, known_hosts I/O, list_ports). | `asyncio.to_thread`; buffered log flush. | S | open |
 | P1-33 | issue | High | conv, arch, feat | server.py:347-457, cli.py:207, ssh.py:225 | SFTP logic duplicated in CLI and web, two SFTP entry points, cached client races and is never closed; web reaches `session.inner.connection`. | Core `sftp.py` service exposed as `Session.sftp()`, locked creation. | L | open |
 | P1-34 | issue | High | ui, arch | tui/app.py:272, app.js:560, server.py:253 | States are only connecting/connected/closed; failed vs ended indistinguishable; capabilities guessed from profile kind; reconnect differs per UI. | Core `SessionController` with states, capabilities, reconnect (re-reads profile). | M | open |
 | P1-35 | issue | High | ui | ssh.py:190, server.py:318 | Port-forward results are only text in the terminal; no UI shows active forwards. | Core forward status list; shown in status bars. | M | open |
-| P1-36 | issue | Medium | arch | session.py:153-190 | Hidden import cycle; `describe_error` imports asyncssh for serial errors; adding a transport edits session.py. | Transport registry. | M | open |
-| P1-37 | issue | Medium | arch | cli.py:344, server.py:169 | No core error types: bugs reported as user errors (400 / exit 2). | `errors.py` with `TermdeckError` subclasses. | M | open |
-| P1-38 | issue | Medium | arch, feat, sec | session.py:26, ssh.py:68, server.py:123 | Prompter has no notices; SSH banner and kbd-int instructions dropped; web answers not type-checked. | `Prompter.notify`, banner, type checks. | M | open |
-| P1-39 | issue | Medium | arch | serialport.py:186, tui/terminal.py:162 | Serial reads hold default-executor workers; TUI writes unordered via `ensure_future`. | Per-session reader thread and single-worker writer; TUI write queue. | M | open |
+| P1-36 | issue | Medium | arch | session.py:153-190 | Hidden import cycle; `describe_error` imports asyncssh for serial errors; adding a transport edits session.py. | Transport registry. | M | fixed (218591c) |
+| P1-37 | issue | Medium | arch | cli.py:344, server.py:169 | No core error types: bugs reported as user errors (400 / exit 2). | `errors.py` with `TermdeckError` subclasses. | M | fixed (218591c) |
+| P1-38 | issue | Medium | arch, feat, sec | session.py:26, ssh.py:68, server.py:123 | Prompter has no notices; SSH banner and kbd-int instructions dropped; web answers not type-checked. | `Prompter.notify`, banner, type checks. | M | fixed (218591c) |
+| P1-39 | issue | Medium | arch | serialport.py:186, tui/terminal.py:162 | Serial reads hold default-executor workers; TUI writes unordered via `ensure_future`. | Per-session reader thread and single-worker writer; TUI write queue. | M | fixed (218591c) |
 | P1-40 | issue | Medium | conv, arch | profiles.py:20, tui/app.py:149, app.js:250, cli.py:63 | Option schema isn't the single source: `forwards`, wide fields, device picker, section titles hard-coded in UIs; stopbits typed from default. | Widget metadata (`device`, `forwards`, `wide`), section titles from the core. | M | open |
 | P1-41 | issue | Medium | conv, arch, ui | app.js:404,607; tui/terminal.py:17 | JS copies of `parse_target` (drifted), `summary`, themes; TUI theme copy. | Server parses quick targets; themes in a core module served by `/api/options`. | M | open |
-| P1-42 | issue | Medium | arch | cli.py:20 | `getpass` on the default executor: Ctrl+C at a prompt may hang shutdown. | Daemon thread resolving a future. | S | open |
-| P1-43 | issue | Low | arch | session.py:131 | Non-UTF-8 input decoded per chunk: split multibyte chars corrupted. | Incremental decoder for input. | S | open |
-| P1-44 | issue | Low | arch, conv | tui/terminal.py:162, console.py:198, server.py:309,335 | Cancelled tasks never awaited; fire-and-forget tasks unreferenced. | Keep references, gather after cancel. | S | open |
-| P1-45 | issue | Low | sec | serialport.py:173, server.py:307 | Cancelling a serial open leaves the port open with no owner. | Close the port if the open is cancelled. | S | open |
+| P1-42 | issue | Medium | arch | cli.py:20 | `getpass` on the default executor: Ctrl+C at a prompt may hang shutdown. | Daemon thread resolving a future. | S | fixed (218591c) |
+| P1-43 | issue | Low | arch | session.py:131 | Non-UTF-8 input decoded per chunk: split multibyte chars corrupted. | Incremental decoder for input. | S | fixed (218591c) |
+| P1-44 | issue | Low | arch, conv | tui/terminal.py:162, console.py:198, server.py:309,335 | Cancelled tasks never awaited; fire-and-forget tasks unreferenced. | Keep references, gather after cancel. | S | fixed (218591c) |
+| P1-45 | issue | Low | sec | serialport.py:173, server.py:307 | Cancelling a serial open leaves the port open with no owner. | Close the port if the open is cancelled. | S | fixed (218591c) |
 | P1-46 | issue | Low | feat, arch | ssh.py:229 | Concurrent first SFTP requests open two clients. | Covered by P1-33 (lock). | S | open |
 | P1-47 | issue | Low | conv | server.py:495 | Uses private `site._server`. | `runner.addresses`. | S | open |
 | P1-48 | issue | Low | arch | tui/app.py:253 | TUI save catches only ValueError/TypeError; an OSError crashes the TUI. | Catch OSError. | S | open |
@@ -73,7 +73,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
 | P1-50 | issue | Medium | sec | web/server.py:505 | The start token is in the browser's command line (/proc readable by other local users). | Open a private redirect file instead of the token URL. | M | open |
-| P1-51 | issue | Low | sec | ssh.py:19-40 | After accepting a changed key, the old key stays trusted (other entries, OpenSSH file); CA matches show as "unknown". | Record old key as `@revoked`; treat CA matches as changed. | M | open |
+| P1-51 | issue | Low | sec | ssh.py:19-40 | After accepting a changed key, the old key stays trusted (other entries, OpenSSH file); CA matches show as "unknown". | Record old key as `@revoked`; treat CA matches as changed. | M | open (partly fixed in 218591c: old key revoked, CA matches count as changed; ~/.ssh/known_hosts entries are not edited) |
 | P1-52 | issue | Low | sec | app.js:743 | A failed download navigates the app away. | Download through an `<a download>`. | S | fixed (b782d71) |
 | P1-53 | issue | Low | sec | tui/terminal.py:190, app.js | Pasted text containing `ESC[201~` breaks out of bracketed paste. | Strip ESC from pastes. | S | open |
 | P1-54 | improvement | Low | sec | server.py:421 | Uploads have no size or part limit. | Part count limit, 413. | S | proposed |
@@ -88,9 +88,9 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 |---|---|---|---|---|---|---|---|---|
 | P1-60 | issue | High | feat | ssh.py | Proxy settings missing (SOCKS4/5, HTTP CONNECT, local proxy command, exclude list, proxy DNS). | `ssh.proxy_*` options; asyncssh `tunnel=` connector / `proxy_command`. | M | open |
 | P1-61 | issue | High | feat | cli.py:173, console.py:153 | Plink use impossible: `connect` refuses piped stdin, has no command argument, always exits 0, no batch mode. | Non-interactive mode, command arg, `-t/-T`, `--batch`, `-N`, remote exit status. | M | open |
-| P1-62 | issue | Medium | feat | ssh.py:43 | Expired password cannot be changed. | `password_change_requested` via the Prompter. | S | open |
+| P1-62 | issue | Medium | feat | ssh.py:43 | Expired password cannot be changed. | `password_change_requested` via the Prompter. | S | fixed (218591c) |
 | P1-63 | issue | Low | feat | ssh.py:154 | `use_agent=False` silently disables agent forwarding. | Reject the combination in validate. | S | fixed (a33c0b9) |
-| P1-64 | issue | Low | feat | ssh.py:160 | Encrypted default keys skipped (password asked instead of passphrase). | Document in the key-file help. | S | open |
+| P1-64 | issue | Low | feat | ssh.py:160 | Encrypted default keys skipped (password asked instead of passphrase). | Document in the key-file help. | S | fixed (218591c) |
 | P1-65 | issue | Low | feat | ssh.py:171 | `~/.ssh/config` applied silently. | `ssh.use_ssh_config` option. | S | open |
 | P1-66 | issue | Medium | feat | ssh.py | `NoPTY` and `SshNoShell` not reachable from TUI/web (forwards-only session). | `ssh.allocate_pty`, `ssh.no_shell`. | S | open |
 | P1-67 | issue | Low | feat | ssh.py | Connection sharing missing. | `ssh.share_connection`. | L | open |
@@ -110,21 +110,21 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
 | P1-80 | issue | High | ui, feat | tui/app.py:181, app.js:258 | No port picker in the TUI; web list fetched once; recorded USB identity never shown. | Picker from `available_ports()` with rescan, in both UIs; show the recorded adapter. | M | open |
-| P1-81 | issue | Medium | feat | profiles.py:136 | DSR/DTR flow control missing. | Add `dsrdtr` choice. | S | open |
-| P1-82 | issue | Low | feat | serialport.py:157 | No write timeout: a held-off flow-controlled port blocks a thread forever. | `write_timeout`, reported in the terminal. | S | open |
+| P1-81 | issue | Medium | feat | profiles.py:136 | DSR/DTR flow control missing. | Add `dsrdtr` choice. | S | fixed (218591c) |
+| P1-82 | issue | Low | feat | serialport.py:157 | No write timeout: a held-off flow-controlled port blocks a thread forever. | `write_timeout`, reported in the terminal. | S | needs Windows (fixed in 218591c: hold a port off with RTS/CTS and type; 'write' notice after 5 s, no frozen UI) |
 | P1-83 | issue | Medium | win | serialport.py:116-148 | DTR/RTS on Windows: drivers assert on open, drop on close; comment promises too much. | Document; fix the comment and option help. | S | open |
-| P1-84 | issue | Low | win | serialport.py | Windows-generated serial numbers (contain `&`) depend on the USB socket. | Treat them as absent. | S | open |
-| P1-85 | issue | Low | win | serialport.py | "Access denied" for a port in use is reported raw. | Map to "port in use by another program". | S | open |
+| P1-84 | issue | Low | win | serialport.py | Windows-generated serial numbers (contain `&`) depend on the USB socket. | Treat them as absent. | S | needs Windows (fixed in 218591c: adapter without serial number, moved between USB sockets, still followed) |
+| P1-85 | issue | Low | win | serialport.py | "Access denied" for a port in use is reported raw. | Map to "port in use by another program". | S | needs Windows (fixed in 218591c: open a port held by PuTTY -> 'in use'; COM99 -> 'no such port'; unplug mid-session -> 'device stopped responding') |
 | P1-86 | improvement | High | ui | serialport.py | Reopen automatically when an unplugged adapter returns. | Option "Reopen when the device returns". | M | proposed |
 
 ### Terminal options (PuTTY parity)
 
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
-| P1-90 | issue | High | feat | session.py:87 | Implicit CR in every LF / LF in every CR missing (serial staircase). | `terminal.implicit_cr`, `terminal.implicit_lf` in the core. | S | open |
+| P1-90 | issue | High | feat | session.py:87 | Implicit CR in every LF / LF in every CR missing (serial staircase). | `terminal.implicit_cr`, `terminal.implicit_lf` in the core. | S | fixed (218591c) |
 | P1-91 | issue | Medium | feat | session.py | Logging: log type (output/all/SSH packets), file clash (append/overwrite), header missing. | `terminal.log_mode`, `terminal.log_clash`. | M | open |
 | P1-92 | issue | Low | feat | | Initial modes (auto wrap, origin, BCE, blink text) missing. | Advanced terminal options. | M | open |
-| P1-93 | issue | Low | feat | session.py | Answerback to ENQ missing. | `terminal.answerback` in the core. | S | open |
+| P1-93 | issue | Low | feat | session.py | Answerback to ENQ missing. | `terminal.answerback` in the core. | S | fixed (218591c) |
 | P1-94 | issue | Low | feat | | Printer passthrough missing. | `terminal.printer`. | M | open |
 | P1-95 | issue | Low | feat | tui/terminal.py:29 | Keyboard options (Home/End, function key style, app cursor/keypad) missing. | `terminal.function_keys`, `terminal.home_end`, ... | M | open |
 | P1-96 | issue | Medium | feat | app.js, tui | Bell ignored in every UI. | `terminal.bell` {none, visual, sound}. | S | open |
@@ -198,7 +198,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-152 | issue | Medium | conv | console.py | console.py is UI code listed as core. | Document it as part of the CLI. | S | open |
 | P1-153 | issue | Medium | ui | cli.py:50 | `--set serial.baudrate=abc` error lacks the option name. | Re-raise with the key. | S | fixed (a33c0b9) |
 | P1-154 | issue | Medium | ui | cli.py:173, session.py:155 | `connect` silent until connected; errors lack the target. | "connecting to ..." on stderr; target in errors. | S | open |
-| P1-155 | issue | Medium | ui | ssh.py:147 | Username asked before connecting; empty answer reported as "Authentication failed". | Clear message. | S | open |
+| P1-155 | issue | Medium | ui | ssh.py:147 | Username asked before connecting; empty answer reported as "Authentication failed". | Clear message. | S | fixed (218591c) |
 | P1-156 | issue | Low | ui | cli.py:78 | Empty `list`/`ports` print nothing; no way to list option names. | Messages; `termdeck options`. | S | fixed (a33c0b9) |
 | P1-157 | issue | Medium | win | console.py:87-110 | Console mode return values unchecked; handles truncated without argtypes; stdout not checked. | Check, declare argtypes, require a console. | S | open |
 | P1-158 | issue | Medium | win, arch | console.py:107, 137 | Windows stdin reader thread never stops (eats a key after quit); `call_soon_threadsafe` on a closed loop. | Cancellable read; guard the call. | M | open |
@@ -280,32 +280,32 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-239 | issue | Low | conv | server.py save/delete | OSError and ProfileFileError gave bare 500s. | JSON errors. | S | fixed (a33c0b9) |
 | P1-240 | issue | Low | conv | config.py | open_private("w", own_dir=False) truncated before checks; atomic_write left temp files on failure; log flush errors silent. | Append-only outside own dirs; unlink temp; stop logging with a notice. | S | fixed (a33c0b9) |
 | P1-241 | issue | Medium | test-writer | server.py quick_target | Web quick connect failed (500) with a corrupt profiles.json. | Fall back to no profiles. | S | fixed (a33c0b9) |
-| P1-242 | issue | Low | win | serialport.py _parse_identity | A stored identity with a Windows instance-id serial no longer matched. | Treat "&" serials as none when parsing too. | S | open |
-| P1-243 | issue | Low | win | serialport.py describe_error | Missing/stale port errors shown raw. | "no such port", "device stopped responding". | S | open |
-| P1-244 | issue | Low | win | cli.py ConsolePrompter | A cancelled ask leaves a reading thread (Ctrl+C at a prompt). | Covered by P1-158 (cancellable console read). | S | open |
-| P1-245 | issue | Major | ui, arch | serialport.py _read_loop | Windows unplug ("ClearCommError ... Access is denied") reported as "port in use". | Read failures say "device stopped responding"; "in use" only for open errors. | S | open |
-| P1-246 | issue | Minor | ui | session.py | Implicit CR + LF both on doubled line spacing; CR at chunk end. | Single regex pass, CR held across chunks. | S | open |
-| P1-247 | issue | Minor | ui | tui/terminal.py, app.js | Notices "dimmed" with SGR 2, which pyte ignores. | Grey (SGR 90) in both. | S | open |
-| P1-248 | issue | Minor | ui | tui/app.py, app.js | Login instructions and "passwords do not match" hidden behind the next dialog. | The last notice is shown in the next prompt. | S | open |
-| P1-249 | issue | Minor | ui | tui/app.py | Unknown-host dialog red like a changed key. | `cancel_default` separate from `danger`. | S | open |
-| P1-250 | issue | Minor | ui | serialport.py | Write-timeout notice wrong for flow none, repeated per key, logged as device output. | Wording by flow, once per stall, typing dropped while stalled, `Session.notice` channel not logged. | S | open |
-| P1-251 | issue | Cosmetic | ui | cli.py | CLI wording differed from TUI/web (Was:, Session ended); old keys without type. | Same words; "type fingerprint". | S | open |
-| P1-252 | issue | Critical | arch, test-writer | session.py close | close() hung while the output backlog was full (the UI stopped reading). | Cancel the pump first. | S | open |
-| P1-253 | issue | Major | arch | cli.py, server.py, session.py | Error types not used by the UIs: bugs reported as user errors. | `is_expected`, transports export ERRORS; CLI exit 70 + traceback for bugs; web no longer maps AttributeError to 400; pump logs bugs. | M | open |
-| P1-254 | issue | Major | arch, sec | ssh.py remember_host_key | @revoked lines were never removed: a host whose old key came back was locked out with a misleading message; keys of other types revoked too. | Re-trusting removes the revocation; only same-type keys revoked; message names `termdeck forget-host`; new command. | S | open |
-| P1-255 | issue | Minor | arch | cli.py | Ctrl+C at a getpass prompt left echo off (daemon thread). | Save and restore the tty in main. | S | open |
-| P1-256 | issue | Minor | arch | session.py, profiles.py | Transport table separate from KINDS; unknown type a plain ValueError. | TRANSPORTS next to KINDS; ProfileError. | S | open |
-| P1-257 | issue | Minor | arch | tui/terminal.py | A failed write silently stopped all further typing. | Report and keep the writer running. | S | open |
-| P1-258 | issue | Low | arch | profiles.py get | Invalid profile raised "not found". | ProfileError. | S | open |
-| P1-259 | issue | Low | arch | server.py notify | notify on a closed socket left an unretrieved task exception. | Ignore. | S | open |
-| P1-260 | issue | Medium | sec | serialport.py | DSR/DTR does nothing on POSIX and skipped the DTR setting. | Windows only; elsewhere DTR applies and a notice says so. | S | open |
-| P1-261 | issue | Low | sec | ssh.py | Typed password kept for the whole connection. | Cleared on auth_completed / connection_lost. | S | open |
-| P1-262 | issue | Low | sec | ssh.py | Remote signal name not cleaned. | printable. | S | open |
-| P1-263 | issue | Low | sec | tui/app.py | TUI host-key dialog could be accepted by Tab, Enter typed in another tab. | OK armed after 1.5 s. | S | open |
-| P1-264 | issue | Low | sec | profiles.py answerback | Answerback with CR could run a command on any ENQ. | Reject control characters. | S | open |
-| P1-265 | issue | Low | sec | session.py printable | Missed some invisible characters (U+2060.., soft hyphen, tags). | Strip Unicode categories Cc, Cf, Zl, Zp (keep \n, \t). | S | open |
-| P1-266 | issue | Low | test-writer | ssh.py | Server disconnect reason lost; duplicate old fingerprints. | connection_lost recorded; "Connection closed by the server"; dedupe. | S | open |
-| P1-267 | issue | Medium | conv | serialport.py describe_error | POSIX open errors kept the "[Errno n]" prefix; permission denied unmapped; "Errno 2" matched 20/22. | Regex for the port; Errno n] markers. | S | open |
-| P1-268 | issue | Medium | conv | README.md | Exit codes, "Session ended", forget-host undocumented. | Documented. | S | open |
-| P1-269 | issue | Low | conv | session.py | A lone CR under implicit LF waited for more output. | Released after 50 ms. | S | open |
-| P1-270 | issue | Low | conv | serialport.py | Serial output had no backlog bound. | Reader waits on a semaphore (256 chunks). | S | open |
+| P1-242 | issue | Low | win | serialport.py _parse_identity | A stored identity with a Windows instance-id serial no longer matched. | Treat "&" serials as none when parsing too. | S | fixed (218591c) |
+| P1-243 | issue | Low | win | serialport.py describe_error | Missing/stale port errors shown raw. | "no such port", "device stopped responding". | S | fixed (218591c) |
+| P1-244 | issue | Low | win | cli.py ConsolePrompter | A cancelled ask leaves a reading thread (Ctrl+C at a prompt). | Covered by P1-158 (cancellable console read). | S | open (fold into P1-158) |
+| P1-245 | issue | Major | ui, arch | serialport.py _read_loop | Windows unplug ("ClearCommError ... Access is denied") reported as "port in use". | Read failures say "device stopped responding"; "in use" only for open errors. | S | fixed (218591c) |
+| P1-246 | issue | Minor | ui | session.py | Implicit CR + LF both on doubled line spacing; CR at chunk end. | Single regex pass, CR held across chunks. | S | fixed (218591c) |
+| P1-247 | issue | Minor | ui | tui/terminal.py, app.js | Notices "dimmed" with SGR 2, which pyte ignores. | Grey (SGR 90) in both. | S | fixed (218591c) |
+| P1-248 | issue | Minor | ui | tui/app.py, app.js | Login instructions and "passwords do not match" hidden behind the next dialog. | The last notice is shown in the next prompt. | S | fixed (218591c) |
+| P1-249 | issue | Minor | ui | tui/app.py | Unknown-host dialog red like a changed key. | `cancel_default` separate from `danger`. | S | fixed (218591c) |
+| P1-250 | issue | Minor | ui | serialport.py | Write-timeout notice wrong for flow none, repeated per key, logged as device output. | Wording by flow, once per stall, typing dropped while stalled, `Session.notice` channel not logged. | S | fixed (218591c) |
+| P1-251 | issue | Cosmetic | ui | cli.py | CLI wording differed from TUI/web (Was:, Session ended); old keys without type. | Same words; "type fingerprint". | S | fixed (218591c) |
+| P1-252 | issue | Critical | arch, test-writer | session.py close | close() hung while the output backlog was full (the UI stopped reading). | Cancel the pump first. | S | fixed (218591c) |
+| P1-253 | issue | Major | arch | cli.py, server.py, session.py | Error types not used by the UIs: bugs reported as user errors. | `is_expected`, transports export ERRORS; CLI exit 70 + traceback for bugs; web no longer maps AttributeError to 400; pump logs bugs. | M | fixed (218591c) |
+| P1-254 | issue | Major | arch, sec | ssh.py remember_host_key | @revoked lines were never removed: a host whose old key came back was locked out with a misleading message; keys of other types revoked too. | Re-trusting removes the revocation; only same-type keys revoked; message names `termdeck forget-host`; new command. | S | fixed (218591c) |
+| P1-255 | issue | Minor | arch | cli.py | Ctrl+C at a getpass prompt left echo off (daemon thread). | Save and restore the tty in main. | S | fixed (218591c) |
+| P1-256 | issue | Minor | arch | session.py, profiles.py | Transport table separate from KINDS; unknown type a plain ValueError. | TRANSPORTS next to KINDS; ProfileError. | S | fixed (218591c) |
+| P1-257 | issue | Minor | arch | tui/terminal.py | A failed write silently stopped all further typing. | Report and keep the writer running. | S | fixed (218591c) |
+| P1-258 | issue | Low | arch | profiles.py get | Invalid profile raised "not found". | ProfileError. | S | fixed (218591c) |
+| P1-259 | issue | Low | arch | server.py notify | notify on a closed socket left an unretrieved task exception. | Ignore. | S | fixed (218591c) |
+| P1-260 | issue | Medium | sec | serialport.py | DSR/DTR does nothing on POSIX and skipped the DTR setting. | Windows only; elsewhere DTR applies and a notice says so. | S | fixed (218591c) |
+| P1-261 | issue | Low | sec | ssh.py | Typed password kept for the whole connection. | Cleared on auth_completed / connection_lost. | S | fixed (218591c) |
+| P1-262 | issue | Low | sec | ssh.py | Remote signal name not cleaned. | printable. | S | fixed (218591c) |
+| P1-263 | issue | Low | sec | tui/app.py | TUI host-key dialog could be accepted by Tab, Enter typed in another tab. | OK armed after 1.5 s. | S | fixed (218591c) |
+| P1-264 | issue | Low | sec | profiles.py answerback | Answerback with CR could run a command on any ENQ. | Reject control characters. | S | fixed (218591c) |
+| P1-265 | issue | Low | sec | session.py printable | Missed some invisible characters (U+2060.., soft hyphen, tags). | Strip Unicode categories Cc, Cf, Zl, Zp (keep \n, \t). | S | fixed (218591c) |
+| P1-266 | issue | Low | test-writer | ssh.py | Server disconnect reason lost; duplicate old fingerprints. | connection_lost recorded; "Connection closed by the server"; dedupe. | S | fixed (218591c) |
+| P1-267 | issue | Medium | conv | serialport.py describe_error | POSIX open errors kept the "[Errno n]" prefix; permission denied unmapped; "Errno 2" matched 20/22. | Regex for the port; Errno n] markers. | S | fixed (218591c) |
+| P1-268 | issue | Medium | conv | README.md | Exit codes, "Session ended", forget-host undocumented. | Documented. | S | fixed (218591c) |
+| P1-269 | issue | Low | conv | session.py | A lone CR under implicit LF waited for more output. | Released after 50 ms. | S | fixed (218591c) |
+| P1-270 | issue | Low | conv | serialport.py | Serial output had no backlog bound. | Reader waits on a semaphore (256 chunks). | S | fixed (218591c) |
