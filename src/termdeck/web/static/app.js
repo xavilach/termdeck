@@ -57,8 +57,35 @@ async function api(method, path, body) {
   if (body) headers["Content-Type"] = "application/json";
   const response = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || response.statusText);
+  if (!response.ok) throw Object.assign(new Error(data.error || response.statusText), { field: data.field });
   return data;
+}
+
+// Shortcuts: Ctrl+Shift in the desktop window; in a browser Ctrl+Shift+N/W are the browser's own, so Alt+Shift.
+const shortcut = (e) => (desktop ? e.ctrlKey && !e.altKey : e.altKey && !e.ctrlKey) && e.shiftKey && !e.metaKey;
+const keyName = (key) => `${desktop ? "Ctrl" : "Alt"}+Shift+${key}`;
+
+// Icons drawn inline (no font or emoji needed): 16x16 strokes in the text colour.
+const ICONS = {
+  plus: "M8 3v10M3 8h10",
+  menu: "M2.5 4h11M2.5 8h11M2.5 12h11",
+  up: "M8 13V3M4 7l4-4 4 4",
+  refresh: "M13 8a5 5 0 1 1-1.5-3.5M13 2.5V5h-2.5",
+  "folder-plus": "M1.5 4.5v8h13v-7H8L6.5 3.5h-5zM8 7.5v4M6 9.5h4",
+  upload: "M8 11V3M4.5 6.5 8 3l3.5 3.5M2.5 13.5h11",
+  folder: "M1.5 4v9h13V5.5H8L6.5 4z",
+  file: "M3.5 1.5h6l3 3v10h-9zM9.5 1.5v3h3",
+  link: "M7 9a2.5 2.5 0 0 0 3.5 0l2-2a2.5 2.5 0 0 0-3.5-3.5L8 4.5M9 7a2.5 2.5 0 0 0-3.5 0l-2 2A2.5 2.5 0 0 0 7 12.5l1-1",
+};
+function icon(name) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("class", "icon");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", ICONS[name]);
+  svg.append(path);
+  return svg;
 }
 
 let toastTimer;
@@ -122,22 +149,59 @@ async function loadProfiles() {
   }
 }
 
+// The list is one tab stop (a listbox): arrows move, Enter connects, F2 edits, Delete deletes,
+// Shift+F10 or the menu key opens the actions.
 function profileItem(p) {
-  return el("div", {
-    class: "profile",
-    title: `${p.summary}\nDouble-click to connect`,
+  const item = el("div", {
+    class: "profile", role: "option", tabindex: "-1", "aria-selected": "false",
+    title: `${p.summary}\nDouble-click or Enter to connect`,
     ondblclick: () => connect(p),
-    onclick: (e) => { if (e.detail === 1 && window.matchMedia("(pointer: coarse)").matches) connect(p); },
-    oncontextmenu: (e) => { e.preventDefault(); profileMenu(p, e.clientX, e.clientY); },
+    onclick: (e) => {
+      focusProfile(item);
+      if (e.detail === 1 && window.matchMedia("(pointer: coarse)").matches) connect(p);
+    },
+    oncontextmenu: (e) => { e.preventDefault(); focusProfile(item); profileMenu(p, e.clientX, e.clientY); },
   },
-    el("span", { class: `kind ${p.kind}` }, p.kind === "ssh" ? "SSH" : "COM"),
+    el("span", { class: `kind ${p.kind}` }, p.kind === "ssh" ? "SSH" : "SER"),
     el("span", { class: "name" }, p.name),
     el("button", {
-      class: "more", title: "Actions",
+      class: "more", title: "Actions", tabindex: "-1",
       onclick: (e) => { e.stopPropagation(); const r = e.target.getBoundingClientRect(); profileMenu(p, r.left, r.bottom); },
     }, "⋯"),
     el("span", { class: "summary" }, p.summary),
   );
+  item.profile = p;
+  return item;
+}
+
+function focusProfile(item, focus = true) {
+  for (const other of $("#profile-list").querySelectorAll(".profile")) {
+    other.tabIndex = other === item ? 0 : -1;
+    other.setAttribute("aria-selected", String(other === item));
+  }
+  if (focus) item?.focus();
+}
+
+function profileListKey(e) {
+  const items = [...$("#profile-list").querySelectorAll(".profile")];
+  const current = e.target.closest(".profile");
+  if (!current) return;
+  const i = items.indexOf(current);
+  const move = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: items.length - 1, PageDown: i + 10, PageUp: i - 10 }[e.key];
+  if (move !== undefined) {
+    e.preventDefault();
+    focusProfile(items[Math.max(0, Math.min(items.length - 1, move))]);
+  } else if (e.key === "Enter") {
+    e.preventDefault(); connect(current.profile);
+  } else if (e.key === "F2") {
+    e.preventDefault(); openEditor(current.profile);
+  } else if (e.key === "Delete") {
+    e.preventDefault(); deleteProfile(current.profile);
+  } else if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) {
+    e.preventDefault();
+    const r = current.getBoundingClientRect();
+    profileMenu(current.profile, r.left + 24, r.bottom);
+  }
 }
 
 function renderProfiles() {
@@ -151,25 +215,60 @@ function renderProfiles() {
   }
   const names = [...groups.keys()].sort((a, b) => (a === "") - (b === "") || a.localeCompare(b));
   const list = $("#profile-list");
+  const focused = document.activeElement?.closest?.(".profile")?.profile?.name;
   list.replaceChildren(...names.flatMap((g) => [
-    g ? el("div", { class: "group-title" }, g) : (names.length > 1 ? el("div", { class: "group-title" }, "Other") : null),
+    g ? el("div", { class: "group-title", role: "presentation" }, g)
+      : (names.length > 1 ? el("div", { class: "group-title", role: "presentation" }, "Other") : null),
     ...groups.get(g).map(profileItem),
   ]));
+  const items = [...list.querySelectorAll(".profile")];
+  const keep = items.find((item) => item.profile.name === focused);
+  focusProfile(keep || items[0], Boolean(keep));
   if (!state.profiles.length) {
-    list.append(el("p", { class: "muted", style: "padding: 8px" }, "No profiles yet. Use ＋ or quick connect."));
+    list.append(el("p", { class: "muted empty" }, "No profiles yet. Create one with + or use quick connect."));
   }
-  $("#welcome-cards").replaceChildren(...state.profiles.slice(0, 12).map((p) =>
-    el("div", { class: "card", onclick: () => connect(p) },
-      el("div", {}, p.name), el("div", { class: "summary" }, p.summary))));
+  renderRecent();
+}
+
+// Recently opened saved profiles, newest first, for the start page.
+const RECENT = 8;
+function rememberRecent(name) {
+  store.set("recent", [name, ...store.get("recent", []).filter((n) => n !== name)].slice(0, RECENT));
+}
+
+function renderRecent() {
+  const byName = new Map(state.profiles.map((p) => [p.name, p]));
+  const recent = store.get("recent", []).map((n) => byName.get(n)).filter(Boolean);
+  const shown = recent.length ? recent : state.profiles.slice(0, RECENT);
+  $("#recent-title").textContent = recent.length ? "Recent sessions" : "Profiles";
+  $("#recent").replaceChildren(...shown.map((p) =>
+    el("li", {},
+      el("button", { type: "button", class: "recent-item", onclick: () => connect(p), title: `Connect to ${p.name}` },
+        el("span", { class: `kind ${p.kind}` }, p.kind === "ssh" ? "SSH" : "SER"),
+        el("span", { class: "name" }, p.name),
+        el("span", { class: "summary" }, p.summary)))));
+  $("#recent-block").hidden = !shown.length;
 }
 
 function showMenu(x, y, items) {
   const menu = $("#menu");
+  const opener = document.activeElement;
+  const close = () => { menu.hidden = true; opener?.focus?.(); };
   menu.replaceChildren(...items.map(([label, action, cls]) =>
-    el("button", { class: cls, onclick: () => { menu.hidden = true; action(); } }, label)));
+    el("button", { class: cls, role: "menuitem", onclick: () => { close(); action(); } }, label)));
+  menu.onkeydown = (e) => {
+    const buttons = [...menu.querySelectorAll("button")];
+    const i = buttons.indexOf(document.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); close(); }
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      buttons[(i + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length].focus();
+    }
+  };
   menu.hidden = false;
   menu.style.left = `${Math.min(x, innerWidth - menu.offsetWidth - 8)}px`;
   menu.style.top = `${Math.min(y, innerHeight - menu.offsetHeight - 8)}px`;
+  menu.querySelector("button")?.focus();
 }
 
 function profileMenu(p, x, y) {
@@ -182,7 +281,11 @@ function profileMenu(p, x, y) {
 }
 
 async function deleteProfile(p) {
-  if (!confirm(`Delete profile "${p.name}"?`)) return;
+  const ok = await prompt({
+    title: "Delete profile", body: el("p", {}, `Delete the profile ${p.name}? This cannot be undone.`),
+    okLabel: "Delete", danger: true,
+  });
+  if (!ok) return;
   try {
     await api("DELETE", `/api/profiles/${encodeURIComponent(p.name)}`);
     await loadProfiles();
@@ -239,20 +342,29 @@ function fieldInput(opt, value, onChange) {
   return [id, input];
 }
 
-function fieldRow(opt, values) {
+function fieldRow(opt, values, sectionName) {
   const [id, input] = fieldInput(opt, values[opt.key], (v) => {
     values[opt.key] = v;
+    row.classList.remove("invalid");
+    input.removeAttribute("aria-invalid");
     if (opt.key === "kind") renderEditor();
     else applyWhen();
   });
-  if (opt.widget === "device") attachPortSuggestions(input);
+  const help = opt.help ? el("small", { id: `${id}-help` }, opt.help) : null;
+  if (help) input.setAttribute("aria-describedby", help.id);
+  let recorded = null;
+  if (opt.widget === "device") {
+    attachPortSuggestions(input);
+    // The USB adapter recorded when the profile was saved (Follow the device finds it again).
+    if (values.usb_id) recorded = el("small", {}, `Recorded adapter: ${values.usb_id}`);
+  }
   const row = el("label", {
     class: ["field", opt.type === "bool" && "bool", opt.wide && "wide", opt.advanced && "advanced"].filter(Boolean).join(" "),
-    for: id,
+    for: id, dataset: { field: `${sectionName}.${opt.key}` },
   },
     el("span", {}, opt.label, opt.advanced ? el("span", { class: "adv-badge" }, "adv") : null),
     input,
-    opt.help ? el("small", {}, opt.help) : null,
+    help, recorded,
   );
   // Shown only while the option it depends on has one of the listed values (e.g. proxy fields).
   if (opt.when) {
@@ -269,26 +381,30 @@ function applyWhen() {
 }
 
 // Fields with subheadings for their group (advanced SSH options: Session, Proxy, Authentication...).
-function grouped(options, values) {
+function grouped(options, values, sectionName) {
   let group = "";
   return options.flatMap((opt) => {
     const heading = opt.group && opt.group !== group
       ? el("h4", { class: `subsection ${opt.advanced ? "advanced" : ""}` }, opt.group) : null;
     group = opt.group || group;
-    return [heading, fieldRow(opt, values)];
+    return [heading, fieldRow(opt, values, sectionName)];
   });
 }
 
-let portCache = null;
+// Ports are listed again each time the field gets focus: an adapter plugged in meanwhile shows up.
 async function attachPortSuggestions(input) {
   const list = el("datalist", { id: "serial-ports" });
   input.setAttribute("list", "serial-ports");
   input.after(list);
-  try {
-    portCache ??= await api("GET", "/api/serial-ports");
-    list.replaceChildren(...portCache.map((p) =>
-      el("option", { value: p.device }, [p.description, p.usb_id].filter(Boolean).join(" · "))));
-  } catch { /* suggestions are optional */ }
+  const scan = async () => {
+    try {
+      const ports = await api("GET", "/api/serial-ports");
+      list.replaceChildren(...ports.map((p) =>
+        el("option", { value: p.device }, [p.description, p.usb_id].filter(Boolean).join(" · "))));
+    } catch { /* suggestions are optional */ }
+  };
+  input.addEventListener("focus", scan);
+  scan();
 }
 
 function section(title, rows, extraClass = "") {
@@ -351,24 +467,55 @@ function renderEditor() {
   const applies = (opt) => opt.kinds.includes(kind);
   const o = state.options;
   const conn = o[kind].filter((opt) => opt.type !== "forwards");
+  const titles = state.sections;
   const body = $("#editor-body");
   body.replaceChildren(...[
-    section("General", o.profile.map((opt) => fieldRow(opt, v))),
-    section(kind === "ssh" ? "SSH connection" : "Serial port", conn.filter((opt) => !opt.advanced).map((opt) => fieldRow(opt, v[kind]))),
-    kind === "ssh" ? el("div", { class: "section" }, el("h3", {}, "Port forwards"), forwardsEditor(v.ssh.forwards)) : null,
-    section(kind === "ssh" ? "SSH (advanced)" : "Serial line (advanced)", grouped(conn.filter((opt) => opt.advanced), v[kind])),
-    section("Terminal", o.terminal.filter(applies).map((opt) => fieldRow(opt, v.terminal))),
+    section(titles.profile, o.profile.map((opt) => fieldRow(opt, v, "profile"))),
+    section(titles[kind], conn.filter((opt) => !opt.advanced).map((opt) => fieldRow(opt, v[kind], kind))),
+    kind === "ssh"
+      ? el("div", { class: "section", dataset: { field: "ssh.forwards" } }, el("h3", {}, titles.forwards), forwardsEditor(v.ssh.forwards))
+      : null,
+    section(`${titles[kind]} (advanced)`, grouped(conn.filter((opt) => opt.advanced), v[kind], kind)),
+    section(titles.terminal, grouped(o.terminal.filter(applies), v.terminal, "terminal")),
   ].filter(Boolean));
   applyWhen();
 }
 
 function openEditor(profile = null, { isNew = !profile } = {}) {
   editing = { original: isNew ? null : profile.name, values: profile ? withDefaults(structuredClone(profile)) : blankProfile() };
+  editing.snapshot = JSON.stringify(editing.values);
   $("#editor-title").textContent = isNew ? "New profile" : `Edit ${profile.name}`;
   $("#editor-error").hidden = true;
   renderEditor();
   $("#editor").showModal();
   $("#editor-body").querySelector("input")?.focus();
+}
+
+// Cancel and Esc ask before throwing away what was typed.
+async function cancelEditor() {
+  if (JSON.stringify(editing.values) !== editing.snapshot) {
+    const discard = await prompt({
+      title: "Discard changes?", body: el("p", {}, "The changes to this profile are not saved."),
+      okLabel: "Discard", danger: true,
+    });
+    if (!discard) return;
+  }
+  $("#editor").close("cancel");
+}
+
+function showEditorError(e) {
+  const box = $("#editor-error");
+  box.textContent = e.message;
+  box.hidden = false;
+  const row = e.field && $("#editor-body").querySelector(`[data-field="${CSS.escape(e.field)}"]`);
+  if (!row) return;
+  if (row.closest(".advanced") && !$("#advanced-toggle").checked) $("#advanced-toggle").click();
+  row.classList.add("invalid");
+  const input = row.querySelector("input, select, textarea");
+  input?.setAttribute("aria-invalid", "true");
+  input?.setAttribute("aria-errormessage", "editor-error");
+  (input || row).focus?.();
+  row.scrollIntoView({ block: "nearest" });
 }
 
 function profilePayload(v) {
@@ -397,13 +544,20 @@ async function saveEditor(connectAfter) {
     const saved = editing.original === null
       ? await api("POST", "/api/profiles", payload)
       : await api("PUT", `/api/profiles/${encodeURIComponent(editing.original)}`, payload);
-    $("#editor").close();
+    $("#editor").close("saved");
+    // Open tabs of this profile take the saved version (and its new name, if renamed): their reconnect uses it.
+    for (const tab of state.tabs) {
+      if (tab.saved && tab.profile.name === editing.original) tab.profile = withDefaults(saved);
+    }
+    if (editing.original !== null && editing.original !== saved.name) {
+      store.set("recent", store.get("recent", []).map((n) => (n === editing.original ? saved.name : n)));
+    }
+    renderTabs();
+    renderToolbar();
     await loadProfiles();
     if (connectAfter) connect(saved);
   } catch (e) {
-    const box = $("#editor-error");
-    box.textContent = e.message;
-    box.hidden = false;
+    showEditorError(e);
   } finally {
     buttons.forEach((b) => { b.disabled = false; });
   }
@@ -448,6 +602,8 @@ function prompt({ title, body, input, okLabel = "OK", danger = false, armDelay =
 // ---------- tabs and terminals ----------
 
 function connect(profile, { saved = true } = {}) {
+  if (saved) rememberRecent(profile.name);
+  document.body.classList.remove("sidebar-open");  // a narrow window shows the terminal
   const tab = {
     id: ++tabIds,
     profile: withDefaults(profile),
@@ -455,8 +611,9 @@ function connect(profile, { saved = true } = {}) {
     status: "connecting",
     ws: null,
     session: null,
-    canBreak: false,
-    hasSftp: false,
+    caps: { send_break: false, sftp: false, typing: true },  // what the server says the session can do
+    forwards: [],
+    forwardsSummary: "",
     sftpPath: null,
     sftpOpen: false,
     fontSize: profile.terminal?.font_size || 14,
@@ -569,17 +726,12 @@ function setupClipboard(tab) {
     .catch(() => toast("Clipboard not available", true));
   tab.container.addEventListener("contextmenu", (e) => { e.preventDefault(); paste(); });
   term.attachCustomKeyEventHandler((e) => {
-    // F11 in the desktop window is full screen, not a key for the remote (xterm.js would send it).
-    if (desktop && e.key === "F11") {
-      if (e.type === "keydown") toolbarActions.fullscreen();
-      e.preventDefault();
-      return false;
-    }
     if (e.type !== "keydown" || !e.ctrlKey || !e.shiftKey) return true;
     const key = e.key.toLowerCase();
-    if (key === "c") { navigator.clipboard?.writeText(term.getSelection()); return false; }
-    if (key === "v") { e.preventDefault(); paste(); return false; }  // no second, native paste
-    if (key === "f") { openSearch(); return false; }
+    // preventDefault: the browser's own Ctrl+Shift+C (inspector) and Ctrl+Shift+V (a second, native paste).
+    if (key === "c") { e.preventDefault(); navigator.clipboard?.writeText(term.getSelection()); return false; }
+    if (key === "v") { e.preventDefault(); paste(); return false; }
+    if (key === "f") { e.preventDefault(); openSearch(); return false; }
     return true;
   });
 }
@@ -638,30 +790,33 @@ function openSocket(tab) {
         armDelay: true,  // a host key prompt can open while the user types in a terminal
       });
       send(tab, { type: "answer", id: m.id, value: trusted });
-    } else if (m.type === "connected") {
-      Object.assign(tab, { session: m.session, canBreak: m.can_break, hasSftp: m.sftp, sftpPath: null });
+    } else if (m.type === "break") {
+      toast(m.message, !m.ok);
+    } else if (m.type === "state" && m.state === "connected") {
+      Object.assign(tab, {
+        session: m.session, caps: m.capabilities, forwards: m.forwards, forwardsSummary: m.forwards_summary, sftpPath: null,
+      });
+      tab.term.options.disableStdin = !tab.caps.typing;  // a forwards-only connection: nothing to type into
       setStatus(tab, "connected");
       tab.term.focus();
       if (tab.sftpOpen) refreshSftp();
-    } else if (m.type === "error" || m.type === "closed") {
-      tab.ended = m.message;
-      // Close tab on exit: always, or only when the remote program ended normally.
-      const when = tab.profile.terminal.close_on_exit;
-      tab.closeOnEnd = m.type === "closed" && (when === "always" || (when === "clean" && m.clean));
-      if (m.type === "error") tab.term.write(`\r\n\x1b[31m${m.message}\x1b[0m\r\n`);
+    } else if (m.type === "state") {  // failed (never connected) or ended
+      tab.ended = { state: m.state, message: m.message, closeTab: Boolean(m.close_tab) };
+      if (m.state === "failed") tab.term.write(`\r\n\x1b[31m${m.message}\x1b[0m\r\n`);
     }
   };
   ws.onclose = () => {
     if (tab.ws !== ws) return;
     tab.session = null;
-    if (tab.closeOnEnd) {
+    const ended = tab.ended || { state: tab.status === "connecting" ? "failed" : "ended", message: "Disconnected" };
+    tab.ended = null;
+    if (ended.closeTab) {  // Close tab on exit (the server applies the profile's rule)
       toast(`${tab.profile.name}: session ended, tab closed`);
-      closeTab(tab);
+      closeTab(tab, { ask: false });
       return;
     }
-    setStatus(tab, "closed");
-    showReconnect(tab, tab.ended || "Disconnected");
-    tab.ended = null;
+    setStatus(tab, ended.state);
+    showReconnect(tab, ended.message);
   };
 }
 
@@ -670,12 +825,15 @@ function showReconnect(tab, message) {
   tab.overlay = el("div", { class: "overlay" },
     el("span", {}, message),
     el("button", { class: "primary", onclick: () => openSocket(tab) }, "Reconnect"),
-    el("button", { onclick: () => closeTab(tab) }, "Close tab"));
+    el("button", { onclick: () => closeTab(tab, { ask: false }) }, "Close tab"));
   tab.container.append(tab.overlay);
   tab.reconnectKey = tab.term.onKey(({ domEvent }) => {
-    if (tab.status === "closed" && domEvent.key === "Enter") openSocket(tab);
+    if (!isLive(tab) && domEvent.key === "Enter") openSocket(tab);
   });
 }
+
+const isLive = (tab) => tab.status === "connecting" || tab.status === "connected";
+const STATUS_TEXT = { connecting: "Connecting…", connected: "Connected", failed: "Failed", ended: "Ended" };
 
 function setStatus(tab, status) {
   tab.status = status;
@@ -694,12 +852,20 @@ function activate(tab) {
   renderToolbar();
   if (tab) {
     requestAnimationFrame(() => { tab.fit.fit(); tab.term.focus(); });
-    $("#sftp").hidden = !(tab.sftpOpen && tab.hasSftp);
+    $("#sftp").hidden = !(tab.sftpOpen && tab.caps.sftp);
     if (tab.sftpOpen) refreshSftp();
   }
 }
 
-function closeTab(tab) {
+// Like PuTTY's Warn on close: closing a connected session asks first (unless the profile says not to).
+async function closeTab(tab, { ask = true } = {}) {
+  if (ask && tab.status === "connected" && tab.profile.terminal.warn_on_close) {
+    const ok = await prompt({
+      title: "Close session?", body: el("p", {}, `${tab.profile.name} is still connected. Close it?`),
+      okLabel: "Close", danger: true,
+    });
+    if (!ok || !state.tabs.includes(tab)) return;
+  }
   const ws = tab.ws;
   tab.ws = null;
   ws?.close();
@@ -715,49 +881,53 @@ function closeTab(tab) {
 function renderTabs() {
   $("#tabs").replaceChildren(...state.tabs.map((tab) =>
     el("div", {
-      class: `tab ${tab === state.active ? "active" : ""}`,
-      title: tab.remoteTitle ? `${tab.profile.name}: ${tab.remoteTitle}` : tab.profile.name,  // the full label
+      class: `tab ${tab === state.active ? "active" : ""}`, role: "tab", "aria-selected": String(tab === state.active),
+      title: `${tab.remoteTitle ? `${tab.profile.name}: ${tab.remoteTitle}` : tab.profile.name} (${STATUS_TEXT[tab.status]})`,
       onclick: () => activate(tab),
       onauxclick: (e) => { if (e.button === 1) closeTab(tab); },
     },
-      el("span", { class: `dot ${tab.status}` }),
+      el("span", { class: `dot ${tab.status}`, "aria-label": STATUS_TEXT[tab.status] }),
       el("span", { class: "label" }, tab.remoteTitle ? `${tab.profile.name}: ${tab.remoteTitle}` : tab.profile.name),
       tab.bell ? el("span", { class: "bell", title: "Bell rang" }, "!") : null,
-      el("button", { class: "close", title: "Close", onclick: (e) => { e.stopPropagation(); closeTab(tab); } }, "✕"))));
-}
-
-function summaryOf(p) {
-  if (p.kind === "ssh") return `ssh ${p.ssh.username ? p.ssh.username + "@" : ""}${p.ssh.host}:${p.ssh.port}`;
-  const s = p.serial;
-  return `serial ${s.device} ${s.baudrate} ${s.bytesize}${s.parity}${s.stopbits}`;
+      el("button", { class: "close", title: `Close (${keyName("W")})`, "aria-label": "Close tab",
+        onclick: (e) => { e.stopPropagation(); closeTab(tab); } }, "✕"))));
 }
 
 function renderToolbar() {
   const tab = state.active;
   $("#toolbar").hidden = !tab;
   if (!tab) { updateStatusbar(); return; }
-  $("#tb-status").textContent = tab.status;
-  $("#tb-summary").textContent = summaryOf(tab.profile);
+  $("#tb-status").textContent = STATUS_TEXT[tab.status];
+  $("#tb-status").className = `status ${tab.status}`;
+  $("#tb-summary").textContent = tab.profile.summary || "";
   const show = (action, visible) => { $(`[data-action=${action}]`).hidden = !visible; };
-  // Only the controls that make sense for this connection type.
-  show("sftp", tab.profile.kind === "ssh");
-  show("break", tab.profile.kind === "serial");
-  show("reconnect", tab.status === "closed");
-  $("[data-action=sftp]").disabled = !tab.hasSftp || tab.status !== "connected";
+  // Only the controls the session has (the server reports them once connected).
+  const live = tab.status === "connected";
+  show("sftp", tab.caps.sftp);
+  show("break", tab.caps.send_break);
+  show("reconnect", !isLive(tab));
+  $("[data-action=sftp]").disabled = !live;
   $("[data-action=sftp]").classList.toggle("on", tab.sftpOpen);
-  $("[data-action=break]").disabled = !tab.canBreak || tab.status !== "connected";
+  $("[data-action=break]").disabled = !live;
   updateStatusbar();
 }
 
 function updateStatusbar() {
   const tab = state.active;
-  $("#sb-left").textContent = tab ? `${tab.profile.name} — ${tab.status}` : `${state.profiles.length} profiles`;
+  $("#sb-left").textContent = tab ? `${tab.profile.name}: ${STATUS_TEXT[tab.status]}` : `${state.profiles.length} profiles`;
+  const forwards = $("#sb-forwards");
+  forwards.hidden = !(tab && tab.forwardsSummary && tab.status === "connected");
+  if (!forwards.hidden) {
+    forwards.textContent = tab.forwardsSummary;
+    forwards.title = tab.forwards.map((f) => f.text).join("\n");
+    forwards.classList.toggle("bad", tab.forwards.some((f) => !f.active));
+  }
   $("#sb-right").textContent = tab ? `${tab.term.cols}×${tab.term.rows}  ${tab.profile.terminal.encoding}` : "";
 }
 
 const toolbarActions = {
   reconnect: () => openSocket(state.active),
-  break: () => { send(state.active, { type: "break" }); toast("Break sent"); },
+  break: () => send(state.active, { type: "break" }),  // the server answers whether it was sent
   "font-up": () => setFont(1),
   "font-down": () => setFont(-1),
   search: () => openSearch(),
@@ -830,7 +1000,7 @@ function parentPath(path) {
 
 async function refreshSftp(path) {
   const tab = state.active;
-  if (!tab?.session || !tab.hasSftp) return;
+  if (!tab?.session || !tab.caps.sftp) return;
   $("#sftp-info").textContent = "Loading…";
   try {
     const data = await api("GET", sftpUrl(tab, "", { path: path ?? tab.sftpPath ?? "." }));
@@ -853,7 +1023,13 @@ function fileRow(tab, entry) {
   return el("div", {
     class: "file",
     title: `${entry.mode}  ${new Date(entry.mtime * 1000).toLocaleString()}`,
+    tabindex: "0",
     ondblclick: open,
+    onkeydown: (e) => {
+      if (e.key === "Enter") open();
+      else if (e.key === "Delete") sftpDelete(tab, path, entry);
+      else if (e.key === "F2") sftpRename(tab, path, entry.name);
+    },
     oncontextmenu: (e) => {
       e.preventDefault();
       showMenu(e.clientX, e.clientY, [
@@ -864,7 +1040,7 @@ function fileRow(tab, entry) {
       ]);
     },
   },
-    el("span", {}, entry.dir ? "📁" : entry.link ? "🔗" : "📄"),
+    icon(entry.dir ? "folder" : entry.link ? "link" : "file"),
     el("span", { class: "fname" }, entry.name),
     el("span", { class: "fsize" }, entry.dir ? "" : formatSize(entry.size)));
 }
@@ -978,7 +1154,47 @@ const sftpActions = {
 
 // ---------- wiring ----------
 
+// App shortcuts (keyName: Ctrl+Shift in the desktop window, Alt+Shift in a browser). True if handled.
+function appShortcut(e) {
+  const key = e.key.toLowerCase();
+  if (key === "n") openEditor();
+  else if (key === "w" && state.active) closeTab(state.active);
+  else if (key === "b") toggleSidebar();
+  else if ((key === "pagedown" || key === "pageup") && state.tabs.length > 1) {
+    const i = state.tabs.indexOf(state.active) + (key === "pagedown" ? 1 : -1);
+    activate(state.tabs[(i + state.tabs.length) % state.tabs.length]);
+  } else return false;
+  e.preventDefault();
+  return true;
+}
+
+// The sidebar can be hidden for a wider terminal; on a narrow window it opens over the terminal.
+function toggleSidebar(open) {
+  const narrow = matchMedia("(max-width: 720px)").matches;
+  const cls = narrow ? "sidebar-open" : "sidebar-hidden";
+  const shown = narrow ? document.body.classList.contains(cls) : !document.body.classList.contains(cls);
+  const want = open ?? !shown;
+  document.body.classList.toggle(cls, narrow ? want : !want);
+  $("#sidebar-toggle").setAttribute("aria-expanded", String(want));
+  if (!narrow) store.set("sidebar-hidden", !want);
+  if (want) $("#quick-input").focus();
+  else state.active?.term.focus();
+  requestAnimationFrame(() => state.active?.fit.fit());
+}
+
 function bindEvents() {
+  document.body.classList.toggle("sidebar-hidden", store.get("sidebar-hidden", false));
+  $("#sidebar-toggle").onclick = () => toggleSidebar();
+  $("#sidebar-toggle").setAttribute("aria-expanded", String(!store.get("sidebar-hidden", false)
+    && !matchMedia("(max-width: 720px)").matches));
+  $("#sidebar-toggle").title = `Show or hide the profiles (${keyName("B")})`;
+  $("#new-profile").title = `New profile (${keyName("N")})`;
+  $("#new-key").textContent = keyName("N");
+  $("#profile-list").addEventListener("keydown", profileListKey);
+  $("#sb-forwards").onclick = () => {
+    const tab = state.active;
+    if (tab) toast(tab.forwards.map((f) => f.text).join("\n"), tab.forwards.some((f) => !f.active));
+  };
   $("#new-profile").onclick = () => openEditor();
   // In the desktop window there is no browser to open another window in.
   $(".sidebar-footer").hidden = desktop;
@@ -1009,9 +1225,11 @@ function bindEvents() {
     document.body.classList.toggle("show-advanced", e.target.checked);
     store.set("advanced", e.target.checked);
   };
-  for (const button of document.querySelectorAll("dialog [data-close]")) {
+  for (const button of document.querySelectorAll("#prompt [data-close]")) {
     button.onclick = () => button.closest("dialog").close(button.dataset.close);
   }
+  $("#editor-cancel").onclick = cancelEditor;
+  $("#editor").addEventListener("cancel", (e) => { e.preventDefault(); cancelEditor(); });  // Esc
   $("#editor-form").onsubmit = (e) => {
     const action = e.submitter?.value;
     if (action === "save" || action === "connect") {
@@ -1022,10 +1240,10 @@ function bindEvents() {
 
   $("#toolbar").onclick = (e) => {
     const action = e.target.closest("[data-action]")?.dataset.action;
-    if (action && !e.target.disabled) toolbarActions[action]();
+    if (action && !e.target.closest("button").disabled) toolbarActions[action]();
   };
   $("#searchbar").onclick = (e) => {
-    const action = e.target.dataset.search;
+    const action = e.target.closest("[data-search]")?.dataset.search;
     if (action === "close") { closeSearch(); state.active?.term.focus(); }
     else if (action) runSearch(action === "prev");
   };
@@ -1035,7 +1253,7 @@ function bindEvents() {
   };
 
   $("#sftp").querySelector("header").onclick = (e) => {
-    const action = e.target.dataset.sftp;
+    const action = e.target.closest("[data-sftp]")?.dataset.sftp;
     if (action) sftpActions[action]();
   };
   $("#sftp-path").onkeydown = (e) => { if (e.key === "Enter") refreshSftp(e.target.value); };
@@ -1047,20 +1265,15 @@ function bindEvents() {
 
   document.addEventListener("click", (e) => { if (!e.target.closest("#menu")) $("#menu").hidden = true; });
   document.addEventListener("keydown", (e) => {
-    if (desktop && e.key === "F11") {  // outside a terminal (inside, its key handler takes it)
+    // Seen here first (capture), before a terminal: stopped, these keys never reach the remote.
+    if (desktop && e.key === "F11") {
       e.preventDefault();
+      e.stopPropagation();
       toolbarActions.fullscreen();
       return;
     }
-    if (!(e.ctrlKey && e.shiftKey)) return;
-    const key = e.key.toLowerCase();
-    if (key === "n") { e.preventDefault(); openEditor(); }
-    else if (key === "w" && state.active) { e.preventDefault(); closeTab(state.active); }
-    else if ((key === "pagedown" || key === "pageup") && state.tabs.length > 1) {
-      e.preventDefault();
-      const i = state.tabs.indexOf(state.active) + (key === "pagedown" ? 1 : -1);
-      activate(state.tabs[(i + state.tabs.length) % state.tabs.length]);
-    }
+    if (e.key === "Escape" && document.body.classList.contains("sidebar-open")) toggleSidebar(false);
+    if (shortcut(e) && !$("dialog[open]") && appShortcut(e)) e.stopPropagation();
   }, true);
   window.addEventListener("beforeunload", (e) => {
     if (state.tabs.some((t) => t.status === "connected")) e.preventDefault();
@@ -1070,8 +1283,8 @@ function bindEvents() {
 async function main() {
   bindEvents();
   await login();
-  const { options, defaults, themes } = await api("GET", "/api/options");
-  Object.assign(state, { options, defaults, themes });
+  const { options, sections, defaults, themes } = await api("GET", "/api/options");
+  Object.assign(state, { options, sections, defaults, themes });
   await loadProfiles();
   activate(null);
 }

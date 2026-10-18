@@ -68,6 +68,23 @@ class HostKey:
     known_hosts: str = ""          # where the key will be saved
 
 
+@dataclass
+class ForwardStatus:
+    """One port forward of a connection, as the UIs list it."""
+
+    spec: str                      # as the profile has it: L 8080:db:5432
+    kind: str                      # local, remote, dynamic
+    public: bool = False           # listens beyond this computer
+    active: bool = False
+    port: int | None = None        # the port listened on (the one picked for port 0)
+    error: str = ""
+
+    def describe(self) -> str:
+        if not self.active:
+            return f"{self.spec}: failed ({self.error})" if self.error else f"{self.spec}: not open"
+        return f"{self.spec}: listening on port {self.port}" + (" (other machines too)" if self.public else "")
+
+
 class Prompter(Protocol):
     """Questions a connection may ask the user. Each UI provides its own."""
 
@@ -109,6 +126,10 @@ class Session(ABC):
     def sftp(self):
         """File transfer on the same connection (sftp.SFTP), or None (serial)."""
         return None
+
+    def forwards(self) -> list[ForwardStatus]:
+        """The connection's port forwards and whether each one opened."""
+        return []
 
     def resize(self, cols: int, rows: int) -> None:
         """Report the new terminal size. Ignored by sessions without one."""
@@ -210,6 +231,9 @@ class TerminalSession(Session):
 
     def sftp(self):
         return self.inner.sftp()
+
+    def forwards(self) -> list[ForwardStatus]:
+        return self.inner.forwards()
 
     def _local(self, data: bytes) -> None:
         """Show bytes that did not come from the remote side (echo, notices)."""

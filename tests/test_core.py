@@ -296,3 +296,81 @@ def test_resolve_target_garbage_gets_generic_help():
         resolve_target("a b", {"web": Profile("web", "ssh")})
     message = exc.value.args[0]
     assert "user@host" in message and "COM3@9600" in message and "did you mean" not in message
+
+
+# ---- OptionError: which option is invalid, so editors can mark the field ----
+
+def _where(profile):
+    from termdeck.errors import OptionError
+
+    with pytest.raises(OptionError) as exc:
+        profile.validate()
+    assert isinstance(exc.value, ValueError)  # callers catching ValueError keep working
+    return exc.value.section, exc.value.key
+
+
+def _ssh(**ssh):
+    return Profile("x", "ssh", ssh=SSHSettings(host="h", **ssh))
+
+
+def _serial(**kw):
+    return Profile("x", "serial", serial=SerialSettings(device="loop://", **kw))
+
+
+def _with_terminal(profile, **terminal):
+    for key, value in terminal.items():
+        setattr(profile.terminal, key, value)
+    return profile
+
+
+@pytest.mark.parametrize("profile, where", [
+    (Profile("x", "ssh"), ("ssh", "host")),
+    (Profile("x", "ssh", ssh=SSHSettings(host="bad host")), ("ssh", "host")),
+    (Profile("", "ssh", ssh=SSHSettings(host="h")), ("profile", "name")),
+    (Profile("a\x07b", "ssh", ssh=SSHSettings(host="h")), ("profile", "name")),
+    (Profile("x", "ssh", group="g\x00", ssh=SSHSettings(host="h")), ("profile", "group")),
+    (Profile("x", "telnet"), ("profile", "kind")),
+    (Profile("x", "serial"), ("serial", "device")),
+    (Profile("x", "serial", serial=SerialSettings(device="http://nope")), ("serial", "device")),
+    (_with_terminal(_serial(), colours="red=notacolour"), ("terminal", "colours")),
+    (_with_terminal(_serial(), answerback="a\x05b"), ("terminal", "answerback")),
+    (_with_terminal(_serial(), encoding="no-such-charset"), ("terminal", "encoding")),
+    (_ssh(no_shell=True, remote_command="ls"), ("ssh", "remote_command")),
+    (_ssh(port=70000), ("ssh", "port")),
+    (_ssh(port=0), ("ssh", "port")),
+    (_ssh(port="22"), ("ssh", "port")),
+    (_ssh(address_family="ipv5"), ("ssh", "address_family")),
+    (_ssh(ciphers="rot13"), ("ssh", "ciphers")),
+    (_ssh(jump_host="@@"), ("ssh", "jump_host")),
+    (_ssh(proxy_type="socks5"), ("ssh", "proxy_host")),
+    (_ssh(proxy_type="command"), ("ssh", "proxy_command")),
+    (_ssh(agent_forwarding=True, use_agent=False), ("ssh", "agent_forwarding")),
+    (_ssh(tty_modes="BOGUS=1"), ("ssh", "tty_modes")),
+    (_ssh(forwards=[Forward("local", 8080, "localhost", "", 0)]), ("ssh", "forwards")),
+    (_serial(parity="Q"), ("serial", "parity")),
+    (_serial(baudrate=0), ("serial", "baudrate")),
+    (_with_terminal(_serial(), scrollback=-1), ("terminal", "scrollback")),
+    (_with_terminal(_serial(), bell="loud"), ("terminal", "bell")),
+])
+def test_validate_names_the_invalid_option(profile, where):
+    assert _where(profile) == where
+
+
+def test_an_option_error_keeps_its_message():
+    from termdeck.errors import OptionError, ProfileError
+
+    with pytest.raises(OptionError, match="needs a host"):
+        Profile("x", "ssh").validate()
+    assert issubclass(OptionError, ProfileError)
+
+
+def test_from_dict_raises_option_error_too():
+    from termdeck.errors import OptionError
+
+    with pytest.raises(OptionError) as exc:
+        Profile.from_dict({"name": "x", "kind": "ssh", "ssh": {"host": ""}})
+    assert (exc.value.section, exc.value.key) == ("ssh", "host")
+
+
+def test_a_serial_profile_is_not_blamed_for_unused_ssh_options():
+    _serial().validate()  # the empty ssh host of a serial profile is not an error

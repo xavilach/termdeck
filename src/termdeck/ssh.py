@@ -17,7 +17,7 @@ from .config import atomic_write, config_dir, file_lock, open_private, user_path
 from .errors import ConnectError
 from .profiles import Profile, SSHSettings, check_algorithms, check_host, parse_env, parse_jump, parse_tty_modes
 from .proxy import CommandTunnel, ProxyTunnel, proxy_command, uses_proxy
-from .session import HostKey, Prompter, Session, describe_error as _describe, notify, printable
+from .session import ForwardStatus, HostKey, Prompter, Session, describe_error as _describe, notify, printable
 from .sftp import SFTP
 
 MAX_PASSWORD_TRIES = 3
@@ -231,6 +231,7 @@ class SSHConnection:
         self.profile = profile
         self.jump = jump
         self.listeners: list[asyncssh.SSHListener] = []
+        self.forward_status: list[ForwardStatus] = []
         self._files: SFTP | None = None
         self.users = 1  # sessions using this connection (share_connection)
         self.share_key: tuple | None = None
@@ -341,11 +342,14 @@ class SSHConnection:
         raise asyncssh.HostKeyNotVerifiable("host key still not trusted after accepting it")
 
     async def start_forwards(self) -> list[str]:
-        """Open the profile's port forwards. Returns messages for failures and public listeners."""
+        """Open the profile's port forwards. Returns messages for failures and public listeners;
+        `forward_status` keeps the result of each, for the UIs' status bars."""
         errors = []
         for fwd in self.profile.ssh.forwards:
             if fwd.public:
                 errors.append(f"warning: forward {fwd} accepts connections from other machines")
+            status = ForwardStatus(str(fwd), fwd.kind, fwd.public)
+            self.forward_status.append(status)
             try:
                 if fwd.kind == "local":
                     listener = await self.conn.forward_local_port(
@@ -358,7 +362,9 @@ class SSHConnection:
                 else:
                     listener = await self.conn.forward_socks(fwd.listen_host, fwd.listen_port)
                 self.listeners.append(listener)
+                status.active, status.port = True, listener.get_port()
             except (OSError, asyncssh.Error) as exc:
+                status.error = str(exc)
                 errors.append(f"forward {fwd} failed: {exc}")
         return errors
 
@@ -504,6 +510,9 @@ class SSHShell(Session):
     def sftp(self) -> SFTP:
         return self.connection.sftp()
 
+    def forwards(self) -> list[ForwardStatus]:
+        return self.connection.forward_status
+
     async def close(self) -> None:
         if not self._closed:
             self._closed = True
@@ -605,6 +614,9 @@ class SSHForwards(Session):
     def sftp(self) -> SFTP:
         return self.connection.sftp()
 
+    def forwards(self) -> list[ForwardStatus]:
+        return self.connection.forward_status
+
     async def close(self) -> None:
         if not getattr(self, "_closed", False):  # released once, even if closed twice
             self._closed = True
@@ -638,6 +650,9 @@ class SSHStream(Session):
 
     def sftp(self) -> SFTP:
         return self.connection.sftp()
+
+    def forwards(self) -> list[ForwardStatus]:
+        return self.connection.forward_status
 
     async def close(self) -> None:
         if not getattr(self, "_closed", False):  # released once, even if closed twice

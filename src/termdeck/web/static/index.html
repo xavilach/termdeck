@@ -11,14 +11,15 @@
 <div id="app">
   <aside id="sidebar">
     <header class="brand">
-      <span class="logo">▍</span><span>termdeck</span>
-      <button id="new-profile" class="icon-btn" title="New profile (Ctrl+Shift+N)">＋</button>
+      <span>termdeck</span>
+      <button id="new-profile" class="icon-btn" aria-label="New profile"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
     </header>
     <form id="quick-connect" autocomplete="off">
-      <input id="quick-input" placeholder="Quick connect: user@host:port or COM3@9600" spellcheck="false">
+      <input id="quick-input" placeholder="Quick connect: user@host:port or COM3@9600" spellcheck="false"
+             aria-label="Quick connect">
     </form>
-    <input id="filter" type="search" placeholder="Filter profiles" spellcheck="false">
-    <nav id="profile-list"></nav>
+    <input id="filter" type="search" placeholder="Filter profiles" spellcheck="false" aria-label="Filter profiles">
+    <div id="profile-list" role="listbox" aria-label="Profiles"></div>
     <div id="profile-problems" class="problems" role="status" hidden></div>
     <footer class="sidebar-footer">
       <button id="new-window" title="Open termdeck in another browser window">Open another window</button>
@@ -26,46 +27,59 @@
   </aside>
 
   <main id="main">
-    <div id="tabbar"><div id="tabs"></div></div>
+    <div id="tabbar">
+      <button id="sidebar-toggle" class="icon-btn" aria-label="Profiles" aria-expanded="true"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg></button>
+      <div id="tabs" role="tablist" aria-label="Sessions"></div>
+    </div>
     <div id="toolbar" hidden>
-      <span id="tb-status" class="status-pill"></span>
+      <span id="tb-status" class="status"></span>
       <span id="tb-summary" class="muted"></span>
       <span class="spacer"></span>
       <button data-action="search" title="Find (Ctrl+Shift+F)">Find</button>
       <button data-action="sftp" title="Files (SFTP)">Files</button>
       <button data-action="break" title="Send serial break">Break</button>
-      <button data-action="font-down" title="Smaller text">A−</button>
-      <button data-action="font-up" title="Larger text">A＋</button>
+      <button data-action="font-down" title="Smaller text" aria-label="Smaller text">A-</button>
+      <button data-action="font-up" title="Larger text" aria-label="Larger text">A+</button>
       <button data-action="reconnect" title="Reconnect">Reconnect</button>
       <button data-action="ontop" title="Keep the window above others" aria-pressed="false" hidden>On top</button>
       <button data-action="fullscreen" title="Full screen (F11)" hidden>Full screen</button>
     </div>
     <div id="searchbar" hidden>
       <input id="search-input" placeholder="Find in scrollback" spellcheck="false">
-      <button data-search="prev" title="Previous (Shift+Enter)">↑</button>
-      <button data-search="next" title="Next (Enter)">↓</button>
-      <button data-search="close" title="Close (Esc)">✕</button>
+      <button data-search="prev" title="Previous (Shift+Enter)" aria-label="Previous match">↑</button>
+      <button data-search="next" title="Next (Enter)" aria-label="Next match">↓</button>
+      <button data-search="close" title="Close (Esc)" aria-label="Close find">✕</button>
     </div>
     <div id="workspace">
       <div id="terminals"></div>
       <section id="sftp" hidden>
         <header>
-          <input id="sftp-path" spellcheck="false">
-          <button data-sftp="up" title="Parent folder">↑</button>
-          <button data-sftp="refresh" title="Refresh">⟳</button>
-          <button data-sftp="mkdir" title="New folder">＋📁</button>
-          <label class="btn" title="Upload files">⤒<input id="sftp-upload" type="file" multiple hidden></label>
+          <input id="sftp-path" spellcheck="false" aria-label="Remote folder">
+          <button data-sftp="up" title="Parent folder" aria-label="Parent folder"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4"/></svg></button>
+          <button data-sftp="refresh" title="Refresh" aria-label="Refresh"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5V5h-2.5"/></svg></button>
+          <button data-sftp="mkdir" title="New folder" aria-label="New folder"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 4.5v8h13v-7H8L6.5 3.5h-5zM8 7.5v4M6 9.5h4"/></svg></button>
+          <label class="btn" title="Upload files"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 11V3M4.5 6.5 8 3l3.5 3.5M2.5 13.5h11"/></svg><span class="sr-only">Upload files</span><input id="sftp-upload" type="file" multiple class="sr-only"></label>
         </header>
         <div id="sftp-list" class="drop-zone"></div>
         <footer id="sftp-status" class="muted"><span id="sftp-info"></span><span id="sftp-transfer"></span></footer>
       </section>
     </div>
     <div id="welcome">
-      <h1>termdeck</h1>
-      <p class="muted">SSH and serial terminals. Pick a profile, or press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd> to create one.</p>
-      <div id="welcome-cards"></div>
+      <section id="recent-block" hidden>
+        <h2 id="recent-title">Recent sessions</h2>
+        <ul id="recent"></ul>
+      </section>
+      <section class="hints">
+        <h2>Keys</h2>
+        <dl>
+          <dt><kbd id="new-key">Ctrl+Shift+N</kbd></dt><dd>New profile</dd>
+          <dt><kbd>Enter</kbd></dt><dd>Connect the selected profile (F2 edits, Delete deletes)</dd>
+          <dt><kbd>Ctrl+Shift+C</kbd> <kbd>Ctrl+Shift+V</kbd></dt><dd>Copy and paste in a terminal (selecting also copies, right click pastes)</dd>
+          <dt><kbd>Ctrl+Shift+F</kbd></dt><dd>Find in the scrollback</dd>
+        </dl>
+      </section>
     </div>
-    <footer id="statusbar"><span id="sb-left"></span><span id="sb-right"></span></footer>
+    <footer id="statusbar"><span id="sb-left"></span><span class="spacer"></span><button id="sb-forwards" class="link" hidden></button><span id="sb-right"></span></footer>
   </main>
 </div>
 
@@ -84,7 +98,7 @@
       <!-- The first submit button is the default: Enter in a field saves. -->
       <button id="editor-save" value="save" class="primary">Save</button>
       <button id="editor-save-connect" value="connect">Save &amp; connect</button>
-      <button type="button" data-close="cancel">Cancel</button>
+      <button type="button" id="editor-cancel">Cancel</button>
     </footer>
   </form>
 </dialog>
@@ -101,8 +115,8 @@
   </form>
 </dialog>
 
-<div id="menu" class="menu" hidden></div>
-<div id="toast" hidden></div>
+<div id="menu" class="menu" role="menu" hidden></div>
+<div id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="/static/vendor/xterm.js"></script>
 <script src="/static/vendor/addon-fit.js"></script>

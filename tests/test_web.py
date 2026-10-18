@@ -172,8 +172,8 @@ async def test_terminal_over_websocket_with_prompts_and_sftp(client, ssh_server)
     m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "prompt")
     assert m["secret"] is True
     await ws.send_json({"type": "answer", "id": m["id"], "value": "secret"})
-    m, out = await _receive_until(ws, lambda m, _: m and m["type"] == "connected")
-    assert m["sftp"] is True and m["can_break"] is False
+    m, out = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "connected")
+    assert m["capabilities"]["sftp"] is True and m["capabilities"]["send_break"] is False
     sid = m["session"]
 
     _, out = await _receive_until(ws, lambda m, out: b"90x20" in out)
@@ -200,7 +200,7 @@ async def test_terminal_over_websocket_with_prompts_and_sftp(client, ssh_server)
     assert (ssh_server.root / "dir").is_dir()
 
     await ws.send_json({"type": "input", "data": "exit\r"})
-    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "closed")
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "ended")
     await ws.close()
     assert (await client.get(f"/api/sessions/{sid}/sftp")).status == 404
 
@@ -211,7 +211,7 @@ async def test_rejected_host_key_reports_error(client, ssh_server):
     await ws.send_json({"type": "open", "profile": ssh_server.profile().to_dict()})
     m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "hostkey")
     await ws.send_json({"type": "answer", "id": m["id"], "value": False})
-    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "error")
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "failed")
     assert m["message"] == "Host key not trusted, connection aborted"
 
 
@@ -220,8 +220,8 @@ async def test_saved_serial_profile_and_break(client):
     await client.post("/api/profiles", json={"name": "loop", "kind": "serial", "serial": {"device": "loop://"}})
     ws = await client.ws_connect("/api/terminal")
     await ws.send_json({"type": "open", "name": "loop"})
-    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "connected")
-    assert m["can_break"] is True and m["sftp"] is False
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "connected")
+    assert m["capabilities"]["send_break"] is True and m["capabilities"]["sftp"] is False
     await ws.send_json({"type": "break"})
     await ws.send_json({"type": "input", "data": "AT\r"})
     _, out = await _receive_until(ws, lambda m, out: b"AT\r" in out)
@@ -232,7 +232,7 @@ async def test_unknown_profile_reports_error(client):
     await login(client)
     ws = await client.ws_connect("/api/terminal")
     await ws.send_json({"type": "open", "name": "nope"})
-    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "error")
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "failed")
     assert "nope" in m["message"]
 
 
@@ -247,7 +247,7 @@ async def test_websocket_auth_by_subprotocol(client):
     ws = await client.ws_connect("/api/terminal", protocols=("termdeck", f"auth.{secret}"))
     assert ws.protocol == "termdeck"
     await ws.send_json({"type": "open", "name": "loop"})
-    await _receive_until(ws, lambda m, _: m and m["type"] == "connected")
+    await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "connected")
     await ws.send_str("not json")  # ignored, the session keeps working
     await ws.send_json({"type": "resize", "cols": "x", "rows": 10**9})
     await ws.send_json({"type": "input", "data": "still here"})
@@ -289,7 +289,7 @@ async def test_sftp_ticket_for_a_missing_path_is_a_400(client, ssh_server):
     await ws.send_json({"type": "answer", "id": m["id"], "value": True})
     m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "prompt")
     await ws.send_json({"type": "answer", "id": m["id"], "value": "secret"})
-    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "connected")
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "connected")
     sid = m["session"]
 
     r = await client.post(f"/api/sessions/{sid}/sftp/ticket", json={"path": "/nope"})
@@ -308,7 +308,7 @@ async def _sftp_session(client, ssh_server):
     await ws.send_json({"type": "answer", "id": m["id"], "value": True})
     m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "prompt")
     await ws.send_json({"type": "answer", "id": m["id"], "value": "secret"})
-    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "connected")
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "connected")
     return ws, m["session"]
 
 
@@ -441,7 +441,7 @@ async def test_server_banner_is_sent_as_a_notice(client, ssh_server):
     assert m == {"type": "notice", "text": "Authorized users only"}
     m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "prompt")
     await ws.send_json({"type": "answer", "id": m["id"], "value": "secret"})
-    await _receive_until(ws, lambda m, _: m and m["type"] == "connected")
+    await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "connected")
     await ws.close()
 
 
@@ -453,7 +453,7 @@ async def test_hostkey_message_carries_the_key_details(client, ssh_server):
     assert m["key_type"] == "ssh-ed25519" and m["fingerprint"].startswith("SHA256:")
     assert m["old_fingerprints"] == [] and m["known_hosts"].endswith("known_hosts")
     await ws.send_json({"type": "answer", "id": m["id"], "value": "true"})  # not a real yes
-    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "error")
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "failed")
     assert m["message"] == "Host key not trusted, connection aborted"
 
 
@@ -464,7 +464,7 @@ async def test_closed_message_says_why_for_a_remote_exit_status(client, ssh_serv
     await ws.send_json({"type": "open", "profile": ssh_server.profile(remote_command="exit3").to_dict()})
     m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "prompt")
     await ws.send_json({"type": "answer", "id": m["id"], "value": "secret"})
-    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "closed")
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "ended")
     assert m["message"].startswith("Session ended: ") and "status 3" in m["message"]
 
 
@@ -484,9 +484,9 @@ async def test_closed_message_says_why_when_the_serial_port_disappears(client, p
     await login(client)
     ws = await client.ws_connect("/api/terminal")
     await ws.send_json({"type": "open", "profile": {"name": "loop", "kind": "serial", "serial": {"device": "loop://"}}})
-    await _receive_until(ws, lambda m, _: m and m["type"] == "connected")
+    await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "connected")
     gone.set()
-    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "closed")
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "ended")
     assert m["message"].startswith("Session ended: loop: ")
 
 
@@ -497,7 +497,7 @@ async def test_closed_message_without_reason_for_a_normal_exit(client, ssh_serve
     await ws.send_json({"type": "open", "profile": ssh_server.profile(remote_command="uptime").to_dict()})
     m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "prompt")
     await ws.send_json({"type": "answer", "id": m["id"], "value": "secret"})
-    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "closed")
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "ended")
     assert m["message"] == "Session ended"
 
 
@@ -626,14 +626,14 @@ async def test_closed_message_is_clean_only_without_a_reason(client, ssh_server,
     await ws.send_json({"type": "open", "profile": ssh_server.profile(remote_command="uptime").to_dict()})
     m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "prompt")
     await ws.send_json({"type": "answer", "id": m["id"], "value": "secret"})
-    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "closed")
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "ended")
     assert m["clean"] is True
 
     ws = await client.ws_connect("/api/terminal")
     await ws.send_json({"type": "open", "profile": ssh_server.profile(remote_command="exit3").to_dict()})
     m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "prompt")
     await ws.send_json({"type": "answer", "id": m["id"], "value": "secret"})
-    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "closed")
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "ended")
     assert m["clean"] is False
 
     gone = threading.Event()
@@ -646,7 +646,200 @@ async def test_closed_message_is_clean_only_without_a_reason(client, ssh_server,
     patch_port(read=read)
     ws = await client.ws_connect("/api/terminal")
     await ws.send_json({"type": "open", "profile": {"name": "loop", "kind": "serial", "serial": {"device": "loop://"}}})
-    await _receive_until(ws, lambda m, _: m and m["type"] == "connected")
+    await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "connected")
     gone.set()
-    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "closed")
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "ended")
     assert m["clean"] is False
+
+
+# ---- batch 8: option errors name the field, sections, break replies, forwards, deleted profiles ----
+
+async def test_options_carry_the_section_titles(client):
+    from termdeck.profiles import SECTION_TITLES
+
+    await login(client)
+    data = await (await client.get("/api/options")).json()
+    assert data["sections"] == SECTION_TITLES
+    assert {"profile", "ssh", "serial", "terminal", "forwards"} <= set(data["sections"])
+
+
+@pytest.mark.parametrize("body, field", [
+    ({"name": "x", "kind": "ssh", "ssh": {"host": ""}}, "ssh.host"),
+    ({"name": "x", "kind": "ssh", "ssh": {"host": "h", "port": 70000}}, "ssh.port"),
+    ({"name": "x", "kind": "serial", "serial": {"device": "http://x"}}, "serial.device"),
+    ({"name": "x", "kind": "serial", "serial": {"device": "loop://"}, "terminal": {"colours": "red=zzz"}},
+     "terminal.colours"),
+    ({"name": "x", "kind": "ssh", "ssh": {"host": "h", "no_shell": True, "remote_command": "ls"}},
+     "ssh.remote_command"),
+])
+async def test_an_invalid_option_is_a_400_naming_the_field(client, body, field):
+    await login(client)
+    r = await client.post("/api/profiles", json=body)
+    assert r.status == 400
+    data = await r.json()
+    assert data["field"] == field and data["error"]
+    assert (await (await client.get("/api/profiles")).json())["profiles"] == []
+
+
+async def test_updating_with_an_invalid_option_names_the_field_and_keeps_the_profile(client):
+    await login(client)
+    body = {"name": "box", "kind": "ssh", "ssh": {"host": "box.example"}}
+    assert (await client.post("/api/profiles", json=body)).status == 200
+    body["ssh"]["host"] = ""
+    r = await client.put("/api/profiles/box", json=body)
+    assert r.status == 400 and (await r.json())["field"] == "ssh.host"
+    [kept] = (await (await client.get("/api/profiles")).json())["profiles"]
+    assert kept["ssh"]["host"] == "box.example"
+
+
+async def test_a_400_without_a_field_has_no_field_key(client):
+    await login(client)
+    r = await client.post("/api/profiles", json=[1, 2])
+    assert r.status == 400 and "field" not in await r.json()
+
+
+async def test_break_message_is_answered_with_the_result(client):
+    await login(client)
+    await client.post("/api/profiles", json={"name": "loop", "kind": "serial", "serial": {"device": "loop://"}})
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "name": "loop"})
+    await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "connected")
+    await ws.send_json({"type": "break"})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "break")
+    assert m["ok"] is True and m["message"] == "Break sent"
+    await ws.close()
+
+
+async def test_break_on_an_ssh_session_is_refused_with_a_message(client, ssh_server):
+    await login(client)
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "profile": ssh_server.profile().to_dict()})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "hostkey")
+    await ws.send_json({"type": "answer", "id": m["id"], "value": True})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "prompt")
+    await ws.send_json({"type": "answer", "id": m["id"], "value": "secret"})
+    await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "connected")
+    await ws.send_json({"type": "break"})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "break")
+    assert m["ok"] is False and m["message"]
+    await ws.close()
+
+
+async def test_break_reports_a_device_that_went_away(client, patch_port):
+    import serial
+
+    await login(client)
+    await client.post("/api/profiles", json={"name": "loop", "kind": "serial", "serial": {"device": "loop://"}})
+    ports = patch_port()
+
+    def refuse(*a, **k):
+        raise serial.SerialException("device vanished")
+
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "name": "loop"})
+    await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "connected")
+    port, _kwargs = ports[0]
+    port.send_break = refuse
+    await ws.send_json({"type": "break"})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "break")
+    assert m["ok"] is False and m["message"].startswith("Break not sent: ") and "device vanished" in m["message"]
+    await ws.close()
+
+
+async def test_opening_a_profile_deleted_meanwhile_fails_with_a_reason(client):
+    await login(client)
+    await client.post("/api/profiles", json={"name": "loop", "kind": "serial", "serial": {"device": "loop://"}})
+    assert (await client.delete("/api/profiles/loop")).status == 200
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "name": "loop"})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] != "connecting")
+    assert m["state"] == "failed" and "deleted or renamed" in m["message"]
+    await ws.close()
+
+
+async def test_connected_message_lists_the_forwards_and_their_summary(client, ssh_server):
+    import asyncio
+
+    busy = await asyncio.start_server(lambda r, w: None, "127.0.0.1", 0)
+    busy_port = busy.sockets[0].getsockname()[1]
+    profile = ssh_server.profile()
+    from termdeck.profiles import Forward
+
+    profile.ssh.forwards = [Forward("local", 0, "127.0.0.1", "127.0.0.1", 9),
+                            Forward("local", busy_port, "127.0.0.1", "127.0.0.1", 9)]
+    await login(client)
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "profile": profile.to_dict()})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "hostkey")
+    await ws.send_json({"type": "answer", "id": m["id"], "value": True})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "prompt")
+    await ws.send_json({"type": "answer", "id": m["id"], "value": "secret"})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "connected")
+    ok, failed = m["forwards"]
+    assert ok["active"] is True and ok["port"] and ok["kind"] == "local" and "listening on port" in ok["text"]
+    assert failed["active"] is False and failed["port"] is None and failed["error"]
+    assert "failed" in failed["text"]
+    assert m["forwards_summary"] == "1 of 2 forwards failed"
+    await ws.close()
+    busy.close()
+
+
+async def test_connected_message_without_forwards_has_an_empty_summary(client):
+    await login(client)
+    await client.post("/api/profiles", json={"name": "loop", "kind": "serial", "serial": {"device": "loop://"}})
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "name": "loop"})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "connected")
+    assert m["forwards"] == [] and m["forwards_summary"] == ""
+    await ws.close()
+
+
+# ---- open_in_browser: the start link goes through a private file, not the command line ----
+
+async def test_open_in_browser_writes_a_private_page_and_removes_it_later(tmp_path, monkeypatch):
+    import json
+    import stat
+    import sys
+    import tempfile
+    import webbrowser
+    from pathlib import Path
+    from urllib.parse import urlparse
+    from urllib.request import url2pathname
+
+    from termdeck.web.server import open_in_browser
+
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    opened = []
+    monkeypatch.setattr(webbrowser, "open", lambda url, *a, **k: opened.append(url) or True)
+    url = "http://127.0.0.1:5000/#token=abc_DEF-123"
+    page = open_in_browser(url, keep=0.1)
+    assert page.parent == tmp_path and page.exists()
+    if sys.platform != "win32":
+        assert stat.S_IMODE(page.stat().st_mode) == 0o600
+    text = page.read_text(encoding="utf-8")
+    assert json.dumps(url) in text and "location.replace(" in text
+    assert 'name="referrer" content="no-referrer"' in text
+    [uri] = opened
+    assert uri.startswith("file://") and Path(url2pathname(urlparse(uri).path)) == page
+    assert url not in uri  # the link is never on the browser's command line
+
+    async def gone():
+        while page.exists():
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(gone(), 5)
+
+
+async def test_open_in_browser_escapes_the_url_inside_the_script(tmp_path, monkeypatch):
+    import tempfile
+    import webbrowser
+
+    from termdeck.web.server import open_in_browser
+
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    monkeypatch.setattr(webbrowser, "open", lambda *a, **k: True)
+    page = open_in_browser('http://127.0.0.1:1/#a");alert(1);("', keep=60)
+    try:
+        assert 'a\\");alert(1);(\\"' in page.read_text(encoding="utf-8")  # a string literal, not code
+    finally:
+        page.unlink()

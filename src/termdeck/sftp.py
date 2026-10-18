@@ -7,6 +7,7 @@ messages naming the path.
 """
 
 import asyncio
+import os
 import posixpath
 import re
 import secrets
@@ -232,8 +233,13 @@ class SFTP:
         if sys.platform == "win32" and recursive and (bad := await self._unsafe_names(remote)):
             shown = ", ".join(bad[:5]) + (f" and {len(bad) - 5} more" if len(bad) > 5 else "")
             raise SFTPFailure(f"{remote}: names Windows cannot store ({shown}); rename them on the server first")
-        await self._call(remote, "get", remote, str(local), recurse=recursive, preserve=True,
+        # Not preserve=True: it would copy the remote mode, setuid and world-writable bits included.
+        # Local files get the user's usual permissions; the modification time is kept.
+        attrs = await self._call(remote, "stat", remote)
+        await self._call(remote, "get", remote, str(local), recurse=recursive, preserve=False,
                          progress_handler=_handler(progress))
+        if attrs.mtime is not None:
+            os.utime(local, (attrs.atime or attrs.mtime, attrs.mtime))
 
     async def put(self, local: Path, remote: str, *, recursive: bool = False, overwrite: bool = False,
                   progress: Progress | None = None) -> None:

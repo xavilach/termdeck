@@ -4,10 +4,16 @@ The server runs on its own thread and event loop; the GUI toolkit needs the main
 """
 
 import asyncio
+import json
 import sys
 import threading
 
-from .config import data_dir, private_dir
+from .config import atomic_write, config_dir, data_dir
+
+GEOMETRY_FILE = "window.json"
+MIN_SIZE = (900, 560)
+# The page's background in each system theme (app.css --bg), shown before the page draws.
+BACKGROUND = {True: "#0f1218", False: "#ffffff"}
 
 
 class BackgroundServer:
@@ -79,6 +85,53 @@ def has_webview2() -> bool:
     return False
 
 
+def system_dark() -> bool:
+    """Whether the system uses a dark theme for apps (Windows); dark elsewhere, where it cannot be read."""
+    try:
+        import winreg
+    except ImportError:  # not Windows
+        return True
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as key:
+            light, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+    except OSError:  # Windows 10 before 1809 has no app theme: light
+        return False
+    return not light
+
+
+def load_size() -> tuple[int, int]:
+    """The window size saved when it last closed. Only the size: the position could be on a screen
+    that is no longer there."""
+    try:
+        data = json.loads((config_dir() / GEOMETRY_FILE).read_text(encoding="utf-8"))
+        width, height = int(data["width"]), int(data["height"])
+    except (OSError, ValueError, KeyError, TypeError, OverflowError):  # OverflowError: int(Infinity)
+        return 1280, 800
+    return max(MIN_SIZE[0], min(width, 10000)), max(MIN_SIZE[1], min(height, 10000))
+
+
+def _scale() -> float:
+    """Windows display scaling: pywebview reports the window in device pixels but sizes it in logical ones."""
+    try:
+        import ctypes
+
+        return ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100 or 1.0
+    except (AttributeError, OSError):
+        return 1.0
+
+
+def save_size(window) -> None:
+    try:
+        scale = _scale()
+        width, height = int(window.width / scale), int(window.height / scale)
+        if width < MIN_SIZE[0] or height < MIN_SIZE[1]:
+            return  # minimised: keep the last real size
+        atomic_write(config_dir() / GEOMETRY_FILE, json.dumps({"width": width, "height": height}))
+    except (AttributeError, TypeError, ValueError, ZeroDivisionError, OSError):
+        pass  # a nicety: never stops the window from closing
+
+
 def desktop_functions(window) -> list:
     """What the page may ask of the desktop window (window.pywebview.api in app.js).
 
@@ -113,8 +166,9 @@ def run() -> None:
     webview.settings["ALLOW_DOWNLOADS"] = True  # SFTP downloads; WebView2 shows its Save As dialog
     server = BackgroundServer()
     url = server.start() + "&desktop=1"
-    window = webview.create_window("termdeck", url, width=1280, height=800, min_size=(900, 560),
-                                   text_select=True, background_color="#0f1218")
+    width, height = load_size()
+    window = webview.create_window("termdeck", url, width=width, height=height, min_size=MIN_SIZE,
+                                   text_select=True, background_color=BACKGROUND[system_dark()])
     window.expose(*desktop_functions(window))
 
     confirmed = threading.Event()
@@ -127,21 +181,28 @@ def run() -> None:
     def ask_then_close() -> None:
         if window.create_confirmation_dialog(*question()):
             confirmed.set()
+            save_size(window)
             window.destroy()
 
     def closing() -> bool:
         """Like PuTTY: ask before closing only while sessions are connected. False keeps the window."""
         if confirmed.is_set() or not server.sessions:
+            save_size(window)
             return True
         if sys.platform == "win32":  # the WinForms dialog runs right here
-            return window.create_confirmation_dialog(*question())
+            if window.create_confirmation_dialog(*question()):
+                save_size(window)
+                return True
+            return False
         # GTK and Cocoa queue the dialog on the GUI thread, which is running this handler:
         # asking from here would wait forever. Keep the window, ask from a helper thread.
         threading.Thread(target=ask_then_close, daemon=True).start()
         return False
 
     window.events.closing += closing
-    storage = private_dir(data_dir() / "webview")
+    # Not private_dir: WebView2 sets its own access entries in its folder (under the per-user LOCALAPPDATA).
+    storage = data_dir() / "webview"
+    storage.mkdir(parents=True, exist_ok=True)
     try:
         # Not private: keeps UI preferences (advanced toggle) between runs.
         webview.start(private_mode=False, storage_path=str(storage), **options)

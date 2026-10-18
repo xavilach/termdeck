@@ -1,7 +1,9 @@
 """Full-screen terminal UI (Textual)."""
 
 import asyncio
+import copy
 import re
+import time
 from dataclasses import asdict
 
 from rich.text import Text
@@ -15,8 +17,11 @@ from textual.widgets import (
     Button, Footer, Input, Label, ListItem, ListView, Select, Static, Switch, TabbedContent, TabPane, TextArea,
 )
 
-from ..profiles import Profile, ProfileStore, describe_options, parse_forward, resolve_target
+from ..errors import OptionError
+from ..profiles import SECTION_TITLES, Profile, ProfileStore, describe_options, parse_forward, resolve_target
+from ..serialport import available_ports
 from ..session import HostKey
+from .files import FilesScreen
 from .terminal import TerminalView
 
 FORWARD_FLAGS = {"L": "local", "R": "remote", "D": "dynamic"}
@@ -165,6 +170,7 @@ class ProfileEditor(ModalScreen[Profile | None]):
         }
         self.values["ssh"]["forwards_text"] = forwards_to_text(p.ssh.forwards)
         self.options = describe_options()
+        self._snapshot = copy.deepcopy(self.values)  # Cancel asks only when something changed
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog editor"):
@@ -174,20 +180,22 @@ class ProfileEditor(ModalScreen[Profile | None]):
                 yield Label("Advanced ", classes="adv-label")
                 yield Switch(value=self.show_advanced, id="advanced")
             with VerticalScroll(id="form"):
-                yield from self._section("General", "profile", self.options["profile"], self.values)
+                yield from self._section(SECTION_TITLES["profile"], "profile", self.options["profile"], self.values)
                 # Both connection types are built; CSS shows the selected one only.
-                for kind, title in (("ssh", "SSH connection"), ("serial", "Serial port")):
+                for kind in ("ssh", "serial"):
+                    title = SECTION_TITLES[kind]
                     conn = [o for o in self.options[kind] if o["type"] != "forwards"]
                     with Vertical(classes=f"for-{kind} kind-section"):
                         yield from self._section(title, kind, [o for o in conn if not o["advanced"]], self.values[kind])
                         if kind == "ssh":
-                            yield Label("Port forwards", classes="section")
+                            yield Label(SECTION_TITLES["forwards"], classes="section")
                             yield Input(self.values["ssh"]["forwards_text"],
                                         placeholder="L 8080:db:5432, R 9000:localhost:80, D 1080", id="ssh--forwards_text")
                             yield Label("Comma-separated, flags as in ssh -L/-R/-D", classes="help")
                         yield from self._section(f"{title} (advanced)", kind, [o for o in conn if o["advanced"]],
                                                  self.values[kind])
-                yield from self._section("Terminal", "terminal", self.options["terminal"], self.values["terminal"])
+                yield from self._section(SECTION_TITLES["terminal"], "terminal", self.options["terminal"],
+                                         self.values["terminal"])
             yield Label("", id="error")
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="cancel")
@@ -218,11 +226,17 @@ class ProfileEditor(ModalScreen[Profile | None]):
                     yield Switch(value=bool(value), id=wid)
                 elif o["widget"] == "multiline":
                     yield TextArea(value, id=wid)
+                elif o["widget"] == "device":  # typed, or picked from the ports present now
+                    with Horizontal(classes="device"):
+                        yield Input(str(value), id=wid)
+                        yield Button("Ports…", id=f"pick--{wid}")
                 else:
                     kind = {"int": "integer", "float": "number"}.get(o["type"], "text")
                     yield Input(str(value), type=kind, password=o["widget"] == "secret", id=wid)
                 if o["help"]:
                     yield Static(o["help"], classes="help", markup=False)  # wraps, unlike a Label
+                if o["widget"] == "device" and values.get("usb_id"):
+                    yield Static(f"Recorded adapter: {values['usb_id']}", classes="help", markup=False)
 
     def _apply_when(self) -> None:
         """Show a field only while the option it depends on has one of its values (proxy fields...)."""
@@ -276,7 +290,31 @@ class ProfileEditor(ModalScreen[Profile | None]):
     def _show_field(self, exc: "FieldError") -> None:
         if exc.advanced:
             self.query_one("#advanced", Switch).value = True
-        self.query_one(f"#{exc.widget_id}").focus()
+        for field in self.query(".invalid"):
+            field.remove_class("invalid")
+        widget = self.query_one(f"#{exc.widget_id}")
+        if field := next((a for a in widget.ancestors if a.has_class("field")), None):
+            field.add_class("invalid")
+        widget.focus()
+        widget.scroll_visible()
+
+    def _field_error(self, exc: OptionError) -> "FieldError":
+        """The editor's widget for an option the core found invalid."""
+        if (exc.section, exc.key) == ("ssh", "forwards"):
+            return FieldError("ssh--forwards_text", False, str(exc))
+        option = next((o for o in self.options.get(exc.section, []) if o["key"] == exc.key), None)
+        return FieldError(f"{exc.section}--{exc.key}", bool(option and option["advanced"]), str(exc))
+
+    @on(Button.Pressed, ".device Button")
+    def pick_port(self, event: Button.Pressed) -> None:
+        target = self.query_one(f"#{event.button.id.removeprefix('pick--')}", Input)
+
+        def chosen(device: str | None) -> None:
+            if device:
+                target.value = device
+            target.focus()
+
+        self.app.push_screen(PortPicker(), callback=chosen)
 
     @on(Select.Changed)
     def select_changed(self, event: Select.Changed) -> None:
@@ -311,11 +349,60 @@ class ProfileEditor(ModalScreen[Profile | None]):
         except (ValueError, TypeError, KeyError, OSError) as exc:
             if isinstance(exc, KeyError):
                 exc = ValueError(exc.args[0])
+            if isinstance(exc, OptionError):
+                exc = self._field_error(exc)
             self.query_one("#error", Label).update(Text(str(exc), style="red"))
             if isinstance(exc, FieldError):
                 self._show_field(exc)
             return
         self.dismiss(profile)
+
+    @on(Button.Pressed, "#cancel")
+    def action_cancel(self) -> None:
+        if self.values == self._snapshot:
+            self.dismiss(None)
+            return
+        self.app.push_screen(ConfirmDialog("Discard changes?", "The changes to this profile are not saved.",
+                                           "Discard", danger=True, cancel_default=False),
+                             callback=lambda discard: discard and self.dismiss(None))
+
+
+class PortPicker(ModalScreen[str | None]):
+    """The serial ports present now, with their adapter; R scans again (an adapter plugged in meanwhile)."""
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel"), Binding("r", "rescan", "Rescan")]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            yield Label("Serial ports", classes="dialog-title")
+            yield ListView(id="ports")
+            yield Label("", id="ports-note")
+            with Horizontal(classes="buttons"):
+                yield Button("Rescan", id="rescan")
+                yield Button("Cancel", id="cancel")
+
+    async def on_mount(self) -> None:
+        await self.action_rescan()
+
+    @on(Button.Pressed, "#rescan")
+    async def action_rescan(self) -> None:
+        note = self.query_one("#ports-note", Label)
+        note.update("Scanning…")
+        ports = await asyncio.to_thread(available_ports)  # slow on Windows
+        view = self.query_one("#ports", ListView)
+        await view.clear()
+        for port in ports:
+            detail = " · ".join(filter(None, (port["description"], port["usb_id"])))
+            item = ListItem(Label(Text.assemble((port["device"], "bold"), "  ", (detail, "dim"))))
+            item.device = port["device"]
+            await view.append(item)
+        note.update(f"{len(ports)} port(s). Enter picks, R scans again." if ports else
+                    "No serial port found. Plug the adapter in and press R.")
+        view.focus()
+
+    @on(ListView.Selected, "#ports")
+    def picked(self, event: ListView.Selected) -> None:
+        self.dismiss(event.item.device)
 
     @on(Button.Pressed, "#cancel")
     def action_cancel(self) -> None:
@@ -326,12 +413,15 @@ class ProfileEditor(ModalScreen[Profile | None]):
 
 class ProfileItem(ListItem):
     def __init__(self, profile: Profile):
-        kind = ("SSH", "bold cyan") if profile.kind == "ssh" else ("COM", "bold yellow")
+        kind = ("SSH", "bold cyan") if profile.kind == "ssh" else ("SER", "bold yellow")
         super().__init__(Label(Text.assemble(kind, " ", profile.name, "\n    ", (profile.summary(), "dim"))))
         self.profile = profile
 
 
-STATUS_ICON = {"connecting": ("●", "yellow"), "connected": ("●", "green"), "closed": ("●", "red")}
+# Shape and colour, so the state reads without colour too.
+STATUS_ICON = {"connecting": ("◌", "yellow"), "connected": ("●", "green"), "failed": ("✕", "red"),
+               "ended": ("○", "dim")}
+STATUS_TEXT = {"connecting": "Connecting…", "connected": "Connected", "failed": "Failed", "ended": "Ended"}
 
 
 def tab_title(status: str, name: str, title: str = "", bell: bool = False) -> Content:
@@ -347,7 +437,8 @@ class TermdeckTUI(App, inherit_bindings=False):
     ENABLE_COMMAND_PALETTE = False
     CSS = """
     Screen { layout: horizontal; }
-    #sidebar { width: 34; border-right: solid $panel-lighten-2; }
+    #sidebar { width: 34; max-width: 40%; border-right: solid $panel-lighten-2; }
+    #sidebar.hidden { display: none; }
     #sidebar Input { margin: 0 1; }
     #sidebar .title { padding: 1 1 0 1; text-style: bold; color: $accent; }
     #profiles { height: 1fr; margin-top: 1; }
@@ -363,7 +454,13 @@ class TermdeckTUI(App, inherit_bindings=False):
     .dialog Input { margin: 1 0; }
     .buttons { height: auto; align-horizontal: right; margin-top: 1; }
     .buttons Button { margin-left: 1; }
-    .editor { width: 90; height: 90%; }
+    .editor { width: 100%; max-width: 96; height: 100%; max-height: 50; padding: 0 1; }
+    .device { height: auto; }
+    .device Input { width: 1fr; }
+    .field.invalid Input, .field.invalid Select, .field.invalid TextArea { border: tall $error; }
+    #ports { height: auto; max-height: 16; }
+    .files { width: 100%; max-width: 100; height: 90%; }
+    #files-list { height: 1fr; }
     .editor-head { height: 3; }
     .adv-label { padding-top: 1; }
     #form { height: 1fr; }
@@ -382,19 +479,25 @@ class TermdeckTUI(App, inherit_bindings=False):
     .kind-section { height: auto; }
     """
     BINDINGS = [
-        Binding("ctrl+right_square_bracket", "focus_terminal", "Back to terminal", priority=False),
-        Binding("escape", "focus_terminal", "Back to terminal", show=False),
+        # Ctrl+] goes from the menus to the terminal and (handled by the terminal) back: the footer says which.
+        Binding("ctrl+right_square_bracket", "focus_terminal", "Terminal", priority=False),
+        Binding("ctrl+right_square_bracket", "menus", "Menus", priority=False),
+        Binding("escape", "focus_terminal", "Terminal", show=False),
         Binding("n", "new_profile", "New"),
         Binding("e", "edit_profile", "Edit"),
-        Binding("c", "duplicate_profile", "Copy"),
+        Binding("c", "duplicate_profile", "Duplicate"),
         Binding("delete", "delete_profile", "Delete"),
         Binding("w", "close_tab", "Close tab"),
         Binding("b", "send_break", "Break"),
         Binding("r", "reconnect", "Reconnect"),
+        Binding("f", "find", "Find"),
+        Binding("t", "files", "Files"),
+        Binding("s", "toggle_sidebar", "Sidebar"),
         Binding("/", "focus_quick", "Quick connect"),
         Binding("q", "quit", "Quit"),
         Binding("ctrl+q", "quit_anywhere", "Quit", show=False),
     ]
+    BREAK_AGAIN = 3.0  # seconds for the second B that sends the break
 
     def __init__(self, start_profile: Profile | None = None, store: ProfileStore | None = None):
         super().__init__()
@@ -402,11 +505,13 @@ class TermdeckTUI(App, inherit_bindings=False):
         self.start_profile = start_profile
         self._tab_ids = 0
         self._reported: set[str] = set()
+        self._break_armed = 0.0
 
     def compose(self) -> ComposeResult:
         with Vertical(id="sidebar"):
             yield Label("▍termdeck", classes="title")
-            yield Input(placeholder="user@host:port or COM3@9600", id="quick")
+            yield Input(placeholder="user@host or COM3", id="quick", tooltip="Quick connect: user@host:port, "
+                        "COM3@9600, /dev/ttyUSB0, or a profile name")
             yield ListView(id="profiles")
         with Vertical(id="main"):
             yield Static("", id="toolbar")
@@ -416,7 +521,7 @@ class TermdeckTUI(App, inherit_bindings=False):
                         "Pick a profile and press Enter, or type a quick connect.\n\n"
                         "In a terminal every key goes to the remote side.\n"
                         "Press Ctrl+] to reach the menus, Esc to return, Ctrl+Q to quit.\n"
-                        "Shift+PgUp/PgDn or the mouse wheel scroll back.",
+                        "Shift+PgUp/PgDn or the mouse wheel scroll back; drag to select and copy.",
                         id="welcome",
                     )
             yield Footer()
@@ -426,9 +531,9 @@ class TermdeckTUI(App, inherit_bindings=False):
         if self.start_profile:
             self.open_tab(self.start_profile)
         elif count:
-            self.query_one("#profiles").focus()
+            self.main.query_one("#profiles").focus()
         else:
-            self.query_one("#quick").focus()
+            self.main.query_one("#quick").focus()
 
     # ---- profiles ----
 
@@ -457,39 +562,46 @@ class TermdeckTUI(App, inherit_bindings=False):
                 items.append(ListItem(Label(p.group or "Other", classes="group", markup=False), disabled=True))
             group = p.group
             items.append(ProfileItem(p))
-        view = self.query_one("#profiles", ListView)
+        view = self.main.query_one("#profiles", ListView)
         await view.clear()
         await view.extend(items)
         return len(profiles)
 
     def selected_profile(self) -> Profile | None:
-        item = self.query_one("#profiles", ListView).highlighted_child
+        item = self.main.query_one("#profiles", ListView).highlighted_child
         return item.profile if isinstance(item, ProfileItem) else None
 
     @on(ListView.Selected, "#profiles")
     def profile_chosen(self, event: ListView.Selected) -> None:
         if isinstance(event.item, ProfileItem):
-            self.open_tab(event.item.profile)
+            self.open_tab(event.item.profile, saved=True)
 
     @on(Input.Submitted, "#quick")
     def quick_connect(self, event: Input.Submitted) -> None:
         if not event.value.strip():
             return
+        profiles = self.load_profiles()
         try:
-            profile = resolve_target(event.value, self.load_profiles())
+            profile = resolve_target(event.value, profiles)
         except KeyError as exc:
             self.notify(exc.args[0], severity="error", markup=False)
             return
         event.input.value = ""
-        self.open_tab(profile)
+        self.open_tab(profile, saved=event.value.strip() in profiles)
 
     async def _edit(self, profile: Profile | None, is_new: bool | None = None) -> None:
+        editor = ProfileEditor(self.store, profile, is_new)
+
         async def done(result):
             if result:
+                if editor.original is not None and editor.original != result.name:
+                    for view in self.main.query(TerminalView):  # open tabs reconnect under the new name
+                        view.controller.rename(editor.original, result.name)
+                        self._relabel(view)
                 await self.reload_profiles()
                 self.notify(f"Saved {result.name}", markup=False)
 
-        self.push_screen(ProfileEditor(self.store, profile, is_new), callback=done)
+        self.push_screen(editor, callback=done)
 
     async def action_new_profile(self) -> None:
         await self._edit(None)
@@ -521,13 +633,14 @@ class TermdeckTUI(App, inherit_bindings=False):
 
     # ---- tabs ----
 
-    def open_tab(self, profile: Profile) -> None:
+    def open_tab(self, profile: Profile, saved: bool = False) -> None:
+        """`saved`: a profile from the store, read again on each (re)connect."""
         self._tab_ids += 1
         pane_id = f"tab-{self._tab_ids}"
         prompter = TUIPrompter(self, profile.name)
-        view = TerminalView(profile, prompter, id=f"term-{self._tab_ids}")
+        view = TerminalView(profile, prompter, self.store, saved, id=f"term-{self._tab_ids}")
         prompter.show = view.show_notice
-        tabs = self.query_one("#tabs", TabbedContent)
+        tabs = self.main.query_one("#tabs", TabbedContent)
         tabs.add_pane(TabPane(tab_title("connecting", profile.name), view, id=pane_id))
         tabs.active = pane_id
         self.call_after_refresh(self._start, view)
@@ -536,8 +649,16 @@ class TermdeckTUI(App, inherit_bindings=False):
         view.focus()
         view.connect()
 
+    @property
+    def main(self):
+        """The main screen: queries must not depend on which dialog is open (App.query searches the top one)."""
+        return self.screen_stack[0]
+
     def active_view(self) -> TerminalView | None:
-        pane = self.query_one("#tabs", TabbedContent).active_pane
+        tabs = self.main.query("#tabs") if self.screen_stack else None
+        if not tabs:  # the app is closing
+            return None
+        pane = tabs.first(TabbedContent).active_pane
         views = pane.query(TerminalView) if pane else []
         return views.first() if views else None
 
@@ -552,15 +673,15 @@ class TermdeckTUI(App, inherit_bindings=False):
 
     def _relabel(self, view: TerminalView) -> None:
         pane = view.parent
-        if isinstance(pane, TabPane):
-            tabs = self.query_one("#tabs", TabbedContent)
+        if isinstance(pane, TabPane) and self.screen_stack:
+            tabs = self.main.query_one("#tabs", TabbedContent)
             tabs.get_tab(pane.id).label = tab_title(view.status, view.profile.name, view.remote_title, view.bell)
 
     @on(TerminalView.CloseRequested)
     async def close_requested(self, event: TerminalView.CloseRequested) -> None:
         pane = event.view.parent
-        if isinstance(pane, TabPane):
-            await self.query_one("#tabs", TabbedContent).remove_pane(pane.id)
+        if isinstance(pane, TabPane) and self.screen_stack:
+            await self.main.query_one("#tabs", TabbedContent).remove_pane(pane.id)
             self.notify(f"{event.view.profile.name}: session ended, tab closed", markup=False)
             self.update_toolbar()
 
@@ -574,61 +695,131 @@ class TermdeckTUI(App, inherit_bindings=False):
             view.focus()
 
     def update_toolbar(self) -> None:
-        view = self.active_view()
-        bar = self.query_one("#toolbar", Static)
-        if not view:
-            bar.update("[dim]No session[/]")
+        if not (self.screen_stack and self.main.query("#toolbar")):  # the app is closing
             return
-        extra = "  b: send break" if view.profile.kind == "serial" else ""
-        bar.update(Text.assemble(STATUS_ICON[view.status], f" {view.status}  ",
-                                 (f"{view.profile.summary()}{extra}  Ctrl+] menus", "dim")))
+        view = self.active_view()
+        bar = self.main.query_one("#toolbar", Static)
+        if not view:
+            bar.update(Text("No session", style="dim"))
+            return
+        c = view.controller
+        live = c.state == "connected"
+        forwards = c.forwards_summary() if live else ""
+        keys = "  ".join(k for k, ok in (("b b: break", c.capabilities.send_break), ("t: files", c.capabilities.sftp))
+                         if ok and live)
+        bar.update(Text.assemble(STATUS_ICON[view.status], f" {STATUS_TEXT[view.status]}  ",
+                                 (view.profile.summary(), "dim"),
+                                 ("  " + forwards, "red" if "failed" in forwards else "dim") if forwards else "",
+                                 (f"  {keys}" if keys else "", "dim")))
 
     @on(TerminalView.EscapePressed)
     def leave_terminal(self) -> None:
-        self.query_one("#profiles").focus()
+        self.main.query_one("#profiles").focus()
 
     def action_focus_terminal(self) -> None:
         if view := self.active_view():
             view.focus()
 
     def action_focus_quick(self) -> None:
-        self.query_one("#quick").focus()
+        self.main.query_one("#quick").focus()
 
     async def action_close_tab(self) -> None:
-        tabs = self.query_one("#tabs", TabbedContent)
         view = self.active_view()
-        if view:
-            await view.disconnect()
-            await tabs.remove_pane(tabs.active)
-            self.update_toolbar()
+        if not view:
+            return
+        pane_id = self.main.query_one("#tabs", TabbedContent).active
+
+        async def close(confirmed: bool = True) -> None:
+            if confirmed:
+                await view.disconnect()
+                await self.main.query_one("#tabs", TabbedContent).remove_pane(pane_id)
+                self.update_toolbar()
+
+        # Like PuTTY's Warn on close (the profile's Ask before closing).
+        if view.status == "connected" and view.profile.terminal.warn_on_close:
+            self.push_screen(ConfirmDialog("Close session?", f"{view.profile.name} is still connected. Close it?",
+                                           "Close", danger=True, cancel_default=False), callback=close)
+        else:
+            await close()
 
     async def action_send_break(self) -> None:
+        """B twice: a break can reset a device, so one stray key does not send it."""
         view = self.active_view()
-        if view and view.profile.kind == "serial":
-            await view.send_break()
-            self.notify("Break sent")
-            view.focus()
+        if not (view and view.controller.capabilities.send_break):
+            return
+        if time.monotonic() - self._break_armed > self.BREAK_AGAIN:
+            self._break_armed = time.monotonic()
+            self.notify("Press B again to send a break", timeout=self.BREAK_AGAIN)
+            return
+        self._break_armed = 0.0
+        sent, text = await view.send_break()
+        self.notify(text, severity="information" if sent else "error", markup=False)
+        view.focus()
 
     def action_reconnect(self) -> None:
         view = self.active_view()
-        if view and view.status == "closed":
+        if view and not view.live:
             view.focus()
             view.connect()
+
+    def action_menus(self) -> None:
+        self.leave_terminal()
+
+    def action_toggle_sidebar(self) -> None:
+        sidebar = self.main.query_one("#sidebar")
+        sidebar.toggle_class("hidden")
+        if sidebar.has_class("hidden"):
+            self.action_focus_terminal()
+        else:
+            self.main.query_one("#profiles").focus()
+
+    def action_find(self) -> None:
+        view = self.active_view()
+        if not view:
+            return
+
+        def search(text: str | None) -> None:
+            view.focus()
+            if text and not view.find(text):
+                self.notify(f"No match for {text}", severity="warning", markup=False)
+
+        self.push_screen(InputDialog("Find", "Text to find in the scrollback (searches upwards):"), callback=search)
+
+    def action_files(self) -> None:
+        view = self.active_view()
+        if view and view.status == "connected" and view.controller.capabilities.sftp:
+            self.push_screen(FilesScreen(view.session.sftp(), view.profile.name))
 
     async def action_quit_anywhere(self) -> None:
         await self.action_quit()
 
     async def action_quit(self) -> None:
-        for view in self.query(TerminalView):
-            await view.disconnect()
-        self.exit()
+        connected = [v for v in self.main.query(TerminalView) if v.status == "connected"]
+
+        async def leave(confirmed: bool = True) -> None:
+            if confirmed:
+                for view in self.main.query(TerminalView):
+                    await view.disconnect()
+                self.exit()
+
+        if connected:
+            names = ", ".join(v.profile.name for v in connected)
+            self.push_screen(ConfirmDialog("Quit termdeck?", f"Still connected: {names}. Close and quit?", "Quit",
+                                           danger=True, cancel_default=False), callback=leave)
+        else:
+            await leave()
 
     def check_action(self, action: str, parameters) -> bool | None:
+        in_terminal = isinstance(self.focused, TerminalView)
         if action == "quit_anywhere":
-            return not isinstance(self.focused, TerminalView)  # there Ctrl+Q is XON for the device
+            return not in_terminal  # there Ctrl+Q is XON for the device
+        if action == "focus_terminal":
+            return not in_terminal
+        if action == "menus":
+            return in_terminal
         # Single-letter shortcuts must not fire while typing in an input.
         if action in {"new_profile", "edit_profile", "duplicate_profile", "delete_profile", "close_tab",
-                      "send_break", "reconnect", "focus_quick", "quit"}:
+                      "send_break", "reconnect", "focus_quick", "quit", "find", "files", "toggle_sidebar"}:
             return not isinstance(self.focused, (Input, TextArea, TerminalView))
         return True
 

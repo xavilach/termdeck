@@ -850,7 +850,7 @@ def build_parser() -> argparse.ArgumentParser:
     serial.add_argument("--stopbits", type=float, default=defaults.stopbits, choices=[k for k, _ in choices["stopbits"]])
     serial.add_argument("--flow", default=defaults.flow, choices=[k for k, _ in choices["flow"]])
     for k in (ssh, serial):
-        k.add_argument("-g", "--group", default="", help="sidebar folder")
+        k.add_argument("-g", "--group", default="", help="group listed together in the sidebar")
         k.add_argument("--set", action="append", metavar="SECTION.OPTION=VALUE", help="any other option, repeatable")
         k.set_defaults(func=cmd_add)
 

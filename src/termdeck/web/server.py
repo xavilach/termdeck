@@ -15,6 +15,7 @@ import asyncio
 import hmac
 import itertools
 import json
+import os
 import re
 import secrets
 import time
@@ -26,12 +27,14 @@ import asyncssh
 from aiohttp import web
 
 from ..profiles import (
-    Profile, ProfileFileError, ProfileStore, SerialSettings, SSHSettings, TerminalSettings, describe_options,
-    resolve_target,
+    SECTION_TITLES, Profile, ProfileFileError, ProfileStore, SerialSettings, SSHSettings, TerminalSettings,
+    describe_options, resolve_target,
 )
 from ..serialport import available_ports
-from ..errors import SFTPFailure
-from ..session import HostKey, Session, describe_error, open_session
+from ..errors import OptionError, SFTPFailure
+from ..config import owner_only_acl
+from ..controller import SessionController, State
+from ..session import HostKey, describe_error
 from ..sftp import SFTP, join as sftp_join
 from ..themes import THEMES, palette
 
@@ -223,7 +226,8 @@ async def get_options(request: web.Request) -> web.Response:
         "serial": asdict(SerialSettings()),
         "terminal": asdict(TerminalSettings()),
     }
-    return web.json_response({"options": describe_options(), "defaults": defaults, "themes": THEMES})
+    return web.json_response({"options": describe_options(), "sections": SECTION_TITLES, "defaults": defaults,
+                              "themes": THEMES})
 
 
 def _described(profile: Profile) -> dict:
@@ -259,6 +263,8 @@ async def save_profile(request: web.Request) -> web.Response:
             await asyncio.to_thread(store.update, old_name, profile)
     except KeyError as exc:
         return _json_error(404, str(exc.args[0]))
+    except OptionError as exc:  # the page marks the field
+        return web.json_response({"error": str(exc), "field": f"{exc.section}.{exc.key}"}, status=400)
     except (ValueError, TypeError, json.JSONDecodeError) as exc:
         return _json_error(400, str(exc))
     except OSError as exc:
@@ -310,15 +316,39 @@ async def terminal(request: web.Request) -> web.WebSocketResponse:
     """One terminal tab.
 
     Client sends JSON text: open (first), input, resize, answer, break.
-    Server sends binary frames of UTF-8 output and JSON text for
-    prompt, hostkey, connected, error and closed.
+    Server sends binary frames of UTF-8 output and JSON text: prompt, hostkey, notice,
+    break, and state (connecting, connected, failed, ended; see controller.State).
     """
     ws = web.WebSocketResponse(heartbeat=30, protocols=(WS_PROTOCOL,))
     await ws.prepare(request)
     prompter = WebPrompter(ws)
-    session: Session | None = None
     sessions = request.app[sessions_key]
     sid = secrets.token_urlsafe(12)
+
+    def state_message(c: SessionController) -> dict:
+        m = {"type": "state", "state": c.state, "message": c.message}
+        if c.state is State.CONNECTED:
+            m.update(session=sid, title=c.session.title, capabilities=c.capabilities.to_dict(),
+                     forwards=[{**asdict(f), "text": f.describe()} for f in c.forwards()],
+                     forwards_summary=c.forwards_summary())
+        elif c.state is State.ENDED:
+            m.update(clean=c.clean, close_tab=c.closes_tab)
+        return m
+
+    try:
+        first = await ws.receive_json(timeout=30)
+        if first.get("type") != "open":
+            raise ValueError("expected an open message")
+        if name := first.get("name"):  # a saved profile: read when connecting, so always the saved version
+            profile = Profile(name=str(name))
+        else:
+            profile = Profile.from_dict(first["profile"])
+        cols, rows = _terminal_size(first)
+    except Exception as exc:
+        await ws.send_json({"type": "state", "state": State.FAILED, "message": describe_error(exc)})
+        await ws.close()
+        return ws
+    controller = SessionController(profile, prompter, request.app[store_key], saved=bool(name))
 
     async def handle_messages():
         async for msg in ws:
@@ -327,78 +357,51 @@ async def terminal(request: web.Request) -> web.WebSocketResponse:
             try:
                 m = json.loads(msg.data)
                 kind = m.get("type")
+                session = controller.session
                 if kind == "answer":
                     prompter.answer(m.get("id"), m.get("value"))
+                elif kind == "break":  # answered even while connecting ("cannot send a break")
+                    sent, text = await controller.send_break()
+                    await ws.send_json({"type": "break", "ok": sent, "message": text})
                 elif session is None:
                     continue
                 elif kind == "input":
                     await session.write(str(m["data"]).encode("utf-8", "surrogatepass"))
                 elif kind == "resize":
                     session.resize(*_terminal_size(m))
-                elif kind == "break" and session.can_break:
-                    await session.send_break()
             except (ValueError, TypeError, KeyError, AttributeError):
                 continue  # malformed message: ignore it, keep the session
         prompter.cancel_all()
 
-    try:
-        first = await ws.receive_json(timeout=30)
-        if first.get("type") != "open":
-            raise ValueError("expected an open message")
-        if first.get("name"):
-            profile = request.app[store_key].get(first["name"])
-        else:
-            profile = Profile.from_dict(first["profile"])
-        cols, rows = _terminal_size(first)
-    except Exception as exc:
-        await ws.send_json({"type": "error", "message": describe_error(exc)})
-        await ws.close()
-        return ws
-
     reader = asyncio.create_task(handle_messages())
-    connect = asyncio.create_task(
-        open_session(profile, prompter, cols, rows)
-    )
+    connect = asyncio.create_task(controller.connect(cols, rows))
     try:
         await asyncio.wait({reader, connect}, return_when=asyncio.FIRST_COMPLETED)
         if not connect.done():  # browser went away while connecting
             connect.cancel()
             await asyncio.gather(connect, return_exceptions=True)
             return ws
-        try:
-            session = connect.result()
-        except Exception as exc:
-            await ws.send_json({"type": "error", "message": describe_error(exc)})
+        connected = connect.result()
+        await ws.send_json(state_message(controller))  # connected, or failed and why
+        if not connected:
             return ws
-
-        sessions[sid] = session
-        await ws.send_json({
-            "type": "connected",
-            "session": sid,
-            "title": session.title,
-            "kind": profile.kind,
-            "can_break": session.can_break,
-            "sftp": profile.kind == "ssh",
-        })
+        sessions[sid] = controller.session
 
         async def pump():
-            while data := await session.read():
+            while data := await controller.read():
                 await ws.send_bytes(data)
 
         output = asyncio.create_task(pump())
         await asyncio.wait({reader, output}, return_when=asyncio.FIRST_COMPLETED)
         if output.done() and not ws.closed:
-            reason = session.end_reason
-            await ws.send_json({"type": "closed", "message": f"Session ended: {reason}" if reason else "Session ended",
-                                "clean": reason is None})  # for "Close tab on exit: only on clean exit"
+            await ws.send_json(state_message(controller))  # ended, and how
         output.cancel()
         await asyncio.gather(output, return_exceptions=True)
     finally:
         reader.cancel()
         await asyncio.gather(reader, return_exceptions=True)
         sessions.pop(sid, None)
-        if session:
-            await session.close()
+        await controller.close()
         await ws.close()
     return ws
 
@@ -579,18 +582,38 @@ async def start(port: int = 0, store: ProfileStore | None = None) -> tuple[web.A
     return runner, f"http://127.0.0.1:{actual}/#token={app[auth_key].new_link()}"
 
 
+def open_in_browser(url: str, keep: float = 600) -> Path:
+    """Open the start link without putting it on the browser's command line, which other local
+    users can read (/proc, Task Manager): the browser opens a private file that forwards to it.
+    The file is removed after `keep` seconds (the caller's loop): as long as the link is valid."""
+    import tempfile
+    import webbrowser
+
+    fd, name = tempfile.mkstemp(prefix="termdeck-", suffix=".html")  # owner only
+    page = Path(name)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write('<!doctype html><meta charset="utf-8"><meta name="referrer" content="no-referrer">'
+                f"<title>termdeck</title><script>location.replace({json.dumps(url)})</script>")
+    owner_only_acl(page)
+    webbrowser.open(page.as_uri())
+    asyncio.get_running_loop().call_later(keep, lambda: page.unlink(missing_ok=True))
+    return page
+
+
 def serve(port: int = 0, open_browser: bool = True) -> None:
     """Run the web UI until interrupted."""
-    import webbrowser
 
     async def main():
         runner, url = await start(port)
         print(f"termdeck web UI (link works once, within 10 minutes): {url}", flush=True)
-        if open_browser:
-            webbrowser.open(url)
+        page = open_in_browser(url) if open_browser else None
+        if page:  # a browser confined to its own /tmp (snap) cannot read the forwarding file
+            print("If the browser shows \"file not found\", open the link above.", flush=True)
         try:
             await asyncio.Event().wait()
         finally:
+            if page:
+                page.unlink(missing_ok=True)
             await runner.cleanup()
 
     try:

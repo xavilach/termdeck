@@ -601,3 +601,31 @@ def test_what_to_run_on_the_server_is_one_choice(ssh):
     profile = Profile("p", "ssh", ssh=SSHSettings(host="h.example", **ssh))
     with pytest.raises(ValueError, match="replace each other"):
         profile.validate()
+
+
+# ---- owner_only_acl (Windows access lists; nothing to do elsewhere) ----
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX modes")
+def test_owner_only_acl_does_nothing_off_windows(tmp_path):
+    from termdeck.config import owner_only_acl
+
+    path = tmp_path / "f.txt"
+    path.write_text("x")
+    path.chmod(0o644)
+    owner_only_acl(path)
+    owner_only_acl(tmp_path / "missing")  # not even looked at
+    assert (path.stat().st_mode & 0o777) == 0o644
+
+
+def test_owner_only_acl_without_pywin32_leaves_the_file_alone(tmp_path, monkeypatch):
+    import sys
+
+    from termdeck.config import owner_only_acl
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    for name in ("ntsecuritycon", "win32api", "win32security"):
+        monkeypatch.setitem(sys.modules, name, None)  # import raises ImportError
+    path = tmp_path / "f.txt"
+    path.write_text("x")
+    owner_only_acl(path)  # no exception
+    assert path.read_text() == "x"

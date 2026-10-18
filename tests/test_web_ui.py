@@ -61,8 +61,20 @@ async def test_danger_prompt_focuses_cancel_and_enter_declines(page):
 async def test_editor_enter_saves_and_cancel_does_not(page):
     await page.click("#new-profile")
     await page.wait_for_selector("#editor[open]")
+    await page.click('#editor-cancel')  # nothing typed: closes at once
+    await page.wait_for_selector("#editor[open]", state="detached")
+
+    await page.click("#new-profile")
+    await page.wait_for_selector("#editor[open]")
     await page.fill('#editor-body input[id^="f-name-"]', "cancelled")
-    await page.click('#editor button[data-close="cancel"]')
+    await page.click('#editor-cancel')  # typed: asks first
+    await page.wait_for_selector("#prompt[open]")
+    assert await page.text_content("#prompt-title") == "Discard changes?"
+    await page.click("#prompt-cancel")
+    assert await page.query_selector("#editor[open]") is not None  # kept, with what was typed
+    await page.keyboard.press("Escape")
+    await page.wait_for_selector("#prompt[open]")
+    await page.click("#prompt-ok")
     await page.wait_for_selector("#editor[open]", state="detached")
     assert page.store.load() == {}
 
@@ -301,7 +313,7 @@ async def test_proxy_host_field_appears_with_a_proxy_and_advanced_groups_have_su
     await page.select_option('#editor-body select[id^="f-proxy_type-"]', label="None")
     assert not await page.is_visible(host)
 
-    section = page.locator("#editor-body .section", has=page.locator("h3", has_text="SSH (advanced)"))
+    section = page.locator("#editor-body .section", has=page.locator("h3", has_text="SSH connection (advanced)"))
     headings = await section.locator("h4.subsection").all_text_contents()
     assert {"Session", "Proxy", "Authentication"} <= set(headings)
     for heading in await section.locator("h4.subsection").all():

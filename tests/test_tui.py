@@ -4,7 +4,7 @@ import pytest
 from textual.widgets import Input, Label, Select, Switch
 
 from termdeck.profiles import Profile, ProfileStore, SerialSettings
-from termdeck.tui.app import ProfileEditor, TermdeckTUI, text_to_forwards
+from termdeck.tui.app import ConfirmDialog, ProfileEditor, TermdeckTUI, text_to_forwards
 from termdeck.tui.terminal import TerminalView, key_to_bytes
 
 
@@ -49,7 +49,10 @@ async def test_connect_serial_and_type(tmp_path):
         assert "hiq" in view._vt.display[0]
         await pilot.press("ctrl+right_square_bracket")
         assert app.focused.id == "profiles"
-        await pilot.press("w")  # close tab from menu mode
+        await pilot.press("w")  # close tab from menu mode: connected, so it asks first
+        await pilot.pause(0.2)
+        assert isinstance(app.screen, ConfirmDialog)
+        await pilot.press("enter")
         await pilot.pause(0.2)
         assert not app.query(TerminalView)
 
@@ -303,7 +306,7 @@ async def test_ended_session_says_why(tmp_path, patch_port):
         await _wait_for_screen(pilot, view, "Session ended: ")
         screen = _screen_text(view)
         assert "Session ended: loop: " in screen and "Enter to reconnect" in screen
-        assert view.status == "closed"
+        assert view.status == "ended"
 
 
 async def test_normal_end_has_no_reason(tmp_path):
@@ -423,10 +426,8 @@ def _loop_profile(**terminal):
 
 async def _open(app, pilot, profile=None):
     app.open_tab(profile or app.store.get("loop"))
-    await pilot.pause(0.3)
-    view = app.query_one(TerminalView) if len(app.query(TerminalView)) == 1 else list(app.query(TerminalView))[-1]
-    assert view.status == "connected"
-    return view
+    await _until(pilot, lambda: app.query(TerminalView) and list(app.query(TerminalView))[-1].status == "connected")
+    return list(app.query(TerminalView))[-1]
 
 
 async def _until(pilot, condition, timeout=5.0):
@@ -560,7 +561,7 @@ async def test_close_on_exit_never_keeps_the_tab_after_a_clean_end(tmp_path):
         await view.session.close()
         await _wait_for_screen(pilot, view, "Session ended")
         await pilot.pause(0.3)
-        assert app.query(TerminalView) and view.status == "closed"
+        assert app.query(TerminalView) and view.status == "ended"
 
 
 @pytest.mark.parametrize("when", ["clean", "always"])
@@ -600,7 +601,7 @@ async def test_close_on_exit_after_an_error_end(tmp_path, patch_port, when, clos
         else:
             await _wait_for_screen(pilot, view, "Session ended: ")  # the reason stays readable
             await pilot.pause(0.3)
-            assert app.query(TerminalView) and view.status == "closed"
+            assert app.query(TerminalView) and view.status == "ended"
 
 
 async def _cell_style(view, text):
@@ -696,3 +697,352 @@ async def test_paste_keeps_controls_when_the_profile_allows_it(tmp_path):
         await view.on_paste(events.Paste("a\x1bb"))
         await _until(pilot, lambda: sent)
         assert sent == [b"a\x1bb"]
+
+
+# ---- batch 8: closing and quitting, break, editor, sidebar, footer, find, selection, ports, files ----
+
+def _store_with(tmp_path, *profiles):
+    store = ProfileStore(tmp_path / "p.json")
+    for profile in profiles:
+        store.save(profile)
+    return store
+
+
+async def _to_menus(pilot, app):
+    await pilot.press("ctrl+right_square_bracket")
+    await _until(pilot, lambda: app.focused is not None and app.focused.id == "profiles")
+
+
+async def test_closing_the_tab_of_a_connected_session_asks_and_cancel_keeps_it(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile()))
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot)
+        await _to_menus(pilot, app)
+        await pilot.press("w")
+        await _until(pilot, lambda: isinstance(app.screen, ConfirmDialog))
+        await pilot.click("#cancel")
+        await _until(pilot, lambda: not isinstance(app.screen, ConfirmDialog))
+        assert app.query(TerminalView) and view.status == "connected"
+        await pilot.press("w")
+        await _until(pilot, lambda: isinstance(app.screen, ConfirmDialog))
+        await pilot.press("escape")  # Esc cancels too
+        await _until(pilot, lambda: not isinstance(app.screen, ConfirmDialog))
+        assert app.query(TerminalView) and view.status == "connected"
+
+
+async def test_closing_the_tab_without_the_warning_closes_at_once(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile(warn_on_close=False)))
+    async with app.run_test(size=(120, 40)) as pilot:
+        await _open(app, pilot)
+        await _to_menus(pilot, app)
+        await pilot.press("w")
+        await _until(pilot, lambda: not app.query(TerminalView))
+        assert not isinstance(app.screen, ConfirmDialog)
+
+
+async def test_closing_an_ended_tab_does_not_ask(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile(close_on_exit="never")))
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot)
+        await view.session.close()
+        await _until(pilot, lambda: view.status == "ended")
+        await _to_menus(pilot, app)
+        await pilot.press("w")
+        await _until(pilot, lambda: not app.query(TerminalView))
+        assert not isinstance(app.screen, ConfirmDialog)
+
+
+async def test_quitting_with_a_connected_session_asks(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile()))
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot)
+        await _to_menus(pilot, app)
+        await pilot.press("q")
+        await _until(pilot, lambda: isinstance(app.screen, ConfirmDialog))
+        assert "Still connected: loop" in " ".join(str(w.render()) for w in app.screen.query("Static"))
+        await pilot.press("escape")  # keeps running
+        await _until(pilot, lambda: not isinstance(app.screen, ConfirmDialog))
+        assert app.is_running and view.status == "connected"
+        await pilot.press("q")
+        await _until(pilot, lambda: isinstance(app.screen, ConfirmDialog))
+        await pilot.press("enter")
+    assert app.return_code == 0
+
+
+async def test_quitting_without_a_connected_session_does_not_ask(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile()))
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.press("q")
+    assert app.return_code == 0
+
+
+def _record_breaks(view):
+    sent = []
+    real = view.session.send_break
+
+    async def record():
+        sent.append(1)
+        await real()
+
+    view.session.send_break = record
+    return sent
+
+
+async def test_break_needs_two_presses(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile()))
+    seen = _record_notifications(app)
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot)
+        sent = _record_breaks(view)
+        await _to_menus(pilot, app)
+        await pilot.press("b")
+        await _until(pilot, lambda: any("Press B again" in m for m, _ in seen))
+        assert sent == []
+        await pilot.press("b")
+        await _until(pilot, lambda: any(m == "Break sent" for m, _ in seen))
+        assert sent == [1]
+        assert app.focused is view  # back in the terminal after the break
+
+
+async def test_a_late_second_break_press_only_arms_again(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile()))
+    app.BREAK_AGAIN = 0.0  # the window for the second press is already over
+    seen = _record_notifications(app)
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot)
+        sent = _record_breaks(view)
+        await _to_menus(pilot, app)
+        await pilot.press("b", "b")
+        await _until(pilot, lambda: len([m for m, _ in seen if "Press B again" in m]) == 2)
+        assert sent == []
+
+
+async def test_break_in_a_session_that_cannot_send_one_says_nothing(tmp_path, ssh_server):
+    from termdeck.ssh import remember_host_key
+
+    remember_host_key("127.0.0.1", ssh_server.port, ssh_server.key)
+    app = TermdeckTUI(store=_store_with(tmp_path))
+    seen = _record_notifications(app)
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.open_tab(ssh_server.profile())
+        await _until(pilot, lambda: app.query("InputDialog"))
+        await pilot.press(*"secret", "enter")
+        view = app.query_one(TerminalView)
+        await _until(pilot, lambda: view.status == "connected")
+        await _to_menus(pilot, app)
+        await pilot.press("b", "b")
+        await pilot.pause()
+        assert not any("break" in m.lower() for m, _ in seen)
+
+
+async def test_a_failed_break_is_reported_as_an_error(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile()))
+    seen = _record_notifications(app)
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot)
+
+        async def refuse():
+            raise OSError("device vanished")
+
+        view.session.send_break = refuse
+        await _to_menus(pilot, app)
+        await pilot.press("b", "b")
+        await _until(pilot, lambda: any(m.startswith("Break not sent") for m, _ in seen))
+        assert [s for m, s in seen if m.startswith("Break not sent")] == ["error"]
+        assert "device vanished" in [m for m, _ in seen if m.startswith("Break not sent")][0]
+
+
+async def test_editor_cancel_without_a_change_closes_at_once(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile()))
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.press("n")
+        await _until(pilot, lambda: isinstance(app.screen, ProfileEditor))
+        await pilot.click("#cancel")
+        await _until(pilot, lambda: not isinstance(app.screen, ProfileEditor))
+        assert not isinstance(app.screen, ConfirmDialog)
+
+
+async def test_editor_cancel_after_a_change_asks_before_discarding(tmp_path):
+    store = _store_with(tmp_path, _loop_profile())
+    app = TermdeckTUI(store=store)
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.press("n")
+        await _until(pilot, lambda: isinstance(app.screen, ProfileEditor))
+        editor = app.screen
+        editor.query_one("#profile--name", Input).value = "typed"
+        await pilot.click("#cancel")
+        await _until(pilot, lambda: isinstance(app.screen, ConfirmDialog))
+        assert "Discard changes?" in str(app.screen.query_one(".dialog-title").render())
+        await pilot.press("escape")  # keep editing
+        await _until(pilot, lambda: app.screen is editor)
+        assert editor.query_one("#profile--name", Input).value == "typed"
+        await pilot.press("escape")  # Esc is Cancel in the editor
+        await _until(pilot, lambda: isinstance(app.screen, ConfirmDialog))
+        await pilot.click("#ok")
+        await _until(pilot, lambda: not isinstance(app.screen, (ProfileEditor, ConfirmDialog)))
+        assert list(store.load()) == ["loop"]
+
+
+async def test_editor_change_that_is_undone_is_no_change(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile()))
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.press("n")
+        await _until(pilot, lambda: isinstance(app.screen, ProfileEditor))
+        name = app.screen.query_one("#profile--name", Input)
+        name.value = "x"
+        name.value = ""
+        await pilot.click("#cancel")
+        await _until(pilot, lambda: not isinstance(app.screen, ProfileEditor))
+        assert not isinstance(app.screen, ConfirmDialog)
+
+
+async def test_saving_with_an_empty_host_focuses_and_marks_the_host_field(tmp_path):
+    store = _store_with(tmp_path, _loop_profile())
+    app = TermdeckTUI(store=store)
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.press("n")
+        await _until(pilot, lambda: isinstance(app.screen, ProfileEditor))
+        editor = app.screen
+        editor.query_one("#profile--name", Input).value = "box"
+        await pilot.click("#save")
+        await _until(pilot, lambda: app.focused is not None and app.focused.id == "ssh--host")
+        assert editor.query_one("#field-ssh--host").has_class("invalid")
+        assert "host" in str(editor.query_one("#error", Label).render())
+        assert "box" not in store.load()
+        # Typing a host and saving again clears the mark and saves.
+        editor.query_one("#ssh--host", Input).value = "box.example"
+        await pilot.click("#save")
+        await _until(pilot, lambda: not isinstance(app.screen, ProfileEditor))
+        assert store.get("box").ssh.host == "box.example"
+
+
+async def test_a_mark_moves_to_the_next_invalid_field(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile()))
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.press("n")
+        await _until(pilot, lambda: isinstance(app.screen, ProfileEditor))
+        editor = app.screen
+        editor.query_one("#profile--name", Input).value = "box"
+        await pilot.click("#save")
+        await _until(pilot, lambda: editor.query_one("#field-ssh--host").has_class("invalid"))
+        editor.query_one("#ssh--host", Input).value = "box.example"
+        editor.query_one("#advanced", Switch).value = True
+        await pilot.pause()
+        editor.query_one("#ssh--ciphers", Input).value = "rot13"
+        await pilot.click("#save")
+        await _until(pilot, lambda: editor.query_one("#field-ssh--ciphers").has_class("invalid"))
+        assert not editor.query_one("#field-ssh--host").has_class("invalid")
+        assert app.focused is editor.query_one("#ssh--ciphers", Input)
+        assert "rot13" in str(editor.query_one("#error", Label).render())
+
+
+async def test_an_invalid_advanced_option_opens_the_advanced_section(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile()))
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.press("n")
+        await _until(pilot, lambda: isinstance(app.screen, ProfileEditor))
+        editor = app.screen
+        editor.query_one("#advanced", Switch).value = True
+        await pilot.pause()
+        editor.query_one("#profile--name", Input).value = "box"
+        editor.query_one("#ssh--host", Input).value = "box.example"
+        editor.query_one("#ssh--ciphers", Input).value = "rot13"
+        editor.query_one("#advanced", Switch).value = False
+        await pilot.pause()
+        await pilot.click("#save")
+        await _until(pilot, lambda: app.focused is not None and app.focused.id == "ssh--ciphers")
+        assert editor.query_one("#advanced", Switch).value is True
+
+
+async def test_an_invalid_serial_device_marks_its_field(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile()))
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.press("n")
+        await _until(pilot, lambda: isinstance(app.screen, ProfileEditor))
+        editor = app.screen
+        editor.query_one("#profile--kind", Select).value = "serial"
+        editor.query_one("#profile--name", Input).value = "board"
+        editor.query_one("#serial--device", Input).value = "http://nope"
+        await pilot.pause()
+        await pilot.click("#save")
+        await _until(pilot, lambda: app.focused is not None and app.focused.id == "serial--device")
+        assert editor.query_one("#field-serial--device").has_class("invalid")
+
+
+async def test_renaming_a_saved_profile_updates_the_open_tabs(tmp_path):
+    store = _store_with(tmp_path, _loop_profile())
+    app = TermdeckTUI(store=store)
+    async with app.run_test(size=(120, 50)) as pilot:
+        view = await _open(app, pilot, store.get("loop"))
+        view.controller.saved = True  # as opened from the list
+        await _to_menus(pilot, app)
+        await pilot.press("e")
+        await _until(pilot, lambda: isinstance(app.screen, ProfileEditor))
+        app.screen.query_one("#profile--name", Input).value = "renamed"
+        await pilot.click("#save")
+        await _until(pilot, lambda: not isinstance(app.screen, ProfileEditor))
+        assert view.controller.profile.name == "renamed"
+        assert "renamed" in _tab_label(app, view)
+        assert list(store.load()) == ["renamed"]
+        # A reconnect finds the profile under its new name.
+        await view.disconnect()
+        view.connect()
+        await _until(pilot, lambda: view.status == "connected")
+        assert view.profile.name == "renamed"
+
+
+async def test_renaming_does_not_touch_tabs_of_other_profiles(tmp_path):
+    store = _store_with(tmp_path, _loop_profile("a"), _loop_profile("b"))
+    app = TermdeckTUI(store=store)
+    async with app.run_test(size=(120, 50)) as pilot:
+        other = await _open(app, pilot, store.get("b"))
+        other.controller.saved = True
+        await _to_menus(pilot, app)
+        app.main.query_one("#profiles").index = 0  # "a" (profiles are sorted by name)
+        await pilot.press("e")
+        await _until(pilot, lambda: isinstance(app.screen, ProfileEditor))
+        app.screen.query_one("#profile--name", Input).value = "a2"
+        await pilot.click("#save")
+        await _until(pilot, lambda: not isinstance(app.screen, ProfileEditor))
+        assert other.controller.profile.name == "b"
+
+
+async def test_s_hides_and_shows_the_sidebar(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile()))
+    async with app.run_test(size=(120, 40)) as pilot:
+        sidebar = app.query_one("#sidebar")
+        assert not sidebar.has_class("hidden") and sidebar.display
+        await pilot.press("s")
+        await _until(pilot, lambda: sidebar.has_class("hidden"))
+        assert not sidebar.display
+        await pilot.press("s")
+        await _until(pilot, lambda: not sidebar.has_class("hidden"))
+        assert sidebar.display and app.focused.id == "profiles"
+
+
+async def test_hiding_the_sidebar_puts_the_keyboard_in_the_terminal(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile()))
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot)
+        await _to_menus(pilot, app)
+        await pilot.press("s")
+        await _until(pilot, lambda: app.query_one("#sidebar").has_class("hidden"))
+        assert app.focused is view
+        await pilot.press("s")  # typed into the terminal, not a shortcut any more
+        await _until(pilot, lambda: "s" in view._vt.display[0])
+        assert app.query_one("#sidebar").has_class("hidden")  # still hidden: the key went to the device
+
+
+def _footer_keys(app):
+    return {str(key.description) for key in app.query("FooterKey") if key.display}
+
+
+async def test_footer_offers_menus_in_the_terminal_and_terminal_in_the_menus(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile()))
+    async with app.run_test(size=(120, 40)) as pilot:
+        await _open(app, pilot)
+        await _until(pilot, lambda: "Menus" in _footer_keys(app))
+        assert "Terminal" not in _footer_keys(app)
+        await _to_menus(pilot, app)
+        await _until(pilot, lambda: "Terminal" in _footer_keys(app))
+        assert "Menus" not in _footer_keys(app)

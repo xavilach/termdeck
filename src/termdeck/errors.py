@@ -14,6 +14,15 @@ class ProfileError(TermdeckError, ValueError):
     """An option value or profile is invalid."""
 
 
+class OptionError(ProfileError):
+    """An invalid option, with where it is (section "profile", "ssh", "serial", "terminal"; key),
+    so editors can mark and focus the field."""
+
+    def __init__(self, message: str, section: str, key: str):
+        super().__init__(message)
+        self.section, self.key = section, key
+
+
 class ProfileNotFound(TermdeckError, KeyError):
     """No saved profile has this name."""
 

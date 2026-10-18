@@ -10,12 +10,13 @@ import hashlib
 import json
 import os
 import re
+from contextlib import contextmanager
 from dataclasses import MISSING, asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any, Literal
 
 from .config import atomic_write, config_dir, file_lock
-from .errors import ProfileError, ProfileNotFound
+from .errors import OptionError, ProfileError, ProfileNotFound
 from .themes import THEME_NAMES, parse_colours
 
 ForwardKind = Literal["local", "remote", "dynamic"]
@@ -291,6 +292,9 @@ class TerminalSettings:
     close_on_exit: str = option("clean", "Close tab on exit", "Clean: when the remote program ends normally",
                                 choices={"never": "Never", "clean": "Only on clean exit", "always": "Always"},
                                 kinds=("ssh",))
+    warn_on_close: bool = option(True, "Ask before closing", "Confirm before closing the tab of a connected "
+                                 "session (the desktop window and the TUI always ask before quitting)",
+                                 advanced=True, group="Window")
 
     # Characters and keys
     term_type: str = option("xterm-256color", "Terminal type", "Sent to the server as $TERM", advanced=True,
@@ -487,77 +491,110 @@ def normalize_device(device: str) -> str:
     return device
 
 
+@contextmanager
+def _option(section: str, key: str):
+    """Problems found inside are about this option (OptionError says which)."""
+    try:
+        yield
+    except OptionError:
+        raise
+    except ProfileError as exc:
+        raise OptionError(str(exc), section, key) from None
+
+
 @dataclass
 class Profile:
     name: str = option("", "Name")
     kind: str = option("ssh", "Type", choices=KINDS)
-    group: str = option("", "Folder", "Groups profiles in the sidebar")
+    group: str = option("", "Group", "Profiles with the same group are listed together")
     ssh: SSHSettings = field(default_factory=SSHSettings)
     serial: SerialSettings = field(default_factory=SerialSettings)
     terminal: TerminalSettings = field(default_factory=TerminalSettings)
 
     def validate(self) -> None:
-        """Check every option, and bring values to their canonical form (device names)."""
-        if not self.name.strip():
-            raise ProfileError("profile name is empty")
-        if _CONTROL_CHARS.search(self.name) or _CONTROL_CHARS.search(self.group):
-            raise ProfileError("profile name and folder cannot contain control characters")
-        if self.kind not in KINDS:
-            raise ProfileError(f"unknown profile type {self.kind!r}")
-        for section in (self, self.ssh, self.serial, self.terminal):
+        """Check every option, and bring values to their canonical form (device names).
+        Raises OptionError naming the option at fault."""
+        with _option("profile", "name"):
+            if not self.name.strip():
+                raise ProfileError("profile name is empty")
+            if _CONTROL_CHARS.search(self.name):
+                raise ProfileError("profile name cannot contain control characters")
+        with _option("profile", "group"):
+            if _CONTROL_CHARS.search(self.group):
+                raise ProfileError("group cannot contain control characters")
+        with _option("profile", "kind"):
+            if self.kind not in KINDS:
+                raise ProfileError(f"unknown profile type {self.kind!r}")
+        for name, section in (("profile", self), ("ssh", self.ssh), ("serial", self.serial),
+                              ("terminal", self.terminal)):
             for f in fields(section):
                 if "label" in f.metadata:
-                    check_option(f, getattr(section, f.name))
+                    with _option(name, f.name):
+                        check_option(f, getattr(section, f.name))
         if self.kind == "ssh":
             s = self.ssh
-            if not s.host:
-                raise ProfileError("ssh profile needs a host")
-            check_host(s.host, "host")
-            if s.jump_host:
-                parse_jump(s.jump_host)
-            for fwd in s.forwards:
-                fwd.validate()
-            parse_env(s.env)
-            chosen = [name for name, used in (("No shell", s.no_shell), ("Subsystem", s.subsystem),
-                                              ("Remote command", s.remote_command)) if used]
+            with _option("ssh", "host"):
+                if not s.host:
+                    raise ProfileError("ssh profile needs a host")
+                check_host(s.host, "host")
+            with _option("ssh", "jump_host"):
+                if s.jump_host:
+                    parse_jump(s.jump_host)
+            with _option("ssh", "forwards"):
+                for fwd in s.forwards:
+                    fwd.validate()
+            with _option("ssh", "env"):
+                parse_env(s.env)
+            chosen = [(label, key) for label, key, used in (("No shell", "no_shell", s.no_shell),
+                                                             ("Subsystem", "subsystem", s.subsystem),
+                                                             ("Remote command", "remote_command", s.remote_command))
+                      if used]
             if len(chosen) > 1:
-                raise ProfileError(f"choose one of {', '.join(chosen)}: they replace each other")
-            parse_tty_modes(s.tty_modes)
-            # Lines may be pasted as shown: "ssh-ed25519 255 SHA256:..." (the type and size are skipped).
-            tokens = [t for t in s.trusted_keys.split() if not re.fullmatch(r"(ssh-|ecdsa-|sk-|rsa-)[\w@.-]+|\d+", t)]
-            s.trusted_keys = "\n".join(dict.fromkeys(normalize_fingerprint(t) for t in tokens))
-            for name in parse_tty_modes(s.tty_modes):
-                if not tty_mode_known(name):
-                    raise ProfileError(f"unknown terminal mode {name}")
-            for text, what in ((s.ciphers, "cipher"), (s.kex_algs, "key exchange"), (s.mac_algs, "MAC"),
-                               (s.hostkey_algs, "host key type"), (s.signature_algs, "signature type")):
-                if text.strip():
-                    check_algorithms(text, what)
-            if s.proxy_type in ("socks4", "socks5", "http", "telnet"):
-                if not s.proxy_host:
-                    raise ProfileError("the proxy needs a proxy host")
-                check_host(s.proxy_host, "proxy host")
+                raise OptionError(f"choose one of {', '.join(label for label, _ in chosen)}: they replace each other",
+                                  "ssh", chosen[-1][1])
+            with _option("ssh", "tty_modes"):
+                for name in parse_tty_modes(s.tty_modes):
+                    if not tty_mode_known(name):
+                        raise ProfileError(f"unknown terminal mode {name}")
+            with _option("ssh", "trusted_keys"):
+                # Lines may be pasted as shown: "ssh-ed25519 255 SHA256:..." (the type and size are skipped).
+                tokens = [t for t in s.trusted_keys.split()
+                          if not re.fullmatch(r"(ssh-|ecdsa-|sk-|rsa-)[\w@.-]+|\d+", t)]
+                s.trusted_keys = "\n".join(dict.fromkeys(normalize_fingerprint(t) for t in tokens))
+            for key, what in (("ciphers", "cipher"), ("kex_algs", "key exchange"), ("mac_algs", "MAC"),
+                              ("hostkey_algs", "host key type"), ("signature_algs", "signature type")):
+                if (text := getattr(s, key)).strip():
+                    with _option("ssh", key):
+                        check_algorithms(text, what)
+            with _option("ssh", "proxy_host"):
+                if s.proxy_type in ("socks4", "socks5", "http", "telnet"):
+                    if not s.proxy_host:
+                        raise ProfileError("the proxy needs a proxy host")
+                    check_host(s.proxy_host, "proxy host")
             if s.proxy_type == "command" and not s.proxy_command.strip():
-                raise ProfileError("the proxy needs a proxy command")
+                raise OptionError("the proxy needs a proxy command", "ssh", "proxy_command")
             if s.agent_forwarding and not s.use_agent:
-                raise ProfileError("'Forward agent' needs 'Use SSH agent' (ssh.use_agent) turned on")
+                raise OptionError("'Forward agent' needs 'Use SSH agent' (ssh.use_agent) turned on",
+                                  "ssh", "agent_forwarding")
         else:
-            self.serial.device = normalize_device(self.serial.device)
-            device = self.serial.device
-            if not device:
-                raise ProfileError("serial profile needs a device")
-            scheme, sep, _ = device.partition("://")
-            if sep and scheme.lower() not in SERIAL_URL_SCHEMES:
-                raise ProfileError(f"unsupported device URL {scheme}://, use one of: "
-                                 + ", ".join(f"{s}://" for s in SERIAL_URL_SCHEMES))
-        parse_colours(self.terminal.colours)
+            with _option("serial", "device"):
+                self.serial.device = normalize_device(self.serial.device)
+                device = self.serial.device
+                if not device:
+                    raise ProfileError("serial profile needs a device")
+                scheme, sep, _ = device.partition("://")
+                if sep and scheme.lower() not in SERIAL_URL_SCHEMES:
+                    raise ProfileError(f"unsupported device URL {scheme}://, use one of: "
+                                       + ", ".join(f"{s}://" for s in SERIAL_URL_SCHEMES))
+        with _option("terminal", "colours"):
+            parse_colours(self.terminal.colours)
         if _CONTROL_CHARS.search(self.terminal.answerback):
-            raise ProfileError("answerback cannot contain control characters: an ENQ in the output "
-                               "would make it type a command")
+            raise OptionError("answerback cannot contain control characters: an ENQ in the output "
+                              "would make it type a command", "terminal", "answerback")
         try:
             "".encode(self.terminal.encoding)
         except LookupError:
-            raise ProfileError(f"unknown character set {self.terminal.encoding!r}") from None
+            raise OptionError(f"unknown character set {self.terminal.encoding!r}", "terminal", "encoding") from None
 
     def summary(self) -> str:
         if self.kind == "ssh":
@@ -643,6 +680,9 @@ def _known(cls, data: dict) -> dict:
 
 SECTION_KINDS = {"profile": ("ssh", "serial"), "ssh": ("ssh",), "serial": ("serial",), "terminal": ("ssh", "serial")}
 SECTIONS = {"profile": Profile, "ssh": SSHSettings, "serial": SerialSettings, "terminal": TerminalSettings}
+# Form headings, the same in every UI; advanced options of a section go under "<title> (advanced)".
+SECTION_TITLES = {"profile": "General", "ssh": "SSH connection", "serial": "Serial port", "terminal": "Terminal",
+                  "forwards": "Port forwards"}
 
 
 def option_fields(section: str, include_hidden: bool = False) -> list:

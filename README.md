@@ -62,21 +62,26 @@ Exit codes: 0 success, 1 connection or file error, 2 invalid input or unknown pr
 | `connect` | Ctrl+] then b | Send serial break |
 | `connect` | Ctrl+] then ] | Send Ctrl+] |
 | TUI | Ctrl+] | Leave the terminal for the menus (Esc returns) |
-| TUI menus | n, e, c, Delete | New, edit, copy, delete profile |
-| TUI menus | w, r, b, / | Close tab, reconnect, break, quick connect |
-| TUI | Ctrl+Q | Quit (inside a terminal Ctrl+Q goes to the device) |
+| TUI menus | n, e, c, Delete | New, edit, duplicate, delete profile |
+| TUI menus | w, r, / | Close tab (asks while connected), reconnect, quick connect |
+| TUI menus | b b | Send serial break (B twice, so a stray key cannot reset a device) |
+| TUI menus | f, t, s | Find in the scrollback, files (SFTP), show or hide the sidebar |
+| TUI | Ctrl+Q | Quit (asks while sessions are connected; inside a terminal Ctrl+Q goes to the device) |
 | TUI | Shift+PgUp/PgDn, wheel | Scrollback |
+| TUI | drag | Select; copied on release |
 | Web, desktop | select / right click | Copy / paste |
 | Web, desktop | Ctrl+Shift+C/V/F | Copy, paste, find |
-| Web, desktop | Ctrl+Shift+N, Ctrl+Shift+W | New profile, close tab |
+| Desktop | Ctrl+Shift+N, W, B, PgUp/PgDn | New profile, close tab, sidebar, previous/next tab |
+| Web (browser) | Alt+Shift+N, W, B, PgUp/PgDn | The same (the browser keeps Ctrl+Shift+N/W for itself) |
+| Web, desktop | profile list: arrows, Enter, F2, Delete | Move, connect, edit, delete |
 
 ## Data
 
-Profiles, `known_hosts` and window storage live in `%APPDATA%\termdeck` (Windows), `~/Library/Application Support/termdeck` (macOS) or `~/.config/termdeck` (Linux). `TERMDECK_HOME` overrides the location. Files are created readable by the owner only. Passwords are never stored.
+Profiles, `known_hosts` and window storage live in `%APPDATA%\termdeck` (Windows), `~/Library/Application Support/termdeck` (macOS) or `~/.config/termdeck` (Linux). `TERMDECK_HOME` overrides the location. Files are created readable by the owner only (on Windows, with an access list of their own). The desktop window remembers its size. Passwords are never stored.
 
 ## Web UI security
 
-The server listens on 127.0.0.1 only and checks the Host and Origin headers. The start link holds a one-time token, valid for 10 minutes, that the page exchanges for a per-tab secret. The secret is sent as a header, never as a cookie. Downloads use single-use links. Uploads have no size limit.
+The server listens on 127.0.0.1 only and checks the Host and Origin headers. The start link holds a one-time token, valid for 10 minutes, that the page exchanges for a per-tab secret. `termdeck web` opens the browser through a private file that forwards to the link, so the token never appears on a command line other users can read. The secret is sent as a header, never as a cookie. Downloads use single-use links. Uploads have no size limit.
 
 ## Development
 

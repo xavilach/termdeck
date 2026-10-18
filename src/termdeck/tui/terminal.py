@@ -11,8 +11,9 @@ from textual.message import Message
 from textual.strip import Strip
 from textual.widget import Widget
 
-from ..profiles import Profile
-from ..session import Session, describe_error, open_session
+from ..controller import SessionController, State
+from ..profiles import Profile, ProfileStore
+from ..session import Session, describe_error
 from ..themes import ANSI, palette
 from ..vt import BellLimiter, clean_paste, clean_title
 
@@ -130,21 +131,20 @@ class TerminalView(Widget, can_focus=True):
             super().__init__()
             self.view = view
 
-    def __init__(self, profile: Profile, prompter, **kwargs):
+    def __init__(self, profile: Profile, prompter, store: ProfileStore | None = None, saved: bool = False, **kwargs):
+        """`saved`: a profile of `store`, read again on each connect (a reconnect uses the saved options)."""
         super().__init__(**kwargs)
-        self.profile = profile
         self.prompter = prompter
-        self.session: Session | None = None
-        self.status = "connecting"
+        self.controller = SessionController(profile, prompter, store, saved, on_change=self._changed)
         t = profile.terminal
-        self._colours = palette(t.theme, t.colours)
-        self._default_style = Style(color=self._colours["foreground"], bgcolor=self._colours["background"])
-        self._styles: dict[tuple, Style] = {}  # a Style per cell look, built once
+        self._apply_colours()
         self.remote_title = ""
         self.bell = False  # rang while the tab was not shown
         self._bells = BellLimiter()
         self._flash = False
         self._offset = 0  # lines scrolled back into the history (0: the live screen)
+        self._selection: tuple[tuple[int, int], tuple[int, int]] | None = None  # (line, column) from, to
+        self._found: tuple[str, int] | None = None  # the last search and the line it found
         self._vt = _Screen(80, 24, t.scrollback, self._send_nowait, self._ring, self._title)
         self._vt_stream = pyte.ByteStream(self._vt)
         self._conn_task: asyncio.Task | None = None
@@ -154,6 +154,23 @@ class TerminalView(Widget, can_focus=True):
 
     # ---- connection ----
 
+    @property
+    def profile(self) -> Profile:
+        return self.controller.profile
+
+    @property
+    def session(self) -> Session | None:
+        return self.controller.session
+
+    @property
+    def status(self) -> str:
+        """connecting, connected, failed or ended (controller.State)."""
+        return str(self.controller.state)
+
+    @property
+    def live(self) -> bool:
+        return self.controller.state in (State.CONNECTING, State.CONNECTED)
+
     def connect(self) -> None:
         if self._conn_task and not self._conn_task.done():
             return
@@ -161,35 +178,24 @@ class TerminalView(Widget, can_focus=True):
 
     async def _run(self) -> None:
         self.remote_title, self.bell = "", False  # from an earlier connection
-        self._set_status("connecting")
+        c = self.controller
         cols, rows = max(self.size.width, 2), max(self.size.height, 2)
-        try:
-            self.session = await open_session(self.profile, self.prompter, cols, rows)
-        except Exception as exc:
-            self._feed(f"\r\n\x1b[31m{describe_error(exc)}\x1b[0m\r\n".encode())
-            self._feed(b"Press Enter to reconnect.\r\n")
-            self._set_status("closed")
+        if not await c.connect(cols, rows):
+            self._feed(f"\r\n\x1b[31m{c.message}\x1b[0m\r\nPress Enter to reconnect.\r\n".encode())
             return
-        self._set_status("connected")
         self._writes = asyncio.Queue()  # nothing typed for an earlier connection goes to this one
-        self._writer = asyncio.create_task(self._write_loop(self.session))
-        reason = None
+        self._writer = asyncio.create_task(self._write_loop(c.session))
         try:
-            while data := await self.session.read():
+            while data := await c.read():
                 for start in range(0, len(data), FEED_SLICE):
                     self._feed(data[start:start + FEED_SLICE])
                     await asyncio.sleep(0)  # a flood must not freeze the other tabs and the keyboard
-            reason = self.session.end_reason
         finally:
             self._writer.cancel()
             await asyncio.gather(self._writer, return_exceptions=True)
-            await self.session.close()
-            self.session = None
-            ended = f"Session ended: {reason}" if reason else "Session ended"
-            self._feed(f"\r\n\x1b[33m{ended}. Press Enter to reconnect.\x1b[0m\r\n".encode())
-            self._set_status("closed")
-            when = self.profile.terminal.close_on_exit
-            if when == "always" or (when == "clean" and reason is None):
+            await c.close()
+            self._feed(f"\r\n\x1b[33m{c.message}. Press Enter to reconnect.\x1b[0m\r\n".encode())
+            if c.closes_tab:
                 self.post_message(self.CloseRequested(self))
 
     async def _write_loop(self, session: Session) -> None:
@@ -205,15 +211,23 @@ class TerminalView(Widget, can_focus=True):
         self._feed(b"\r\n\x1b[90m" + text.replace("\n", "\r\n").encode() + b"\x1b[0m\r\n")
 
     async def disconnect(self) -> None:
-        if self.session:
-            await self.session.close()
+        await self.controller.close()
         if self._conn_task:
             self._conn_task.cancel()
             await asyncio.gather(self._conn_task, return_exceptions=True)
 
-    def _set_status(self, status: str) -> None:
-        self.status = status
-        self.post_message(self.StatusChanged(self, status))
+    def _changed(self, controller: SessionController) -> None:
+        if controller.state is State.CONNECTED:  # the saved profile may have new colours
+            self._apply_colours()
+        self.post_message(self.StatusChanged(self, self.status))
+
+    def _apply_colours(self) -> None:
+        t = self.profile.terminal
+        self._colours = palette(t.theme, t.colours)
+        self._default_style = Style(color=self._colours["foreground"], bgcolor=self._colours["background"])
+        self._styles: dict[tuple, Style] = {}  # a Style per cell look, built once
+        if self.is_mounted:
+            self.refresh()
 
     def _feed(self, data: bytes) -> None:
         pushed = self._vt.pushed
@@ -258,9 +272,8 @@ class TerminalView(Widget, can_focus=True):
         if self.session:
             self._writes.put_nowait(data)
 
-    async def send_break(self) -> None:
-        if self.session and self.session.can_break:
-            await self.session.send_break()
+    async def send_break(self) -> tuple[bool, str]:
+        return await self.controller.send_break()
 
     # ---- input ----
 
@@ -274,24 +287,104 @@ class TerminalView(Widget, can_focus=True):
             self._page(up=event.key == "shift+pageup")
             self.refresh()
             return
-        if self.status == "closed":
+        if not self.live:
             if event.key == "enter":
                 self.connect()
+            return
+        if not self.controller.capabilities.typing:  # a forwards-only connection: nothing to type into
             return
         app_cursor = APP_CURSOR_MODE in self._vt.mode
         data = key_to_bytes(event.key, event.character, app_cursor)
         if data:
+            self._selection = self._found = None
             if self.profile.terminal.scroll_on_key:
                 self._scroll_to_bottom()
             await self.send(data)
 
     async def on_paste(self, event: events.Paste) -> None:
         event.stop()
+        if not self.controller.capabilities.typing:
+            return
         text = clean_paste(event.text, self.profile.terminal.paste_controls)
         data = text.replace("\r\n", "\r").replace("\n", "\r").encode()
         if BRACKETED_PASTE in self._vt.mode:
             data = b"\x1b[200~" + data + b"\x1b[201~"
         await self.send(data)
+
+    # ---- selection (drag; copied on release, through the terminal: OSC 52) and search ----
+
+    def _line_at(self, y: int) -> int:
+        """The line under row `y` of the view, counted from the top of the history."""
+        return len(self._vt.history.top) - self._offset + y
+
+    def _lines(self) -> list:
+        return [*self._vt.history.top, *(self._vt.buffer[y] for y in range(self._vt.lines))]
+
+    def _text(self, row, start: int = 0, end: int | None = None) -> str:
+        return "".join(row[x].data for x in range(start, min(end or self._vt.columns, self._vt.columns)))
+
+    def on_mouse_down(self, event: events.MouseDown) -> None:
+        if event.button == 1:
+            point = (self._line_at(event.y), event.x)
+            self._selection = (point, point)
+            self.capture_mouse()
+            self.refresh()
+
+    def on_mouse_move(self, event: events.MouseMove) -> None:
+        if self._selection and self.app.mouse_captured is self:
+            self._selection = (self._selection[0], (self._line_at(max(0, min(event.y, self.size.height - 1))),
+                                                    max(0, event.x)))
+            self.refresh()
+
+    def on_mouse_up(self, event: events.MouseUp) -> None:
+        if self.app.mouse_captured is self:
+            self.release_mouse()
+        if self._selection and (text := self.selected_text()):
+            self.app.copy_to_clipboard(text)
+            self.notify(f"Copied {len(text)} characters", timeout=2)
+        else:
+            self._selection = None
+        self.refresh()
+
+    def selected_text(self) -> str:
+        if not self._selection:
+            return ""
+        (l0, c0), (l1, c1) = sorted(self._selection)
+        if (l0, c0) == (l1, c1):
+            return ""
+        lines = self._lines()
+        out = []
+        for line in range(max(l0, 0), min(l1, len(lines) - 1) + 1):
+            text = self._text(lines[line], c0 if line == l0 else 0, c1 + 1 if line == l1 else None)
+            out.append(text.rstrip())
+        return "\n".join(out)
+
+    def _selected(self, line: int) -> tuple[int, int] | None:
+        """The columns selected on `line` (from, to excluded)."""
+        if not self._selection:
+            return None
+        (l0, c0), (l1, c1) = sorted(self._selection)
+        if not l0 <= line <= l1 or (l0, c0) == (l1, c1):
+            return None
+        return (c0 if line == l0 else 0, c1 + 1 if line == l1 else self._vt.columns)
+
+    def find(self, text: str) -> bool:
+        """Show the next line above that contains `text` (case ignored); again for the one above."""
+        lines, history = self._lines(), len(self._vt.history.top)
+        start = len(lines) - 1
+        if self._found and self._found[0] == text:
+            start = self._found[1] - 1
+        wanted = text.lower()
+        for line in range(min(start, len(lines) - 1), -1, -1):
+            if wanted in self._text(lines[line]).lower():
+                self._found = (text, line)
+                self._offset = max(0, history - line)  # the line at the top (or the live screen)
+                cols = self._text(lines[line]).lower().index(wanted)
+                self._selection = ((line, cols), (line, cols + len(text) - 1))
+                self.refresh()
+                return True
+        self._found = None
+        return False
 
     def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
         self._page(up=True)
@@ -339,6 +432,7 @@ class TerminalView(Widget, can_focus=True):
             row = top[len(top) + index] if index < 0 else screen.buffer[index]
         else:
             row = screen.buffer[y]
+        selected = self._selected(self._line_at(y))
         cursor = screen.cursor
         show_cursor = self.has_focus and not cursor.hidden and cursor.y == y and not self._offset
         t = self.profile.terminal
@@ -346,7 +440,8 @@ class TerminalView(Widget, can_focus=True):
         for x in range(min(screen.columns, width)):
             char = row[x]
             look = (char.fg, char.bg, char.bold, char.italics, char.underscore, char.strikethrough,
-                    char.blink and t.blink_text, char.reverse, show_cursor and x == cursor.x, self._flash)
+                    char.blink and t.blink_text, char.reverse, show_cursor and x == cursor.x,
+                    self._flash != bool(selected and selected[0] <= x < selected[1]))
             if (style := self._styles.get(look)) is None:
                 if len(self._styles) > 4096:  # true-colour gradients would grow it without end
                     self._styles.clear()
@@ -357,6 +452,7 @@ class TerminalView(Widget, can_focus=True):
         return Strip(Segment.simplify(segments), width)
 
     def _style(self, fg, bg, bold, italics, underscore, strike, blink, reverse, cursor, flash) -> Style:
+        """`flash`: shown inverted (a visual bell, or selected text)."""
         t = self.profile.terminal
         bright = bold and t.bold_style in ("colour", "both")  # PuTTY: bold as a brighter colour, a bold font, or both
         fg, bg = _colour(self._colours, fg, bright), _colour(self._colours, bg)
