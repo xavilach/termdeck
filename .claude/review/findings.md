@@ -159,7 +159,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-123 | issue | High | ui | app.css:275 | Switch checkboxes `display:none`: Tab skips every boolean option. | Visually hidden but focusable, focus ring. | S | fixed (8792025) |
 | P1-124 | issue | High | ui | app.css:291, gui.py:63 | Below 720 px the sidebar disappears with no way back. | Collapsible sidebar toggle. | S | fixed (8792025) |
 | P1-125 | issue | Medium | ui | app.js:502 | Renamed profile: open tabs reconnect with the old name and fail. | Update open tabs after save. | S | fixed (8792025) |
-| P1-126 | issue | Medium | ui | app.js:850 | Ctrl+Shift+N/W are browser shortcuts in `termdeck web`. | Use Alt+Shift in the browser. | S | open |
+| P1-126 | issue | Medium | ui | app.js:850 | Ctrl+Shift+N/W are browser shortcuts in `termdeck web`. | Use Alt+Shift in the browser. | S | fixed (8792025; Windows layout clash: P1-391) |
 | P1-127 | issue | Medium | ui | app.css:111-141 | Contrast failures (warn 2.1:1, ok 2.3:1, input borders 1.4:1). | New tokens. | S | fixed (8792025) |
 | P1-128 | issue | Medium | ui | app.css, index.html:60 | Looks like a generic AI web page (hero, cards, blur, pulse, pill). | Desktop-tool visual system; recent-sessions list. | M | fixed (8792025) |
 | P1-129 | issue | Medium | ui | app.js:366 | Editor errors are one line at the bottom; the field isn't marked. | Core `OptionError(section, key)`; mark and focus the field. | M | fixed (8792025) |
@@ -222,9 +222,9 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
-| P1-180 | issue | Medium | conv, feat, arch | tests | Untested: ciphers/kex/agent/X11/timeout options, serial line settings, remote and SOCKS forwards, `tunnel`, web upload/op, `ports`, unplug, disconnect reason, reconnect, corrupt store. | Add tests. | M | open (part done in 8792025; see P1-392) |
-| P1-181 | issue | Medium | feat, arch | tests | 875 lines of JS untested (the Critical dialog bugs went unseen). | Playwright smoke test of editor, prompts, connect. | M | open (keyboard, discard and editor flows covered in 8792025; see P1-392) |
-| P1-182 | issue | Low | arch | conftest.py:105, test_tui.py | `free_port()` race; fixed `pilot.pause(0.5)` sleeps. | Port 0 and `get_port()`; wait helpers. | S | open |
+| P1-180 | issue | Medium | conv, feat, arch | tests | Untested: ciphers/kex/agent/X11/timeout options, serial line settings, remote and SOCKS forwards, `tunnel`, web upload/op, `ports`, unplug, disconnect reason, reconnect, corrupt store. | Add tests. | M | fixed (3a95a45) |
+| P1-181 | issue | Medium | feat, arch | tests | 875 lines of JS untested (the Critical dialog bugs went unseen). | Playwright smoke test of editor, prompts, connect. | M | fixed (3a95a45) |
+| P1-182 | issue | Low | arch | conftest.py:105, test_tui.py | `free_port()` race; fixed `pilot.pause(0.5)` sleeps. | Port 0 and `get_port()`; wait helpers. | S | fixed (3a95a45) |
 
 ### Improvements (proposed, not implemented)
 
@@ -428,6 +428,6 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-387 | issue | Minor | ui, win | gui.py save_size | Maximised state not kept; maximised size saved as the normal size. | Track maximized/restored events; save the state. | S | needs Windows (fixed in 0bac117: maximise, close, reopen: the normal size comes back) |
 | P1-388 | issue | Minor | ui | index.html, app.css | Web quick-connect placeholder cut off; light SSH badge 4.3:1. | Short placeholder with title; darker badge. | S | fixed (0bac117) |
 | P1-389 | issue | Minor | ui | app.js, tui/app.py | "＋ Add forward" full-width glyph left; TUI find not prefilled for the next match. | icon("plus"); InputDialog value. | S | fixed (0bac117) |
-| P1-390 | issue | Low | sec, win | config.py open_private | Windows: a new log is created with the folder's ACL and restricted after: another user can open it in between. | Create it with the security descriptor (win32file.CreateFile). | M | open |
+| P1-390 | issue | Low | sec, win | config.py open_private | Windows: a new log is created with the folder's ACL and restricted after: another user can open it in between. | Create it with the security descriptor (win32file.CreateFile). | M | needs Windows (fixed in 3a95a45: a new log in a folder another user can read is never readable by them) |
 | P1-391 | issue | Low | win | app.js shortcut | Alt+Shift switches keyboard layout on Windows with two layouts. | Test; if it clashes, pick another chord or make it configurable. | S | needs Windows (Alt+Shift+N/W/B in Edge and Chrome with two layouts installed) |
-| P1-392 | issue | Medium | test-writer | tests | 8 failing tests after 8792025 (TUI discard check, rename of open tabs, quit and break prompts, sidebar toggle; gui overflow strict xfail); no tests yet for PortPicker, FilesScreen, find, selection, owner_only_acl, open_in_browser. | Fix the code bugs above, then finish the tests. | M | open (failing tests fixed in 0bac117; still no tests for PortPicker, FilesScreen, find, selection, owner_only_acl, open_in_browser) |
+| P1-392 | issue | Medium | test-writer | tests | 8 failing tests after 8792025 (TUI discard check, rename of open tabs, quit and break prompts, sidebar toggle; gui overflow strict xfail); no tests yet for PortPicker, FilesScreen, find, selection, owner_only_acl, open_in_browser. | Fix the code bugs above, then finish the tests. | M | fixed (3a95a45) |
