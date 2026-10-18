@@ -75,7 +75,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-50 | issue | Medium | sec | web/server.py:505 | The start token is in the browser's command line (/proc readable by other local users). | Open a private redirect file instead of the token URL. | M | open |
 | P1-51 | issue | Low | sec | ssh.py:19-40 | After accepting a changed key, the old key stays trusted (other entries, OpenSSH file); CA matches show as "unknown". | Record old key as `@revoked`; treat CA matches as changed. | M | fixed (218591c: the @revoked line applies to every known_hosts file asyncssh reads) |
 | P1-52 | issue | Low | sec | app.js:743 | A failed download navigates the app away. | Download through an `<a download>`. | S | fixed (b782d71) |
-| P1-53 | issue | Low | sec | tui/terminal.py:190, app.js | Pasted text containing `ESC[201~` breaks out of bracketed paste. | Strip ESC from pastes. | S | open |
+| P1-53 | issue | Low | sec | tui/terminal.py:190, app.js | Pasted text containing `ESC[201~` breaks out of bracketed paste. | Strip ESC from pastes. | S | fixed (6886570) |
 | P1-54 | improvement | Low | sec | server.py:421 | Uploads have no size or part limit. | Part count limit, 413. | S | proposed |
 | P1-55 | improvement | Low | sec | server.py:63 | Per-tab secrets never expire; no logout. | Idle expiry, logout on pagehide. | S | proposed |
 | P1-56 | issue | Low | sec | server.py:39 | No `Cache-Control: no-store` on API responses and downloads. | Add it. | S | fixed (7b105ed) |
@@ -122,22 +122,22 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
 | P1-90 | issue | High | feat | session.py:87 | Implicit CR in every LF / LF in every CR missing (serial staircase). | `terminal.implicit_cr`, `terminal.implicit_lf` in the core. | S | fixed (218591c) |
-| P1-91 | issue | Medium | feat | session.py | Logging: log type (output/all/SSH packets), file clash (append/overwrite), header missing. | `terminal.log_mode`, `terminal.log_clash`. | M | open |
-| P1-92 | issue | Low | feat | | Initial modes (auto wrap, origin, BCE, blink text) missing. | Advanced terminal options. | M | open |
+| P1-91 | issue | Medium | feat | session.py | Logging: log type (output/all/SSH packets), file clash (append/overwrite), header missing. | `terminal.log_mode`, `terminal.log_clash`. | M | fixed (6886570) |
+| P1-92 | issue | Low | feat | | Initial modes (auto wrap, origin, BCE, blink text) missing. | Advanced terminal options. | M | fixed (6886570) |
 | P1-93 | issue | Low | feat | session.py | Answerback to ENQ missing. | `terminal.answerback` in the core. | S | fixed (218591c) |
-| P1-94 | issue | Low | feat | | Printer passthrough missing. | `terminal.printer`. | M | open |
-| P1-95 | issue | Low | feat | tui/terminal.py:29 | Keyboard options (Home/End, function key style, app cursor/keypad) missing. | `terminal.function_keys`, `terminal.home_end`, ... | M | open |
-| P1-96 | issue | Medium | feat | app.js, tui | Bell ignored in every UI. | `terminal.bell` {none, visual, sound}. | S | open |
-| P1-97 | issue | Low | feat | | "Features" switches (disable app cursor, mouse, remote resize, alt screen, title, bracketed paste...) missing. | Advanced terminal options. | M | open |
-| P1-98 | issue | Low | feat | app.js, tui | Remote window title ignored. | Show OSC title in the tab. | S | open |
-| P1-99 | issue | Low | feat | | Scroll on key/output, erase to scrollback fixed. | Advanced terminal options. | S | open |
-| P1-100 | issue | Medium | feat | app.js:443 | Font family, cursor style/blink missing. | `terminal.font_family`, `terminal.cursor_style`, `terminal.cursor_blink`. | S | open |
-| P1-101 | issue | Low | feat | gui.py | Always on top, full screen. | App setting. | S | open |
-| P1-102 | issue | Low | feat | | CJK ambiguous width. | `terminal.cjk_ambiguous_wide`. | S | open |
-| P1-103 | issue | Low | feat | app.js:470 | Selection options fixed (rect select, word chars, paste controls). | Advanced terminal options. | S | open |
-| P1-104 | issue | Medium | feat, conv | tui/terminal.py:17, app.js:85 | Custom colours, bold style missing; TUI applies only fg/bg of the theme. | Core palettes, `terminal.palette`, TUI maps the palette. | M | open |
-| P1-105 | issue | Low | feat, conv | profiles.py:153 | `font_size` shown in the TUI form but ignored there. | Declare per-UI applicability or document. | S | open |
-| P1-106 | issue | Low | feat | | Close window on exit (always/clean/never). | `terminal.close_on_exit`. | S | open |
+| P1-94 | issue | Low | feat | | Printer passthrough missing. | `terminal.printer`. | M | fixed (6886570) |
+| P1-95 | issue | Low | feat | tui/terminal.py:29 | Keyboard options (Home/End, function key style, app cursor/keypad) missing. | `terminal.function_keys`, `terminal.home_end`, ... | M | fixed (6886570) |
+| P1-96 | issue | Medium | feat | app.js, tui | Bell ignored in every UI. | `terminal.bell` {none, visual, sound}. | S | fixed (6886570) |
+| P1-97 | issue | Low | feat | | "Features" switches (disable app cursor, mouse, remote resize, alt screen, title, bracketed paste...) missing. | Advanced terminal options. | M | fixed (6886570) |
+| P1-98 | issue | Low | feat | app.js, tui | Remote window title ignored. | Show OSC title in the tab. | S | fixed (6886570) |
+| P1-99 | issue | Low | feat | | Scroll on key/output, erase to scrollback fixed. | Advanced terminal options. | S | fixed (6886570) |
+| P1-100 | issue | Medium | feat | app.js:443 | Font family, cursor style/blink missing. | `terminal.font_family`, `terminal.cursor_style`, `terminal.cursor_blink`. | S | fixed (6886570) |
+| P1-101 | issue | Low | feat | gui.py | Always on top, full screen. | App setting. | S | fixed (6886570) |
+| P1-102 | issue | Low | feat | | CJK ambiguous width. | `terminal.cjk_ambiguous_wide`. | S | needs owner (xterm.js and pyte have no ambiguous-width setting; needs a different terminal engine) |
+| P1-103 | issue | Low | feat | app.js:470 | Selection options fixed (rect select, word chars, paste controls). | Advanced terminal options. | S | fixed (6886570) |
+| P1-104 | issue | Medium | feat, conv | tui/terminal.py:17, app.js:85 | Custom colours, bold style missing; TUI applies only fg/bg of the theme. | Core palettes, `terminal.palette`, TUI maps the palette. | M | fixed (6886570) |
+| P1-105 | issue | Low | feat, conv | profiles.py:153 | `font_size` shown in the TUI form but ignored there. | Declare per-UI applicability or document. | S | fixed (6886570) |
+| P1-106 | issue | Low | feat | | Close window on exit (always/clean/never). | `terminal.close_on_exit`. | S | fixed (6886570) |
 
 ### SFTP
 
@@ -179,9 +179,9 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
 | P1-140 | issue | Critical | ui | tui/app.py:212 | Number fields ignore unparsable input: clearing "22" saves port 2. | Keep raw text, parse on save with a clear error. | S | fixed (b782d71) |
-| P1-141 | issue | High | arch | tui/terminal.py:133,225 | pyte at ~0.46 MB/s on the loop, a Style per cell: big output freezes everything. | Feed in slices, cache styles. | M | open |
+| P1-141 | issue | High | arch | tui/terminal.py:133,225 | pyte at ~0.46 MB/s on the loop, a Style per cell: big output freezes everything. | Feed in slices, cache styles. | M | fixed (6886570) |
 | P1-142 | issue | High | ui | tui/app.py:357 | `termdeck tui nosuch` crashes with a traceback and exits 0. | Notify and continue. | S | fixed (b782d71) |
-| P1-143 | issue | Medium | ui | tui/terminal.py:151 | Output scrolls back to the bottom: scrollback unreadable while a device streams. | Scroll on key only; indicator. | S | open |
+| P1-143 | issue | Medium | ui | tui/terminal.py:151 | Output scrolls back to the bottom: scrollback unreadable while a device streams. | Scroll on key only; indicator. | S | fixed (6886570) |
 | P1-144 | issue | Medium | ui | tui/app.py:300 | Editor clipped at 80x24 (Save cut off). | Responsive width/height. | S | open |
 | P1-145 | issue | Medium | ui | tui/terminal.py | No text selection/copy in the TUI terminal. | Selection + OSC 52 copy. | M | open |
 | P1-146 | issue | Medium | ui | tui/app.py:284 | Fixed 34-column sidebar. | Toggle. | M | open |
@@ -380,3 +380,23 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-339 | issue | Low | feat | profiles.py | BugRSASHA2CertUserauth (OpenSSH 7.2-7.7) not possible. | signature_algs option. | S | fixed (e8b2e74) |
 | P1-340 | issue | Low | feat | proxy | PuTTY proxy types "SSH to proxy and execute a command" and "SSH subsystem" missing ("SSH to proxy and use port forwarding" is the jump host). | — | M | fixed (e8b2e74) |
 | P1-341 | issue | Low | test-writer | proxy.py | SOCKS 4 failed for names resolving to IPv6 first; HTTP ignored proxy_dns=no. | Prefer IPv4; HTTP sends the resolved address. | S | fixed (e8b2e74) |
+| P1-342 | issue | High | sec | gui.py | Desktop js_api object exposed the pywebview window (path to os.system from page script). | Expose plain functions only. | S | fixed (6886570) |
+| P1-343 | issue | Medium | sec, feat | app.js | Native pastes (Shift+Insert, Cmd+V, middle click) were not cleaned. | Capturing paste listener cleans every paste. | S | fixed (6886570) |
+| P1-344 | issue | Medium | sec, feat | vt.py | RemoteFilter missed C1 introducers, multi-digit OSC, split ST, colon/intermediate CSI; over-long sequences passed; long digits raised. | ECMA-48 parse, C1, hold from sequence start, drop over-long, bounded params. | M | fixed (6886570) |
+| P1-345 | issue | Medium | feat | profiles.py | Home/End default did not match TERM=xterm-256color. | Default xterm. | S | fixed (6886570) |
+| P1-346 | issue | Medium | feat, conv | session.py | SSH packet log missed the handshake, leaked to other sessions silently, level never restored; handler left on setup failure. | Started before connect, SSH only, documented as process-wide, restored, undone on failure. | S | fixed (6886570) |
+| P1-347 | issue | Major | ui, feat | app.js | F11 swallowed by xterm.js and sent to the remote; Alt+Enter clashes with remote programs. | F11 in the key handler; no Alt+Enter. | S | fixed (6886570) |
+| P1-348 | issue | Major | ui | tui/terminal.py | Scrollback drifted while output arrived; page rebuilds stalled the UI. | Own line offset, "Scrolled back N lines". | M | fixed (6886570) |
+| P1-349 | issue | Major | ui, feat | tui, app.js | Bell floods strobed the screen / stacked oscillators. | BellLimiter in core, mirrored in the web. | S | fixed (6886570) |
+| P1-350 | issue | Minor | ui, feat | tui, app.js | Remote titles unclean, too long, outlived the session. | clean_title; reset on reconnect/close. | S | fixed (6886570) |
+| P1-351 | issue | Minor | ui | tui, app.css | Bell mark looked like the connecting dot / emoji. | Bold "!" in both UIs. | S | fixed (6886570) |
+| P1-352 | issue | Minor | ui | tui, app.js | Close on exit closed tabs silently; applied to serial. | Notice; SSH only. | S | fixed (6886570) |
+| P1-353 | issue | Minor | ui | app.js, index.html | On top state shown by colour only. | aria-pressed and check mark. | S | fixed (6886570) |
+| P1-354 | issue | Minor | ui | profiles.py, app.js | Word characters help wrong; font list quoted as one name; TUI cursor/blink help missing; mixed colour/color. | Fixed help and parsing; one spelling. | S | fixed (6886570) |
+| P1-355 | issue | Low | feat | tui/terminal.py | Bright yellow lost (pyte brightbrown); 256-colour 0-15 ignored the theme. | Mapped onto the palette. | S | fixed (6886570) |
+| P1-356 | issue | Low | feat | vt.py | Printable log kept fragments of split sequences; CR progress lines ran together. | PrintableLog carries the tail; CR is a new line. | S | fixed (6886570) |
+| P1-357 | issue | Low | feat | session.py | Printer file flushed only at the end; write error ended the session. | Flush per job; stop printing on error. | S | fixed (6886570) |
+| P1-358 | issue | Low | feat | console.py | connect left initial modes (no wrap, origin...) in the user's terminal. | Reset on exit. | S | fixed (6886570) |
+| P1-359 | issue | Low | feat | profiles.py | Display defaults differed from PuTTY without reason. | PuTTY defaults (scroll on key kept on, noted). | S | fixed (6886570) |
+| P1-360 | issue | Low | feat, conv | session.py | Filter tail never released at quiet or end. | Flush on a timer and at the end. | S | fixed (6886570) |
+| P1-361 | issue | Low | conv, ui | tui/terminal.py | Phantom pages with short history; style cache unbounded. | Fixed with the offset; cache cleared at 4096. | S | fixed (6886570) |
