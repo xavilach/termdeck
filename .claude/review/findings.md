@@ -87,12 +87,12 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
 | P1-60 | issue | High | feat | ssh.py | Proxy settings missing (SOCKS4/5, HTTP CONNECT, local proxy command, exclude list, proxy DNS). | `ssh.proxy_*` options; asyncssh `tunnel=` connector / `proxy_command`. | M | open |
-| P1-61 | issue | High | feat | cli.py:173, console.py:153 | Plink use impossible: `connect` refuses piped stdin, has no command argument, always exits 0, no batch mode. | Non-interactive mode, command arg, `-t/-T`, `--batch`, `-N`, remote exit status. | M | open |
+| P1-61 | issue | High | feat | cli.py:173, console.py:153 | Plink use impossible: `connect` refuses piped stdin, has no command argument, always exits 0, no batch mode. | Non-interactive mode, command arg, `-t/-T`, `--batch`, `-N`, remote exit status. | M | fixed (48bc35c) |
 | P1-62 | issue | Medium | feat | ssh.py:43 | Expired password cannot be changed. | `password_change_requested` via the Prompter. | S | fixed (218591c) |
 | P1-63 | issue | Low | feat | ssh.py:154 | `use_agent=False` silently disables agent forwarding. | Reject the combination in validate. | S | fixed (a33c0b9) |
 | P1-64 | issue | Low | feat | ssh.py:160 | Encrypted default keys skipped (password asked instead of passphrase). | Document in the key-file help. | S | fixed (218591c) |
 | P1-65 | issue | Low | feat | ssh.py:171 | `~/.ssh/config` applied silently. | `ssh.use_ssh_config` option. | S | open |
-| P1-66 | issue | Medium | feat | ssh.py | `NoPTY` and `SshNoShell` not reachable from TUI/web (forwards-only session). | `ssh.allocate_pty`, `ssh.no_shell`. | S | open |
+| P1-66 | issue | Medium | feat | ssh.py | `NoPTY` and `SshNoShell` not reachable from TUI/web (forwards-only session). | `ssh.allocate_pty`, `ssh.no_shell`. | S | fixed (48bc35c) |
 | P1-67 | issue | Low | feat | ssh.py | Connection sharing missing. | `ssh.share_connection`. | L | open |
 | P1-68 | issue | Low | feat | ssh.py | Rekey time/bytes missing. | `ssh.rekey_*` → asyncssh. | S | open |
 | P1-69 | issue | Medium | feat | ssh.py | Host-key algorithm list, manually trusted fingerprints (Plink `-hostkey`), CA missing. | `ssh.hostkey_algs`, `ssh.hostkey_fingerprints`. | S | open |
@@ -103,7 +103,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-74 | issue | Low | feat, ui | app.js:351 | Forward rows with port 0 dropped silently; empty numbers become 0; no per-forward IPv4/IPv6. | Send null for empty fields; no silent filtering. | S | fixed (b782d71) |
 | P1-75 | issue | Low | feat | ssh.py | Bug workarounds (16 `Bug*` keys) not available. | asyncssh exposes none of these. | M | open |
 | P1-76 | issue | Low | feat | ssh.py | TCP keepalives, address family, logical host name, username from environment, terminal speed missing. | `ssh.*` → asyncssh `tcp_keepalive`, `family`. | S | open |
-| P1-77 | issue | Medium | feat | cli.py | Plink options `-v`, `-m`, `-s`, `-nc`, `-pwfile`, `-sshlog`, `-4/-6` missing; no event log. | `-v` to stderr, per-session event log. | M | open |
+| P1-77 | issue | Medium | feat | cli.py | Plink options `-v`, `-m`, `-s`, `-nc`, `-pwfile`, `-sshlog`, `-4/-6` missing; no event log. | `-v` to stderr, per-session event log. | M | fixed (48bc35c) |
 
 ### Serial
 
@@ -195,16 +195,16 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 |---|---|---|---|---|---|---|---|---|
 | P1-150 | issue | High | ui | cli.py:163, profiles.py:286 | A mistyped profile name becomes an SSH host (password may go to the wrong machine). | No bare-word SSH target; "did you mean". | S | fixed (b782d71) |
 | P1-151 | issue | Medium | conv | cli.py:284 | CLI redefines defaults and choices of serial options. | Derive from the option metadata. | M | fixed (a33c0b9) |
-| P1-152 | issue | Medium | conv | console.py | console.py is UI code listed as core. | Document it as part of the CLI. | S | open |
+| P1-152 | issue | Medium | conv | console.py | console.py is UI code listed as core. | Document it as part of the CLI. | S | fixed (48bc35c) |
 | P1-153 | issue | Medium | ui | cli.py:50 | `--set serial.baudrate=abc` error lacks the option name. | Re-raise with the key. | S | fixed (a33c0b9) |
-| P1-154 | issue | Medium | ui | cli.py:173, session.py:155 | `connect` silent until connected; errors lack the target. | "connecting to ..." on stderr; target in errors. | S | open |
+| P1-154 | issue | Medium | ui | cli.py:173, session.py:155 | `connect` silent until connected; errors lack the target. | "connecting to ..." on stderr; target in errors. | S | fixed (48bc35c) |
 | P1-155 | issue | Medium | ui | ssh.py:147 | Username asked before connecting; empty answer reported as "Authentication failed". | Clear message. | S | fixed (218591c) |
 | P1-156 | issue | Low | ui | cli.py:78 | Empty `list`/`ports` print nothing; no way to list option names. | Messages; `termdeck options`. | S | fixed (a33c0b9) |
-| P1-157 | issue | Medium | win | console.py:87-110 | Console mode return values unchecked; handles truncated without argtypes; stdout not checked. | Check, declare argtypes, require a console. | S | open |
-| P1-158 | issue | Medium | win, arch | console.py:107, 137 | Windows stdin reader thread never stops (eats a key after quit); `call_soon_threadsafe` on a closed loop. | Cancellable read; guard the call. | M | open |
-| P1-159 | issue | Medium | win | console.py:165 | UTF-8 split across writes renders as U+FFFD on conhost. | Hold back partial sequences. | S | open |
-| P1-160 | issue | Medium | win | console.py:87 | Console code page/mode not restored on hard exit or Ctrl+Break. | atexit restore, ignore SIGBREAK. | S | open |
-| P1-161 | issue | Medium | win | console.py:112, cli.py:149 | `shutil.get_terminal_size` uses COLUMNS/LINES first. | `os.get_terminal_size`. | S | open |
+| P1-157 | issue | Medium | win | console.py:87-110 | Console mode return values unchecked; handles truncated without argtypes; stdout not checked. | Check, declare argtypes, require a console. | S | needs Windows (fixed in 48bc35c: termdeck connect in Windows Terminal, conhost and PowerShell 5: console mode and code page restored after Ctrl+] q, after Ctrl+Break and after closing the window; no key lost at the shell; resize reaches the remote; é€😀 output without U+FFFD) |
+| P1-158 | issue | Medium | win, arch | console.py:107, 137 | Windows stdin reader thread never stops (eats a key after quit); `call_soon_threadsafe` on a closed loop. | Cancellable read; guard the call. | M | needs Windows (fixed in 48bc35c: termdeck connect in Windows Terminal, conhost and PowerShell 5: console mode and code page restored after Ctrl+] q, after Ctrl+Break and after closing the window; no key lost at the shell; resize reaches the remote; é€😀 output without U+FFFD) |
+| P1-159 | issue | Medium | win | console.py:165 | UTF-8 split across writes renders as U+FFFD on conhost. | Hold back partial sequences. | S | needs Windows (fixed in 48bc35c: termdeck connect in Windows Terminal, conhost and PowerShell 5: console mode and code page restored after Ctrl+] q, after Ctrl+Break and after closing the window; no key lost at the shell; resize reaches the remote; é€😀 output without U+FFFD) |
+| P1-160 | issue | Medium | win | console.py:87 | Console code page/mode not restored on hard exit or Ctrl+Break. | atexit restore, ignore SIGBREAK. | S | needs Windows (fixed in 48bc35c: termdeck connect in Windows Terminal, conhost and PowerShell 5: console mode and code page restored after Ctrl+] q, after Ctrl+Break and after closing the window; no key lost at the shell; resize reaches the remote; é€😀 output without U+FFFD) |
+| P1-161 | issue | Medium | win | console.py:112, cli.py:149 | `shutil.get_terminal_size` uses COLUMNS/LINES first. | `os.get_terminal_size`. | S | needs Windows (fixed in 48bc35c: termdeck connect in Windows Terminal, conhost and PowerShell 5: console mode and code page restored after Ctrl+] q, after Ctrl+Break and after closing the window; no key lost at the shell; resize reaches the remote; é€😀 output without U+FFFD) |
 | P1-162 | issue | Low | win | cli.py | Redirected output on Windows uses the ANSI code page: UnicodeEncodeError. | Reconfigure stdout/stderr to UTF-8. | S | needs Windows (fixed in a33c0b9: com3, \\.\COM10, COM10@115200 resolve and open; redirected 'termdeck list > out.txt' with accented names) |
 
 ### Windows platform
@@ -309,23 +309,23 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-268 | issue | Medium | conv | README.md | Exit codes, "Session ended", forget-host undocumented. | Documented. | S | fixed (218591c) |
 | P1-269 | issue | Low | conv | session.py | A lone CR under implicit LF waited for more output. | Released after 50 ms. | S | fixed (218591c) |
 | P1-270 | issue | Low | conv | serialport.py | Serial output had no backlog bound. | Reader waits on a semaphore (256 chunks). | S | fixed (218591c) |
-| P1-271 | issue | Low | win | cli.py | --password-file / -m: UTF-16 (PowerShell 5) crashed, BOM kept, empty file IndexError. | utf-8-sig, clear errors. | S | open |
-| P1-272 | issue | Low | win | console.py pipe | Scripted output to a Windows console: no VT processing, split UTF-8 shown as U+FFFD. | _ConsoleOutput. | S | open |
-| P1-273 | issue | Low | win | console.py | watch_size died on OSError. | Keep the last size. | S | open |
-| P1-274 | issue | High | sec | cli.py ConsolePrompter | In scripted mode host-key and login questions were answered from piped stdin ("y" trusted a changed key) and ate the data. | Ask only on /dev/tty or CONIN$; no terminal = fail. | S | open |
-| P1-275 | issue | Medium | sec | cli.py PasswordFilePrompter | --password-file answered the jump host and any prompt containing "password". | Target's password prompt only (and its kbd-int one). | S | open |
-| P1-276 | issue | Medium | sec | session.py, cli.py | Pipe mode applied terminal settings (answerback injection, echo of piped secrets, notices on stdout). | Raw TerminalSession, notices to stderr. | S | open |
-| P1-277 | issue | Low | sec | cli.py BatchPrompter | --batch did not flag a changed key. | WARNING with old fingerprint. | S | open |
-| P1-278 | issue | Low | sec | cli.py logging | --ssh-log/-vv logged environment values. | Filter hides them; help says commands are logged. | S | open |
-| P1-279 | issue | Low | sec | ssh.py SSHForwards | -N with stdin from /dev/null closed after 0.5 s. | write_eof ignored. | S | open |
-| P1-280 | issue | High | feat | cli.py | Options after the target became the remote command (regression of --set). | Split like plink at the first plain word. | S | open |
-| P1-281 | issue | High | feat | console.py, ssh.py | Piped input unbounded (400 MB in memory for a slow remote). | Bounded stdin reader; drain after writes. | S | open |
-| P1-282 | issue | Medium | feat | ssh.py | Without a PTY, stderr was lost outside pipe mode (TUI, web, interactive). | Separate only for scripts; merged otherwise. | S | open |
-| P1-283 | issue | Medium | feat | cli.py | A command, -m or -s got a PTY when stdin was a terminal. | No PTY unless -t, like plink. | S | open |
-| P1-284 | issue | Medium | feat | cli.py | --password-file ignored keyboard-interactive password prompts. | Answer the target's hidden kbd-int prompt once. | S | open |
-| P1-285 | issue | Low | feat | ssh.py | Remote signal gave exit 255. | 128 + signal number. | S | open |
-| P1-286 | issue | Low | feat | cli.py | Scripts got "[termdeck] Session ended" on stderr for a plain non-zero exit. | Quiet unless lost or killed. | S | open |
-| P1-287 | issue | Low | conv | profiles.py, cli.py | no_shell/subsystem/command and --nc with -N/-L/command silently overrode each other. | Rejected. | S | open |
-| P1-288 | issue | Low | conv | cli.py | In a terminal, a command without a PTY ran in raw interactive mode (no echo, key mapping). | Runs like `ssh host cmd`: terminal untouched, data passed unchanged. | S | open |
-| P1-289 | issue | Low | test-writer | cli.py | The environment-value log filter never matched (channel prefix) and sat on the parent logger. | Match "Env: %s=%s" anywhere; filter on the handlers. | S | open |
+| P1-271 | issue | Low | win | cli.py | --password-file / -m: UTF-16 (PowerShell 5) crashed, BOM kept, empty file IndexError. | utf-8-sig, clear errors. | S | fixed (48bc35c) |
+| P1-272 | issue | Low | win | console.py pipe | Scripted output to a Windows console: no VT processing, split UTF-8 shown as U+FFFD. | _ConsoleOutput. | S | fixed (48bc35c) |
+| P1-273 | issue | Low | win | console.py | watch_size died on OSError. | Keep the last size. | S | fixed (48bc35c) |
+| P1-274 | issue | High | sec | cli.py ConsolePrompter | In scripted mode host-key and login questions were answered from piped stdin ("y" trusted a changed key) and ate the data. | Ask only on /dev/tty or CONIN$; no terminal = fail. | S | fixed (48bc35c) |
+| P1-275 | issue | Medium | sec | cli.py PasswordFilePrompter | --password-file answered the jump host and any prompt containing "password". | Target's password prompt only (and its kbd-int one). | S | fixed (48bc35c) |
+| P1-276 | issue | Medium | sec | session.py, cli.py | Pipe mode applied terminal settings (answerback injection, echo of piped secrets, notices on stdout). | Raw TerminalSession, notices to stderr. | S | fixed (48bc35c) |
+| P1-277 | issue | Low | sec | cli.py BatchPrompter | --batch did not flag a changed key. | WARNING with old fingerprint. | S | fixed (48bc35c) |
+| P1-278 | issue | Low | sec | cli.py logging | --ssh-log/-vv logged environment values. | Filter hides them; help says commands are logged. | S | fixed (48bc35c) |
+| P1-279 | issue | Low | sec | ssh.py SSHForwards | -N with stdin from /dev/null closed after 0.5 s. | write_eof ignored. | S | fixed (48bc35c) |
+| P1-280 | issue | High | feat | cli.py | Options after the target became the remote command (regression of --set). | Split like plink at the first plain word. | S | fixed (48bc35c) |
+| P1-281 | issue | High | feat | console.py, ssh.py | Piped input unbounded (400 MB in memory for a slow remote). | Bounded stdin reader; drain after writes. | S | fixed (48bc35c) |
+| P1-282 | issue | Medium | feat | ssh.py | Without a PTY, stderr was lost outside pipe mode (TUI, web, interactive). | Separate only for scripts; merged otherwise. | S | fixed (48bc35c) |
+| P1-283 | issue | Medium | feat | cli.py | A command, -m or -s got a PTY when stdin was a terminal. | No PTY unless -t, like plink. | S | fixed (48bc35c) |
+| P1-284 | issue | Medium | feat | cli.py | --password-file ignored keyboard-interactive password prompts. | Answer the target's hidden kbd-int prompt once. | S | fixed (48bc35c) |
+| P1-285 | issue | Low | feat | ssh.py | Remote signal gave exit 255. | 128 + signal number. | S | fixed (48bc35c) |
+| P1-286 | issue | Low | feat | cli.py | Scripts got "[termdeck] Session ended" on stderr for a plain non-zero exit. | Quiet unless lost or killed. | S | fixed (48bc35c) |
+| P1-287 | issue | Low | conv | profiles.py, cli.py | no_shell/subsystem/command and --nc with -N/-L/command silently overrode each other. | Rejected. | S | fixed (48bc35c) |
+| P1-288 | issue | Low | conv | cli.py | In a terminal, a command without a PTY ran in raw interactive mode (no echo, key mapping). | Runs like `ssh host cmd`: terminal untouched, data passed unchanged. | S | fixed (48bc35c) |
+| P1-289 | issue | Low | test-writer | cli.py | The environment-value log filter never matched (channel prefix) and sat on the parent logger. | Match "Env: %s=%s" anywhere; filter on the handlers. | S | fixed (48bc35c) |
 | P1-290 | issue | Low | test-writer | cli.py PasswordFilePrompter | A jump host with the same user@host as the target (another port) would get the file's password. | Include the port in the prompt label. | S | open |
