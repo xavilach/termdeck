@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:cf9d312fa45f37e45a4a83eb1ba6b69cc43ad502313aa08e1cffc4bb78461d2e",
+  "claims": [
+    {
+      "id": "claim_b435b6063eb9489989844419b9ae249a",
+      "statement": "The web server binds 127.0.0.1 only and returns a start URL whose one-time token is in the URL fragment and valid for 10 minutes.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/web/server.py#L580-L588",
+          "version": "repo-lines-v1:sha256:50948f02f01fdbf5a82e5599021886e47d0571c07d6fbf75ebef7daf9f1785e5:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWUxOGNiZDAzY2M3ZDZiY2UyOTM2NTAwMDg5ZDI3ZGRlYTY2MmZjNTc3MzdlN2NhMmY2YTFkYjAzMmNmMjg4OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjY5MjQ4YWNjNjM0YzE5ZGZmMjg2YjQ1YmRhZjAxNjZlYTRiNmY5ZWM2OTA2ZTJjOWI1MTgxOTY3MjUxNGU4YSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMWVmYWM5YTZiNjhkMDk0NGZkMzM2ZGM4ZjM5MzhiOGExNWNkZjZjNDZlYmI4NWI0OTgzNWI4MjE0Y2EwMTk1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjkzNTA0YWE3OTU0ZmUxOTJmMzc2ZjYwZjg1MWI2YjMyOTY0ZTZiMDA4ODVmOTI1OTE2MTViMGY3OGI1MWIxNCJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/web/server.py#L65-L84",
+          "version": "repo-lines-v1:sha256:d4ac5a0a6cbd7608b43f6ceb4519fe1ec00dccf5ef48526735b313d9dc65d457:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZjNTlkNzg5N2I3NjQxZDIxYTQ1NWZjNjg2Y2I1OThjN2ZkYThlMTI2YTU4OGUxNDI2ODhhYjA3MGQ1OTVhYmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyMDc4MzkyZmZlOTM1MTNhNGNlYzA2MjQ2ODZhOTcyM2Y4MzgxYjM4YTNjNjBmYWQ0NmYzYjEwYTc2NjVlN2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ3MDE0OWUwNjlhZDY3ZWNjZjQ3MzY0NmZmMWM3NTAwNTBkMzI5ZDExMDAxOGRjNTc2Njg3OGVhZmExZDYwN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRmZWY3YzQ1ZDkwNTJiMWU3MmRkZDcxMGIyMGUyMzE2MzhjY2E3YzUzODY3NTFlYzViNzEzNWIxMzI3MDhmMDgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_22cb0a07dfbb49b4a7b55be47c83408e",
+      "statement": "The page exchanges the start token for a per-tab secret via POST /api/login and sends it in the X-Termdeck-Auth header or as an auth.<secret> WebSocket subprotocol; no cookie is used because cookies are shared across ports on 127.0.0.1.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/web/server.py#L1-L12",
+          "version": "repo-lines-v1:sha256:0eb1b24bb71a3b07d2250111ed313ac786b1c7c9d2ee8559afb89970fab4727b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM4MzkzMTM0MDQzODRiZjA1MWI1ODcwZDA3OTU2ODc4YTRhM2ZiOTUzYWE1NzIyYmEwODkyYWE4N2RkZjdkZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzMDNlY2RkNGE0ZDEwZjE5YzczZmQ0MmZkMTI0MzdmZDMzNTRhODI2ODE2MDVkYTUyNTVhOTdhMzkwNjhkYmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMxZmJiOWUxNWJiYzY1YWU0MTY3NjdjNDFjOTY0ZDk4M2E3M2I3MDY3MDNhZWQzYzJhNjA4NzUxNzJlNzgyMTkifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/web/server.py#L159-L165",
+          "version": "repo-lines-v1:sha256:588ead3df4a15c5fc2767692a48d88cf347377180641797fe5a7f4b259140d48:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmQ3MTE4ZDBkNDU2MjA1NDBiODQ2Mzc1MTE3ODdmZjExNDc3ZDY5YWQ0YWU2NTIxMDA4ZGNjNjJkZjMzNmExYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmNiMzJhMjU4Yjk0ZmM4NzM5NTdhMTI3NzVkYWU4ZjU4ZjRmZjQyMjg1MDY1NDk3MTU5ODE5NzBlYzg1YTE3MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzkxMmEwNjE3ZWM0NGIwNmM4OGQ0NDc4OGJmYzAyYjc1Mzk0MWJmZTg2Y2MwOWFjZDgzYzNlNzI0Mzk5NTY3MCJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/web/static/app.js#L38-L60",
+          "version": "repo-lines-v1:sha256:c098570275a96d533a2310e95b9bc90ceb747c0ccdaebdb02489067428319c46:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdmZDk5ZjAyODZmMDk5MGI0OWQ2MDI1YzdjZWIxMjVjM2Q1N2VkNTJhYzExNDUzZjdiZGRhNmJlMmQzMTVmZmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1ZDk5OWM2MmRjZGI0OWUzYzRkNDk0NjU0YTI1NWZhYmRhYTlhOTAzYjRkYmRiYTNjYzMwM2NlZjE3ODI4MTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM4ZDYyMDJlNjIwZWRlODkyOWE4NDU0ZjU2ZDNmOWM4ZGYyNzgwOTEzOTdhNjA0MjcyYTBhZmJlODhlMWUxNzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI1NDU4ZjMwNjQ4MzRmOGYzNjhmZWU4YjdhOGEzYzBjMmZjNTI2ZDZhNWZjZmM5NDIwYzBkMWIwOGUyMTY1MDMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_46691a657f9b4efba031d31a16b201fb",
+      "statement": "The security middleware rejects non-local Host headers and foreign Origin headers, and requires a valid secret on all but the index, login, static and download routes.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/web/server.py#L155-L185",
+          "version": "repo-lines-v1:sha256:a12a6daf1b16cd57eecd25575ce6070dfbe8febdf18f7f5275e4ecd2f801d54c:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFjOWMzM2Y1MDQzYzFhNGU5MzZkMDNhYTdiOTlmZjI4NTY4YzdhYjY0MTVmMTMwMzcxNTU5NTdmOWFlYjc1MmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJlOWEyYmUzZWZkOTI4ODA3MzFkZjM4YTUwNDc0MTE0YmViYWRiMmYwYzNkNzE2NWQ3ODQyY2E3ZmVlNDU1MjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQxYTBiMjBkZmI0OTc4N2IzNzM2ZTdkNmYwOTJmNDU0MDAxNDNkMDkyMTJhNDhiNjQ0OTFhZjYwYzMzMDZkMjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgwYmFhMjJlYjVmYzk4NzllNjljZTg1NWZiMmE0YmYzZjdjOTQzNzA2MWQyZTdhMjIzNTJiMzdjNjI4ZWJmNTAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b21b77f8bd674c0cb6466fcebd273882",
+      "statement": "Responses carry a strict Content-Security-Policy, X-Frame-Options DENY, nosniff and no-referrer headers, and API responses are not cached.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/web/server.py#L188-L191",
+          "version": "repo-lines-v1:sha256:5945d5c1c838a8ad4b1c849ce841f3f712aca74d120fbc45bd0ca3d13d81c4c2:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMmMxOGJmMzQ0ZjVmZjUwNjZkZDY5ZmViMjcyN2YxZDQwY2FmOWVhMjRkZTczYzU2YmVjY2M1Y2Q3NmRiMjA4ZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTExMzQzMmQ2YzU2MWU1ZTM4ZmFhYzBlNDBjMTdlYTRlMzVlNGE2YzVjYWY5NzRkMGYwNWQ2Yjc2YzUzYWJiMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGMyMjNiZmFkYTI3YTNkYTA5MTY3YTVjYmM5NjNiMDFjZWJjNWMwN2MzNGNmNDA2NjJlNWJkODc3OTg5ZTJlNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGY5ZjY4OWJhZjg4ZDhhMTA0YzcyZGNkZDI5OWIwMTNhN2U4ZWI2NTNiMzk1YmIxZjE5MmRhODc5YTlmMjdjNyJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/web/server.py#L47-L54",
+          "version": "repo-lines-v1:sha256:c442719bc0a4680605503c5dad3cc6f2281ddc0cd2a5f4c2c7d00da3cd33e8d4:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzA1NDhiNzBhMjhmYzkyMGZiOWY5NTMyNTQwZDAxMjQ0ODJmMjQzYjBhZjZiMzMyMTllY2Q2NzU1M2ZlMTI0MyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDQ3OWViMGYzODljM2U5NzY5ZDc5MDRiZjllMjkwN2NmZjgzMDIzNjJmMzBhYThjZDk0ZDg1OTRiZTNjMmMyYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzhlZWIyYTEzZWJiNDJhMWI2MzA1N2RmOGEyYjNkMGVkZDdhYjRkZDZkZjM2MTRkY2ZlZDVkYTk2M2EwMzY3OCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_5a8792d9123a429facdd6be6fb6af8b9",
+      "statement": "termdeck web opens the browser through a private temporary file that forwards to the start link, so the token is not on a browser command line.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/web/server.py#L591-L606",
+          "version": "repo-lines-v1:sha256:e2de50b8c56ef1e1e460941f45a144c6f5f384da56949a563ca189c0a133f321:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwMTQ0N2I2NGVjMzM1MDZiMTU0OWM5MTZmYjgzZTRlNTAxZWJlMzk2NzI3OTJlNzhiMjIwNGEyYWY4ZjRjZmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4ZmFmMDBhMDgxMTkzMWFkNTNiODRlMjhkMmE5OWVkOGUwNTU2MDZhMjIzMTdkZmE4MGVkZDU4N2Y2NWI3ZjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU1ZjcwMWM0MmRjZjA0N2NlNGIzMzA0NjdlZDY2Mzg1MTc3YmJkZTc1MmZjYjc5NTg5Yjg0NTA3NDA5ZDY1YTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiNzQwYjhhNTYwYjUwMDBmZTNjNWZmYjVmOGRhMDFlMDFkYTUzZDE5YWFjYWE1OTgyODE4YWI0ZDc3MzI4NDYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b7a9912310af40a3b30459fdc33a1b37",
+      "statement": "Each terminal tab is a WebSocket where the client sends open/input/resize/answer/break JSON messages and the server sends binary output frames plus JSON state, prompt, hostkey, notice and break messages; state changes are flushed before the output that follows.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/web/server.py#L315-L414",
+          "version": "repo-lines-v1:sha256:b21dda5c8345cf2e1a4feef23151fd429ba1c0e88bdcc9babcde7124e5c2c1e7:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI3OTNiOGU5ZDYzMjM1NmU2MmY1NDZlMWJkMDE1ZTZhNGI2M2Y2MWZhZjg5MTRjZDUzYjQyZTdhMzUxMmNhYmFmIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIwMWJhNDcxOWM4MGI2ZmU5MTFiMDkxYTdjMDUxMjRiNjRlZWVjZTk2NGUwOWMwNThlZjhmOTgwNWRhY2E1NDZiIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJjNTM2N2EzZmFlZGU1MDRmMmNmYjAyYTE4NzkzYmMwYzc1YWRlYjUzZWY1ZmM4ZGMyMTRjNzFkMGU3YjQxNTE4IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlZTM5MmQ0NjYzMDg5NjEyNTNhZTRiZDdlM2Q2N2Q1ZjEzMGRjOTM4ZGMxNWM3ODc1MjQ4NDU0ZGIzOTliMWI0In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_5a5b4eae20c8447aa8066c2b114db19d",
+      "statement": "A saved profile opened over the WebSocket is sent by name and read from the store at connect time.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/web/server.py#L345-L356",
+          "version": "repo-lines-v1:sha256:ac1ff96db5a962a1cc29fc5f7162a1248508b0dae1d19f289f29fdb77b2d14fd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBhOTY0OGIzNTFkMzY0Y2JiNWI0ZjU1Njk5NjNjODMyNmQ1MWJlOGIxNDkyM2E0MTJmZDdjZjdhMWZiODBkZWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1NTI2MTNmYjY0MGVmNTY0ZTQwZTc5MTU2MTJmNTVmYmUyZTA1MGZlMWMwYWRhMTU0YjY3NjQyM2VmN2E0YWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI2ZjRhMWM0MGI3ZGY4Yjg5MTBhMzVmNGRkMGMxODFjNjk4YTc1NGRlNzE4NGM2N2QyMGU2MzgwMjA2Mzk2MmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ4NzFlMzkyNTg4NTNjODFiYjBhMTI5NGMwMDJmODk5ZDhkMmEyMTRhOWUwMWZiMGQ1NjkyODQ2YjM1ODEyYjkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9e3de13475f34cbe96fe00efea435026",
+      "statement": "SFTP downloads use single-use tickets valid for 60 seconds, created only after the file was opened successfully, so downloads need no secret.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/web/server.py#L453-L488",
+          "version": "repo-lines-v1:sha256:ab3860c51dacc695f895ba2f1b0511519aff24a72ea0d5b8f4f8e6ce92262a7e:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5MjI1YmQwYWFkNjFiMmNhOGU3ZGUzMGJiNTM0ZmQ3YmQ4Y2VkNGJkMDcyODI0MTc3NGE2ZmU3ODg4Nzk0Y2QiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyMDg1MzI5MTBjZmNlZmU1ODcwM2Q0MzQ0NWE5YzIwMmIxMjQ4NzcyZjE2ZWY1YTE2MzBlNjJmMjVkZjAyNzQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU0ZTdjODBiMDMzNzAxYWUzMTA1ZTI0NmJiY2EzMDc0MmMxYzFkNzk2OGVkYTNiZTE3ZjhhYzg0OTczMzQzZDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk3NzVmNTc4NmNkNjYyZmJhZjc2NzZkYzgzNTI5ODg1MjdiOTI1ZGI3NWZmYjU1ZTEzODI1NWU2ZWZkNWQ3NWMifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/web/server.py#L94-L106",
+          "version": "repo-lines-v1:sha256:b7440e182f2c5a7fe35821e97451c90d1f796d158de04f73adb9adaf467a1e4c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg3NTk4MTgzY2VlNzkxMjFjMGQwZjgwMzk0MjEwMGFhYTAyZTM4MTliYWRmMjA2Y2QzOWM0YzZmZDk2MmUxNTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFkYjU4MTk0MDQ1OTgzN2FiOTUwNTE3NjhmNTk5ODNhMTFjNzBiMzA2YzRhZjg1MzJjZWM2MDlhZDczY2M1OTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZiNThkMjU5NDZiMjdjNTVhZWUyN2I1MzFjNWU5Nzc3MDk1ZGUwNTViZjkwYzFhNWYzYzcyOGMyNTIxNzBhN2EifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_045ba500e546415ba93255c2d2c29b4a",
+      "statement": "Uploads without overwrite stop with 409 at the first existing file; the page first asks which names exist via the check endpoint.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/web/server.py#L491-L525",
+          "version": "repo-lines-v1:sha256:1cbf51b2c623a9117c4db0f007dce4114a33dea2ff2d0de9e186745667866dea:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhkMTIxMWM0Nzg0NjM4MTc3YTMyZjg1NjU0ZmY0YjkwYmUwZWFlZjE5MDI1N2NkYzEzOTdmOGM0NzM1OTJhYmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1N2UzYmE3ZjY1Y2FkZTZiN2RhMTEzNDk0MDQwOTU5NGM2YzMxYzRmMDRjNjVmOTQ1MWI5OTgxNzgwM2QyODgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjczMDMyNWY5ODBiNGFiZTBhNWJmZGViMmQzZWI5MzQ4NzZkM2EwNDMzMjU2NDQ0NzJjMTM2Y2NhMDJiOWE4MGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJhN2ExN2NiY2Q4OGZhMzI0NjE3MzI2MGNjY2Y0ZjE0ZTg2NmVjYjkwMzQwZGVlNzBjNjE0ODUwMDc2OWRjZDYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a3c2e63b6a624e4fa757b21aa5e4ef69",
+      "statement": "Profile saves that fail validation return 400 with the field as section.key so the page can mark it.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/web/server.py#L253-L272",
+          "version": "repo-lines-v1:sha256:de7db415603bea924b8bdf813a84a40113627cf0a6d1d43d454c287ecb91b21d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZmZmFhOWU1Mzg2MjU0OWM0MGRkY2Y1YjU5YjcwOGNkN2RjMDRhN2IzYzVjNGZlN2UwZjdlY2FkZmYzYzY0YWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJkNTJlZDhmMzA1MzVhYjIwM2EyZDM5MWRhNGYzOTYyYjkzMDAwNzFlY2ZkNTBmODBkN2MxMmY2ZGUyYjQ3OTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI2MDhkMzhkNmYxMGUwMmFjZTllZjA0Nzg0Y2Y1YWRlMTJkZGZhYjQ1NjhiNjk5ZjM2YTdkMzlmYmVlZDNhNGIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE2ZDM5OTJiYjc0OGNlMWNjOThiYjMwYmI2M2RiYjI1MzVjNTkzYzM0ZjNmYTM5N2JmMjBlMzNlZWI5MTFlMjIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7064e69b4dac4ea29f1c7a05979dcb8d",
+      "statement": "The front end builds DOM with an el() helper that appends text nodes, and textContent, rather than innerHTML.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/web/static/app.js#L7-L23",
+          "version": "repo-lines-v1:sha256:a88b2d6770ca47b4990cbc2d5ffc24ee7847dcbba1e9fcf2dfe0a2530f4f998c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1OWUwODk0YWQ5MDdhOWRhYTZlNDgwYmViMjQzYzAzNjU0ZWMwZjg1MzdmOTkwYTUyN2Q1ZWRlZjE1ZjU4ZjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdlOTU1ZTBhZGUxYzkwMTRkYTYzZDcyNjg5NWU4NWMzMmI3MTM5YzVhNTA4NWU4NzQwZDA5ZDc0YjE3OTM0ZjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk1YTRlYjA5YmE5MGNjZDBlYTFjNjkwYTJkMTg0YTkzZjdmYmU2YzVkNjE4NjNkZDBiNmMyMTU2ZjE2MmJjODYifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-18T13:56:19.871Z"
+  }
+}

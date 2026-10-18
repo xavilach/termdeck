@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:d5668a5d572d276ec95f3735c0b8d3d2a87c47aa34a420c0e9d77ac357439145",
+  "claims": [
+    {
+      "id": "claim_abbdd3a6df8947dfa1fb212f93b30640",
+      "statement": "Every profile option must be declared once with option() in profiles.py, and UIs must build forms from describe_options() rather than hand-coding fields.",
+      "evidence": [
+        {
+          "resource": "repo://CLAUDE.md#L13-L20",
+          "version": "repo-lines-v1:sha256:fc73db64fa8c3e63a5348b905d1b1cb92d9e42ae4c38f1afd96879636b28fe76:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjgwNDc3MDk1YjAwYWM2ODQ5YTk1M2EzNjI0NzQ4N2FkOWNjZjBkYTFiMTU3M2M1MWIxMGIxYzllMmE5ODdkMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzI2MWZjN2ZkMDY2ZDhmMjJkMDVhYzlhMDNjZDYzZDgzYzExMTA3Yjg5ZTQwODhjYjExYTQ0YjZkMjRhOWVjNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmUwMmI4ODM4NDljNjc4YTZhNjYxNWMwNmZjYjE5OGRkNGFjOWFjMTBhNDI5YTY5YzljMjRiMjgwNjFkZTc0MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWM4MmY2ZTg5OTEyNzNiYTkyZWZjNTMzYTdlMWY1YWFhOTkwNjJhMjFmMjQ0OTkyNDkwNTVmNTFmYWJlODFiZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_847b0237a967498abea2678c0545eaaf",
+      "statement": "Tests must not use network or hardware (a local asyncssh server and loop:// instead), and every fixed bug gets a test.",
+      "evidence": [
+        {
+          "resource": "repo://CLAUDE.md#L13-L20",
+          "version": "repo-lines-v1:sha256:fc73db64fa8c3e63a5348b905d1b1cb92d9e42ae4c38f1afd96879636b28fe76:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjgwNDc3MDk1YjAwYWM2ODQ5YTk1M2EzNjI0NzQ4N2FkOWNjZjBkYTFiMTU3M2M1MWIxMGIxYzllMmE5ODdkMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzI2MWZjN2ZkMDY2ZDhmMjJkMDVhYzlhMDNjZDYzZDgzYzExMTA3Yjg5ZTQwODhjYjExYTQ0YjZkMjRhOWVjNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmUwMmI4ODM4NDljNjc4YTZhNjYxNWMwNmZjYjE5OGRkNGFjOWFjMTBhNDI5YTY5YzljMjRiMjgwNjFkZTc0MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWM4MmY2ZTg5OTEyNzNiYTkyZWZjNTMzYTdlMWY1YWFhOTkwNjJhMjFmMjQ0OTkyNDkwNTVmNTFmYWJlODFiZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_63cc8dd9003e46a68f86e18fe5e40cc1",
+      "statement": "Remote or user text must never be inserted into Textual markup or innerHTML unescaped.",
+      "evidence": [
+        {
+          "resource": "repo://CLAUDE.md#L13-L20",
+          "version": "repo-lines-v1:sha256:fc73db64fa8c3e63a5348b905d1b1cb92d9e42ae4c38f1afd96879636b28fe76:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjgwNDc3MDk1YjAwYWM2ODQ5YTk1M2EzNjI0NzQ4N2FkOWNjZjBkYTFiMTU3M2M1MWIxMGIxYzllMmE5ODdkMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzI2MWZjN2ZkMDY2ZDhmMjJkMDVhYzlhMDNjZDYzZDgzYzExMTA3Yjg5ZTQwODhjYjExYTQ0YjZkMjRhOWVjNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmUwMmI4ODM4NDljNjc4YTZhNjYxNWMwNmZjYjE5OGRkNGFjOWFjMTBhNDI5YTY5YzljMjRiMjgwNjFkZTc0MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWM4MmY2ZTg5OTEyNzNiYTkyZWZjNTMzYTdlMWY1YWFhOTkwNjJhMjFmMjQ0OTkyNDkwNTVmNTFmYWJlODFiZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_c3347ef505d54d84bd3b2bc91a6d50e4",
+      "statement": "Telnet, Rlogin, Raw, SUPDUP connections and PuTTYgen/Pageant equivalents are out of scope unless requested.",
+      "evidence": [
+        {
+          "resource": "repo://REQUIREMENTS.md",
+          "version": "repo-file-v1:sha256:720eb45e758cf982cad42e598a44d72d0ee0b003229cbcd216900d19a821f959"
+        }
+      ]
+    },
+    {
+      "id": "claim_1388ab563f8a4693b717c560dbd013b4",
+      "statement": "The conventions-reviewer runs after every change, while security, Windows, features, interface and architecture reviewers run for specific kinds of changes; applicable reviewers run in parallel and tests rerun after fixes.",
+      "evidence": [
+        {
+          "resource": "repo://.claude/agents/conventions-reviewer.md",
+          "version": "repo-file-v1:sha256:cd119ca27e2bb45bd74d96677b601b3db3daef3083a33dffc58766eabe9b61f7"
+        },
+        {
+          "resource": "repo://CLAUDE.md#L22-L31",
+          "version": "repo-lines-v1:sha256:a507e2d7d904833c3c89ca203dfb7cd7e807091cb0f2dc18d87c0b86b05d35bb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3NGQ1NjhmMGVmMGQxYjQwODVkOWY2M2M1YmQzODkwM2Q5YjczNzE5NmI2MTVjYTg4ZDZhYzJiMzc4Y2FjM2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg3MjdkY2UyODMwZDhkMTk5NjNlMTBkYTllYTkyZmIxZDAyNmY3ODY4ZTZjOTZkMDZiNDY3OTg4NmM2NGY0Y2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY1MDYxNWE1ZDlhMmE0ZGYzYWNhMjE0MTE0N2Q2ZGQ3OWUzNjgzN2NkMTIxMjIxOThiZjEwYzlhYzc4NGQxNGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImViMWJjNWJjNGEyMzdmNTc4ZTZhZjRhNDE1ZDA2NDdmOTkxMGIwM2IzNjRlMWUyN2MxZjFkYmFhNzQzZDAzYmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_855c3a2e32fe4b1695854cdb4291a5a8",
+      "statement": "The putty-reference agent answers PuTTY behaviour questions from a PuTTY source archive; termdeck does not copy PuTTY code.",
+      "evidence": [
+        {
+          "resource": "repo://.claude/agents/putty-reference.md",
+          "version": "repo-file-v1:sha256:17efc8aee68d6a992060daed241ea3b530818add18bbeaa5eead5f16974b95f4"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-18T13:56:19.871Z"
+  }
+}

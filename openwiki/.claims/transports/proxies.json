@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:422f4d6991251c427e898f8c9761b9584e37b8ff10965624c0d1871686dd2914",
+  "claims": [
+    {
+      "id": "claim_15d0b75d70aa404a916b9035c6773452",
+      "statement": "The tunnel for an SSH connection is chosen in order: a jump host command, the jump host connection, the profile's proxy (command or SOCKS/HTTP/Telnet), else a direct connection; proxies apply only to the first hop.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L284-L295",
+          "version": "repo-lines-v1:sha256:6c24b0306e8a6d9747a8d7de439eabe3606f8ec513ee3d2843508fa151dbccf3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA1NjVlNTRkMzM0NDBkNWVmY2Y2YzY3MjhiYmFlYWUzYzFhMWYzMTZhZjE2Y2E1Mjg2MmQ1NjUxZWQ5Y2M4MzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3MmNhMjI2ZjMyZGIyY2U5OTQyMzhkYmUwMGIxYWI4MDY0ZGMzYWJjZjAyOTllNjhiZTk0YTkzN2RkNTgyMzEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFhZDcyNDdiNzAwMjEwZWY0YWQyMzQwZGU1MzVlNmEwYTdjODdhOGZiYTQyYWJlOWI2MTE5OTMzYjNkYmM5NjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIwZmNmNDEwNjhhZTU1ODJiNDBlYzAyNTEzNmE3ZjMyYzMyZDI2ZWYwOWE2MTcyMWZiYjI4NDg4MWRkNjYyZDQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cbb8b994fee7499191d168e705ec1152",
+      "statement": "uses_proxy skips localhost addresses unless proxy_local is set and skips hosts matching proxy_exclude patterns (CIDR networks, wildcards, or domain suffixes), separated by commas, semicolons or spaces.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/proxy.py#L27-L43",
+          "version": "repo-lines-v1:sha256:57c970eebb9e5934ae415530da72d3ad520a5d2cfb18afdcca2271ae61831ecd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzY2FlMWRlYmEzMTdhYzI1MzUzNGE2YjM2OGIyYzQ0ZTgzZmIwMDhiOWRjNmJmZjU4YjUyZWY3ODUxMmEzYTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZGIzMDcxNDRjNmUxM2RhNjNkNGU5MzYzOWQwMTI3NzYwM2NjNTEyYjM5YjlmZjQ1Nzc0NDVkNzNhZTMwMmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhYmJlMzI0OWJkM2UzNjkzMjg1OTU2MWNhMDBhNzExNDZlMmY3ZjM1ZGI5ZWI0OTgzNTQxZGQyZDAzMmY0YmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZmMjRjMDc3YWMzZDVhZTNiMzgxYmFkMjg5YjI0NmY0ZWY5MDZlNDE3YjExZDkzYzkzMzhlZTVmNDkyOTAwZTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_720e1e4746ea49a4a4f5d1d73ffd91b6",
+      "statement": "With proxy_dns auto, the proxy resolves host names except for SOCKS 4, where names are resolved locally preferring IPv4.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/proxy.py#L142-L150",
+          "version": "repo-lines-v1:sha256:bfed9300decd634c46d6f9af1306bfedb1bfcac28ab8908aecfa5deea7a303b1:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWU2YzFmODEzMGQxZGVkZDg1OGJhZjQ1NTllNWMyZDQ3NDg5YjQwYWExMzg5MGMwMGI1MzA5OGI1ZTc0Y2VlZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTQxNjRlNzk2ZDhhZjMwMDFhMmM1MWRiYWVmNTRjOGMzYWQ0MGZmNDhmMzgwYjVlMmJmMDNiMDM4YjI4MjRiZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGQ0ZWRiMTBjNzE0NTAyNWM0MTc4NzQ5NmM4NjU2MmFkYTMzYzgxMDdkYTk0NDQwODkwMTk0NmM2YjNiMjViNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODYwOTVjZjBmNTczOWRjODc3MmVhNTZlYTkzZDI4YWQxZTQ5YjFmMzc5NGFiYzQ5NzZkNTRjNjIwOWJlNTE5NiJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/proxy.py#L191-L208",
+          "version": "repo-lines-v1:sha256:24b697f2787658be722692a5c9b6ab45c46f03cbd7db7de3820c61f088b3034c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBmZjZjZWQ0MTYxY2ZmNDc0MjBmZWU4Y2ZhMzI2Y2IwMWEzMDFjYTdkZmMwNWMzOWYxNWQ1MDhiODg4MjUxYWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQzMjk0YWJiZGZjMzRiNjNmMTE4MzEwM2Q4MzYzZmRlY2NlYTEwMTY2MDE1NDE4Y2QzYjQxYTIwYTdlY2U1MTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU4NTY3NTc3Yjk2ODc0YmU1MDU1ODcyNzc5NzhkMDAzMjkwMTdkMTBlM2ZkNGMwOGNiNzYwY2I3NjVlNTFhODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjExOGE1MzUzZmFkNTZlODU2YjlmYTA5MjBhNzg5NmM0N2ZiZGNiYjE5Y2U4YmQyNGEwMGNhYzQyZWEyNmZlZGIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2c90c1db8ada4c318dc4c2a928d10400",
+      "statement": "The HTTP proxy reply is read byte by byte up to the blank line, capped at 16 KB, so no SSH bytes are consumed.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/proxy.py#L257-L278",
+          "version": "repo-lines-v1:sha256:8d0514a8b2fd143a1c0d088e1f449777fe33cbbc10d4faa65b84b629e1737477:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZkNThiZDc0MDg0YzUyOTRmY2JiMmYxZTQzMzlmM2MxZGQ2MTAwY2NlNzZhYThjZmVmNWJmMzliYTQ5MDQ4MWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZkOGU4NDAwMjViMGI4MDg4YzAwNTk1MDFhMzlhMTdiMDg1Mjg2Njc2YjRhZjgzZDE3YmEwZTI4OTljY2U0NDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNkMDM0Yzc1MDI3MDA2MmUwYTMzODZjZjFiNjVmNDM4NzI4OGIyNmFhNTRiZTIwNTY0ZTNlOWI2MGIxYmYzZDQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_614e0264868d4747a6e6d1a9f43049cf",
+      "statement": "The proxy password is asked at most once per connect, including across the host-key retry.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/proxy.py#L148-L150",
+          "version": "repo-lines-v1:sha256:d1b93506dd142cbefaede77949e2e50c9916af34f1b9675361c94b5c9e4e51c7:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzAzNWNjYzE5N2ZhZjNlZGQ2ODEzNjM1OGI3NzNkMjJlYmM2YzdiNThmNTVjZThkZGU5ZmJmZjkyODcyMjgxMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTQxNjRlNzk2ZDhhZjMwMDFhMmM1MWRiYWVmNTRjOGMzYWQ0MGZmNDhmMzgwYjVlMmJmMDNiMDM4YjI4MjRiZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDE0ZjljZDdhZTZiN2NlMDJkOWFhMzM3NjI5NzdiOTgxMWRlZWNiZjlmMWMyNDEyYmY3NzYxNTFjYjc3ODhjZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODYwOTVjZjBmNTczOWRjODc3MmVhNTZlYTkzZDI4YWQxZTQ5YjFmMzc5NGFiYzQ5NzZkNTRjNjIwOWJlNTE5NiJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/proxy.py#L183-L189",
+          "version": "repo-lines-v1:sha256:2dad229841255665a6359ecc53011059f3ba003be53a0352927180d09f6772eb:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNWQ5MWRmOGZkM2RjMDQyMmE1MzIzZjM2ZTc2ZTBhNzc3NzczOWJjMzk0ODg0Zjk5NWEzMTJhY2Y3MmRmNTE3MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTgzM2YyOGYzZTJjZTRlNGUwNzdiYzYwNWI5ZWViNWE0ODM0ZmMwZTE5YTlmYTEzZDY0YWM0YWEwMTU4MDFhMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2JkYjBkMjg4NGNkY2NmODllZjI2ZjUxNzhlZDI4ZTNiNmM5NTUwNGNmMDIzNmIyZDMxZTMxNGQzM2E1ZGQ4MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTkzYmNhZjRjNTY2YTVjZDExZjA2YTUwNDg3ZGM1N2NjODY2ZWJkMDdlNGI0ZTliNTEwY2U5Y2MzMTlhNGQyNiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_f4ced30b34d04d3cb30091dbfd23f2ef",
+      "statement": "A local proxy command's stderr is collected separately (last 10 lines) and reported when the command ends, instead of being mixed into the SSH stream; on Windows it runs without a console window.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/proxy.py#L64-L136",
+          "version": "repo-lines-v1:sha256:13fc01a9e10334d0dbc2b2101570a56f2194dd1141efd5df56e4a0824e65217b:eyJzZWxlY3RlZExpbmVDb3VudCI6NzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ0MDFkZTk5YWRjZWIwMTk1OWMwZThjNmYwY2RiNGFiZTFkOTJiYjZhNjg4MTQ5MTk5YmRmMzBlOTlmMzMyMGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRmMGE3OTkzYjRmYjZjOWEzZjZiZmI0ZmE2YTM2NzNiNTEyZmFiNjM2NDIwMDk4MGMzNjZlZDdlNDYwMGU5ZmEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiNDY4YWQwYWJkNWRmODYyMGJiOTRiZGZmZTg1ZjQyMTEwZWNkYThhZjc2NGE0ZDVjM2JhMDZiYWE1Zjc3M2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU1NjM4MzI3Nzg3OTk3YzFmNTU1MTNhYjg5NTUxOThkMzg5NTQzMDAzMjAyY2RlYWMwZTc0ZWMzNjA3ZjVmZjUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_243deef46909418f8d35d47a172c1438",
+      "statement": "proxy_command substitutes %host, %port, %user, %proxyhost, %proxyport and %% after splitting the command with platform-appropriate quoting rules.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/proxy.py#L46-L61",
+          "version": "repo-lines-v1:sha256:093fa611909dce73d0a73da1ed5984954053b5f44e1b79a46a48bb6a6556de87:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMyMDQ0MDMxMDAxMWFlNzJkOGI3MTM5MWE3YzI2NWYzMDg5NjI3ZDUxNGMzMzA4YzJhNTA1ZTVkOTVmZjRlMDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU0NTI2YWZkNzhlMmJiZGM0N2QwODZmNjliOTdhZjYwZTQ5MjAzZDNjNDlhMTAwMDNmNTQxNzEyODlmOTYxZTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjIyOWI0NGVkYTIzNTVmZGEyZTljOWY4YzY5OGI0ODc3NGZjOGFkOGQ0Y2Y1YmVmZmJiYzE5MjhkNGRlNGZhNzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkxYmVkNzU0NGQ0NDJhYmM0MTA2YjM2ZWRkYjcxYTJjZDExYWUwNGYwNGUxZTM3ZjNkNThjZjIyODE2ZGJhYTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_80f61076f9a64c9ebbc7335f6c8a300b",
+      "statement": "A jump command (or subsystem:NAME) runs on the jump host and its stdin/stdout become the transport to the target.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L525-L548",
+          "version": "repo-lines-v1:sha256:a01248e97f7adcbf7fb4937bd14c7d02f1d95e0cec960b690d86caab9100417d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZkMGE1MzEwZmJhYTVmMTU0YWFlNzUwNDU3ZmNhYmU2ZDRlZDY0MzUxN2NlZjg3NDgyODdjOGJjODQ5ZjNmYTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZkMjZkNmU3MDNhOTc5NTVkNzAwZGIwMzczYjM2ODE2OTYzMjIzMzBmODJjOGQ2YWNjYzM3NjYyZjM1OTU0ZDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcwZGZiOWNiMjQ5ZTY4MDdjYTQ4ZDU5YTQzNGJlZmJmNGQ2NmNjNTIyNGI3MDNkMGRlOGY4MTEyYjg1ODk4MjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU4ZDFlOWQxMjdmNmNhZDkwYzNlNjUzZjdlNTQ4YTgyNTZkZTkzNzMwNDNhMDZmNGQxZWJmM2RmNTIyNTQxZjUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-18T13:56:19.871Z"
+  }
+}

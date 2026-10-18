@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:6dde2836fdd027613b58f71ab1d0cb6c143f555588ef5c08c1f04d2ba5a626a9",
+  "claims": [
+    {
+      "id": "claim_98a3e4e1c81545e0807d3759beff19f9",
+      "statement": "Transport modules are chosen by profile kind through profiles.TRANSPORTS and imported lazily by session.open_raw_session, so serial-only use never loads asyncssh.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/profiles.py#L386-L388",
+          "version": "repo-lines-v1:sha256:f6e064a263d15a76b6d9c15e11fae6635b1464ccb293cace0311f8b3dd1612eb:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGQ1NDI2NjhmZTRmMDI4NGU0NzVmNzI2YmVkYWJlNTEyNmYyNjE2ODUxMTZiY2JiNTJjN2Q2ZWUzN2QwMTI5MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDI0ODk5N2ZmNDViYjQ3MDZjOWNlNzlkZDg4YTNhMTZhMGEzNmI1MjhmNzg1OWM0ZTQ5OTIyM2FlNWRjNDkwNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmZkMzNiOTQ3YjEzYzg5MTA4ZGM4NGY4YjY2ZDU5N2IwZWIwNTNhNWUwNGE0ZWJkNWJiMTQwMTNjYjQwZTQ1ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZmU4ZDVmNDkwOTY1ODEyNWRiYzQzMmNkMDU0ZDQ2M2Y4ODgxNDRkNjViMTBlZThmYzlmNjZmNWZjNjEyYjMyYiJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/session.py#L485-L530",
+          "version": "repo-lines-v1:sha256:521746e536880a8cb64ef387307c462a817ed78bb5d7e55d38d192da3f8af90e:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZWY4ODAzODU0ZDg1MGFmZTI0YzFjOWZiNzU1NWI1M2UzNTUxNzc0M2FhNWQ2Y2QxMjg1MmU2NTE5ZGU2NmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhODIyNmYwNWI5Yzg3NTcwNTNmMGE5MmZhZDE0OGFiYjc1NjE2YTM0ZDExNTAwYmVlODY2M2QxYzY4ODg2OWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE0YTUyYzMwZmU5YzNkMzdiYWY1OGMwNjExY2RmYzNkNjVhMzQ0NWRhMzk0Mzg5ZTU5MWM4YjgxMTYyNTE3MDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAzZmRmZTM0ZDQwNTYzOGQ0NjcxYjkxMTQ4Mjk4MGU3ZTZjNDUyNzRhOTMwZTQwMmU2ZDIxNzUzYmM0NDZhMGIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4edb2abc1c8c44f9a45bb8214c4c5af0",
+      "statement": "Each transport module provides open_session, describe_error and ERRORS; is_expected and describe_error only consult transports already loaded in sys.modules.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/session.py#L485-L521",
+          "version": "repo-lines-v1:sha256:38d4ac2a487b39b71573979ba7ecdc75fea57a6cf2c6ea8c25a923e0fc45ab26:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZWY4ODAzODU0ZDg1MGFmZTI0YzFjOWZiNzU1NWI1M2UzNTUxNzc0M2FhNWQ2Y2QxMjg1MmU2NTE5ZGU2NmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY4ZWE3ZWYzNTgyOTY0MThkYmNkNDFiM2M3NmM3Zjc2NzA0NGE2MDEzYmUzOWYyOGJhYTk3YjQxZjRjYTdiMDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE0YTUyYzMwZmU5YzNkMzdiYWY1OGMwNjExY2RmYzNkNjVhMzQ0NWRhMzk0Mzg5ZTU5MWM4YjgxMTYyNTE3MDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY4OTY0N2NhZTUzODhhZTIzYjIxYTVkMjgwNzI3Zjc4YWI1NTViYTE4NjJjZWE1NmIwNjU1Nzc3MmU2NDU4MTAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2c67dfc880ec4926af54cfca1e9aced2",
+      "statement": "open_session validates the profile, opens the session log before connecting so the SSH packet log sees the handshake, and wraps the transport session in a TerminalSession.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/session.py#L541-L561",
+          "version": "repo-lines-v1:sha256:11b13ba992145eecaf460875529ae983ba4a85bf66b9201b3cd3e5d89f88c2b3:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY2ZjcyNTRkZjE4YzVmZmFiNGNhYTk3YjVlN2ZmZmVmZWQxOGVkMTY2MGJjNDk1NjNkOWJjYmRlYjJiYzNmOWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEzYjIyMzQzZTljNzU1OTIzM2RjNDZkY2VhNTg5OTY1OGY2Yzg2YTczMTRmYTQ2MjA5OGYyOTI4YWY2YWQzZjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU1YjFkNjRiNGFiZjY3NTMzMGI1Y2JlNWQ1YjZkZmVkYWY1MGUyOWM0NTQ0N2VhMzIzZmQxZTY0ZTNkZjk2ZmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_081e42de8be4471a9103fa7d73c7a6ca",
+      "statement": "cli.main maps errors to exit codes: KeyError/ValueError give 2, expected failures 1, unexpected exceptions 70 with a traceback, and KeyboardInterrupt 130.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/cli.py#L916-L951",
+          "version": "repo-lines-v1:sha256:efb2161abf4a22656f610c53b9c191c800f00695bf6841882cf11c21fb6580b7:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU0NDBhYmY0ZDM3NmViNGUzYWUxZjNiZDU3Y2FhYjlhMTg1OGJlMjBjNTdlNzRmN2YwNGExOGQ1NTI4ZGZmMWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIzMDg2NmUxYmNjNWFiNzZlM2VmNTkwMTJkMGFkMzlhNjg3YWJlMDAyM2I0MzhhY2IxMTMwYTE4ODI1ZTgxOTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMzYTcwMDU4M2Y2YzNiOTdiYzQ2ODExYzZhZDgyOTdkNTEyNzE1YTQzOGU1NzFkMDdmNzc1OWEzMTQyNGU3OWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA5OWE2NTE1Mjk3NGZmNTA5ZDI4NmM1YzRjNTk4MjIyMmFhZGExYWQxZmM3ZGVhYmI4MzhhODdlODg3OTlmYTMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6d2c3bfffaf4469586f993b055367228",
+      "statement": "The CLI imports the web server, GUI and TUI lazily inside their command functions.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/cli.py#L750-L770",
+          "version": "repo-lines-v1:sha256:5b53353f97b91f422b1fc00b6304ff7e0b85a8ba8fd4bc6cbabf7fc7cc587636:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2MjI2NWZjODM1OGY4YjkxMjUxMmZiZWE5NTJkNzRiODczZjlmOWIwNWUwYTJhN2Y4NDBlODkzNmRhYjBkY2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiZmZjZDE3MjkyOTU3Y2VkMDgzOTc3YzM0Y2FlMDJmZDZjNzMyNmE4M2FkOGU1NmQzNmU3Zjg3ZTU4MTUzYzUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgyM2NkZGM1MmRhNDlhYjEwYzFmMjNmZGIwMzlkMjJhYjVhMmU4ZTIzZTYzMjg5YzlkMTYzMWZhYjhmMGZiZGIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d8e4963f91324ebaadebc67c4383153c",
+      "statement": "The desktop GUI runs the web server on its own asyncio loop in a daemon thread (BackgroundServer).",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/gui.py#L19-L67",
+          "version": "repo-lines-v1:sha256:07aae0b49163069a3a4102f0c064b3dab1b3bfddb0450452789ef75e3998fc1d:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQwZjQwNGU1YTY5ZDg4ZTQzYjcyOTExOTdjMTA4Yjg5MjRhZDFjNmRhNTAwZDQxMjgxOTljZmRhMzFiNDk1N2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzNzY3NDUxMjQ4NGZmOWZkMjdlZWM5NTgwZTI1ZmIwMmY0OGY0MjY3YWE0NjE4MTk5ZjhiY2ViYzgzZDM5ZGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY3NmJjNWM4NzBiZTZjNDRjMWM2ZjE4Nzg2ZDVhODgzNTQxYTJjNGJiMzlmNzhkOTViMGJiNjE1MGVkZGFiMjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjcxMzRkZDBiMWVlZjM0ZGU2NTQyYTQxMGRmOTk4M2ZkYzI0MDlmNmNmYjNlMDQ3MzA4Y2UzZDRiOWNjYWRiMDAifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-18T13:56:19.871Z"
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:3de67d35d45dffc689d06d91b7a79c5513860b16e80af26b66fc77313afd7018",
+  "claims": [
+    {
+      "id": "claim_3f783f7cc04643b9a85b51b83f90e067",
+      "statement": "RemoteFilter removes from remote output the escape sequences whose terminal.allow_* option is off (app keys, mouse, alternate screen, bracketed paste, resize, clear scrollback, title, charset) and passes data unchanged when everything is allowed.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/vt.py#L53-L135",
+          "version": "repo-lines-v1:sha256:c4645264e604a8b998ff1185c5bbc2fda9e89ff77c7262c9a684c6dc81039e76:eyJzZWxlY3RlZExpbmVDb3VudCI6ODMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk1MWQ5MWViZGQwYTJlOWMzMTVjYmExYTFlZjYxOTYyMDExYTA4ZWI2Y2JhMjIzNGNjZWNjZmUxYmRjZjRkOWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImViNWFiYmY4NDgzZjRhMmQ5N2Y0NDEwZTg1MzM1YWMzNmYwMmQ3NmM2OTlmMjBmZjYxMDRlMzZhZWFiMzM4MzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY0ZDIzYzhmZWE1OTBmMjgyMjgyNzdmOGEwNzBiZGM3MzcyZjI2ZDMyN2E0NjEzOGFkMDUwMzI2NzViMmIzMTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNlNjRmNDNmYzQyNjhlNDBmYWEyOTlhMjY1MGIwMGU2NjZiODQyZDY1NDBmZGFmOGNkNTI5OGYzODJjMzE2MDcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f3f09b0649264cc9a624a5fac9ba1dc0",
+      "statement": "A sequence cut at a chunk boundary is held until complete, and one unfinished after HOLD_LIMIT (4096) bytes is dropped rather than passed through.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/vt.py#L59-L59",
+          "version": "repo-lines-v1:sha256:d39916b862fe68895ae996a6c90c9af528216ed69a222ea25d4186e95a13d502:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDM5OTE2Yjg2MmZlNjg4OTVhZTk5NmE2YzkwYzlhZjUyODIxNmVkNjlhMjIyZWEyNWQ0MTg2ZTk1YTEzZDUwMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDM5OTE2Yjg2MmZlNjg4OTVhZTk5NmE2YzkwYzlhZjUyODIxNmVkNjlhMjIyZWEyNWQ0MTg2ZTk1YTEzZDUwMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZGM0MWVlZDYxZmVmODE5MWRiZGUyNzAxNDRjNTljNDhjZjZhMDQ1YzViNTVhMzg1OGQ1N2VlNjUwYjRjZDFkZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjFmZmY1YjQ5YmViNjcyNGMwMmQyMjZmNTVhNmZjOWMzZTQ2ODYwZDEyMTM1YjBlYWFiYTQzMWViZjI1NDIwZCJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/vt.py#L95-L107",
+          "version": "repo-lines-v1:sha256:20717f94fa5c086c110b613da73db1b3d67f735fa1da19d692e8418f911344c8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcxNWFkNmM0Yzg1OGRhYWE5MTk4YTVlNWM3NTU2ZjA1YTU1NDViMjE3ODhjMjE4OTcxZGZkODg4ZTE5NzdiMjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjljZmQyMWVjM2M3NDkzNjI2YzEyYWJiMTM3YjdlMzYyOGY0ZGM2MGViMWZlNzQxOTJiNWQxNTNmZTI1OTYxOGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJmNTkxOWExZjU5ODIwNjgyZTZkYzk0ZmYxZDQwODAyZGMwYjU2N2E0MWUzMjUwNmNmMjRkMjkzMjg3ZjEyN2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ3ZjZlYmM4OWM3MjIyMWMxMTY1MDg4N2Y0MTcwNGI0ZDZlOTliMWZmM2FhMjJkYTJlMWNmMWVlZDRmMGVjNzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8f27401d8bde4efab9c1c300448d42a8",
+      "statement": "remap_keys translates xterm Home/End and function key sequences sent by UIs into the profile's home_end and function_keys styles.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/vt.py#L12-L35",
+          "version": "repo-lines-v1:sha256:b10ebe006cc8c4bb488653cb7ada94ca1ac02e5f3817e64e41b9c1915c605803:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzNThkNTU3YzY1ZTUyZjBhZWU0YmVkMTg1ZjcwNjE5NzQyODQ1OWEyZmQ4ZDg4MTU0ZWZmYzAwODYyODNkNjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlkZGUxMmI1N2Q4NjhjNWY2ZjE5NTBmMmE0MDg2MzhhZDUzMzlmNzA2NTY3MzZhN2QwZWIxOTFiZmU5MjFhNjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVhNGRhZGIyMTQ0MTg2ZmEyZDY4ODRiOTA0YjNhYmRjM2JlNGFiZDQ1ZjBiNjU0NjE0NjA3MzQyMTc1NmQ1ZGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY3YTFhMzM4NmEzZTYzYzJhMDc2OWUxNTdhMjBiNTlhNDc0OWU2NGU0MjYzMjYyNGI2ZGViNzBmNzQ0Nzg0NzAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e15d3f5e76cb42a6a3b52e3cd35fc349",
+      "statement": "PrinterCapture diverts text between ESC[5i and ESC[4i to the printer file instead of the screen.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/vt.py#L149-L178",
+          "version": "repo-lines-v1:sha256:563c2a72345980201cdae8ccb5de460ea5924166349af5a15632e751f63cbf99:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMyNmQxY2Q3M2I0MzJkNzYzMGZjNWEyNjFkYmJmM2RhZmVlNDhlYTgzNjQ2MDY0ODAwY2UwZTVjYzViMzQxNzAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMzMDczZWI3ZjgxZjJkMjVhMDlmZjBlZmExMjFmNzRjNmNkZWVmM2YwYTM3YmVmOTJiZTI3YTVlNzUwYzJjNzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEyOWVhMGQ0YzBlNjA5NWM4ZmFmN2EyOTNkYmI4MjJhY2E1MmM1N2FiNmJmMWQ1NzJiODYyNDgyZmYzMTVlMjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY0MTI5ZDY2ODY5NTJjNjgzMWY1YWJkZDk0N2JjMTgzZDFmODY3OTE2MDFiZmI5ZGE3NDgwNGMxOGQxM2M5N2EifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_98d997eae8e0469eb1ebe698a18cc924",
+      "statement": "BellLimiter allows at most one bell per 0.25 s and silences bells for 5 s after a burst of more than 5 within 2 s.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/vt.py#L181-L201",
+          "version": "repo-lines-v1:sha256:3e6786cb9d21958f3e886fd5afdbd15e7d6bee1771aa3c88fb002322ba10ce04:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA2NGU0NjJiZmFkNTFjYWE4NTY2MzFmYjdkOTVmNmVmYjRlOGZlYzZjNjg4ZDYyZGM5M2VhMzZmM2VjYzlmNWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxMDQyNGJkZTNhZDkxZmY4ZGFlYTgxYTRhYTUwNGIyZmU5ZDM3OTIzZjU5Mzc5MTUyZDU0M2Q3YjRkZWFmNzEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk4MTZiMzM0M2ZlYmUxYTVmNmNjNjE0MDZiM2Q0YTk3MWFjZGNlNjBiYzA5YjA0YzU4Y2Y4NzU3ZDkxYThlNDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIzMDc5YjQ0NTI0OTNhOTNhZTkyNzNlNDYxMzcwMzYxYjNlNTEzYjFkODkzYjRlNGQwNmRiMWY2YzIyYzhhOGIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b0d14412f71044dbbba94f7fc9e4808d",
+      "statement": "clean_paste strips control characters other than tab and line ends unless paste_controls is enabled, because an ESC could end bracketed paste early.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/tui/terminal.py#L342-L342",
+          "version": "repo-lines-v1:sha256:641fc155a1640f571e5634823e0c842df7d67c835597dcb4a87afe91351d6733:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjQxZmMxNTVhMTY0MGY1NzFlNTYzNDgyM2UwYzg0MmRmN2Q2N2M4MzU1OTdkY2I0YTg3YWZlOTEzNTFkNjczMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjQxZmMxNTVhMTY0MGY1NzFlNTYzNDgyM2UwYzg0MmRmN2Q2N2M4MzU1OTdkY2I0YTg3YWZlOTEzNTFkNjczMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZWE3YWUzNTE5YjdlZmNlM2Y0YTZlZDcyODRjOTA4MDgyNzI0N2QzNDFkZWFjMzIwOTZlZGUzYmMyMzM2Y2VlZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOGJlNWM5ZDM0NGRjYzhjMmMyMGMzNThjODc5MGI2YjY5MGIyM2UxYjE3MzdkZTliYzEwZGE5NjhmZjczYWE2ZCJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/vt.py#L214-L220",
+          "version": "repo-lines-v1:sha256:6a9ef936fc62aeeb70b2eff5c83a83072dfc6ff57b9ea71f7630e5a4e41f1adb:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjVjZTg3OTQ0ZjY1YTZiOWJiNmE5ODUyZjExMzg3MDhhMGI0ODVkODZiN2ViNTdjMjJiYTI4ZDY1MWYzMzc0YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGJlZTBmNjY1YmY5MDYzMTllYzVhZmI5MTRiMDk5ZDEwYjJiMmM3ZTQ1OGMwMDA2MjA4ZGQyYzA0Zjg0N2ViZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzUxMjkwMmNkZDdmYThkNjZjMTdiYTcwOGFkYmMwZmUxM2FhMzY5MjExZmQ2YWIwZDMyMDI0Mzg5Mjk0MzFhOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzBkYjhmYjE0NjE0NGY3NWZlZTcxN2Y0M2NkMDViNWM5MmI5NWMyZjc4YzdiN2Y5ZDMxYzUxYjAzZjE5MjhlNiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_18600770dac34c8fa26d869cfa437f61",
+      "statement": "LineEditor sends a line only on Enter, keeps a 200-line history, sends other control keys immediately, and in secret mode neither echoes nor records the line.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/lineedit.py#L31-L176",
+          "version": "repo-lines-v1:sha256:e20fa1c942ac5529bfd04cea2dcf364d2ecfc52c5447bd97ed0ea282bda90184:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQ2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJhZWRmYWQ4NWUzMzEzZDBkNTBiYWUyNjNmNmRlMDdlYTE4YjU0OWUyMjg2NGFkNmM5NTEwN2M2NmQ2ZGI1MDI3IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIwZjBkODBkMWNhYWQ2MTAwYjM3OTk5MDRlZGEyNTEyNDBiZTcwOGNiMjJhMTBlNzIzZTU3ZmFlZWExYjI1MmI3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIxODMwYTIzMDBlZDQ0ZTViY2M3MGU4NTA5NjdiYTA4OGQ2YjkzMWI3NTIzYTg4YmRjNTlmYWMwYjQ1ZGE4MWMzIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_e3133d466b6342b4b2f893d50f1d2587",
+      "statement": "palette(theme, colours) merges validated name=#rrggbb overrides into one of the built-in themes, falling back to dark.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/themes.py#L49-L66",
+          "version": "repo-lines-v1:sha256:3bbd3b371a212f8d2329527155b69d9f3ee3550ef710fe39dd658a444d8e1399:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkYWExOWNiZGJlYzY3NmFlZTk4YThkYzY0NDZjMjBlNzIwNjcwZDIxMWI2NGMzMjQ4ZDcwMjRmNDc2YjFlODYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyOTY4YTQyOWM5NzQ3YmZhMDEwNjlmOTg1ZWMwYmYxMzQ0MTVlN2YzMjc0MGU5MDU2Mjg1ODk1ZDZjYjRiZTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRkYzBhNWJhMDlmZmZjZDY2ZjM5M2JjNWZkZWVlZWZhZWExMTM5MzA4Y2MxZDU1NDYxOGRmZGExMjM5ZGY4OWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-18T13:56:19.871Z"
+  }
+}

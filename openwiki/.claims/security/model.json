@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:1c68f976ac5a912e73c11fade3da12c50ccc036c2fc7bb8192fcaf2a719986eb",
+  "claims": [
+    {
+      "id": "claim_e90f11ef8fd84d8dac43a450fdb8909a",
+      "statement": "Error messages shown in every UI go through printable(), which drops control and Unicode format/separator characters from remote text.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/session.py#L25-L55",
+          "version": "repo-lines-v1:sha256:90789a3edd12cffb15426f2bd9baebfd6cabaea6181388ee7b9873cb0239dca5:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhjYzJjZjM0NjZjOTM2YmNlOTZjYmU4MzZkNmNjOTRlYzEyMDg4NzJjM2I5ZjNlMzMyMzc5YjcyNDczODI0MTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzYzY0MGRiNzRjZmQzYTE2OGFhMmNjNjJlNTFiNjlkYjhiYTQ1OTYyZGIxYjgzYzc2ODA1ODUzNjAyYjZiOGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI3MDliMTVlZjkxODNhOGI2N2Y3YzM5MWM4OGI4NWE5MDc3NTcwNjkwY2Y0MDYzNmE1MDVlMjc3NTQzNGZlOWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZjMWYwMmZkN2VjMWQ0NjJjMGNiODE4Yjk0OGZmZTRmNzE1YjJjMmM0MzI2MzBjMjMyZGZlMzRkNDI3NDNmYTkifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/session.py#L502-L504",
+          "version": "repo-lines-v1:sha256:5fb3f2caa56a7acfacf8700312a64cb6c714fe24d51a9b58dc8174b390093d4d:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjUxY2EyMzE2MGZkMTljNWM2N2M0MjI4YTZmYmJhZDcwMTllMTVlN2EwYzE1Y2YyMWM1ZjcyODIzZjJhMDFkMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZGZmYTM2YTNjMDZhMjk1MGNmZDczOWQwZDUzYzFmMzgzMWJhOTRiZTUwZjNlNTQyODljNmIyNTA5NWM3ODBjNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGU3YjBjMTk2M2Q2ODJhNWY4NDMwMjdjYTIxOWJhNTk1NTZjNDg0NzVjNDQ1NzYxNGRmOGY1OWM5Mjc0YmU2OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTI3MTAwZmM0YzcwZjI1ZWYxNzljZjFhZjNmNmEyZmJjZjIwYWVkZTRkZTQ3YWRkZmE4MzI3NjEwMGViOTY4ZiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_bc784fec8ce74f2fa1317d885f8df338",
+      "statement": "Keyboard-interactive prompts from the server are prefixed with (user@host) so the server cannot impersonate termdeck's own questions.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L145-L161",
+          "version": "repo-lines-v1:sha256:8b57c0cb84e26a4b16343460011ce81526295bc1af44ec14f421c8251cd2c21f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0MTNjYzJhODJkNDQzMzk3MDA5MGRkNmMxMjVmNjVlNzhmYmQ3ZWEzMTdkZTE2YmY5ZGRjZTU1N2QwOTY5OWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzODQyYzJmNjkyOTA5YTc5ZmJiNzU1YTYyMjI1ZWI0YWI1ZWY2NzA3Y2JhZjllMTIxOWQ5YWYzZDM3YTI2MGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJlZGQyMWU0N2YyNWMzOGNjODM3YTMwYjMzOTY4YzA5MjI4ZDY0MmNiY2M4NDc2MjMwYTI4NDVkZDQ3OTNmMmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjExOTAwNzQ5MWE2NzZkY2ViMDFjY2QxZjU2YzEyMDZkOGZlYTU4ZjQ1MTU0NjFkYWM3YTE0MjVhNDE3ZDVlYjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8d14996793094d0cb41b5f4ce740f172",
+      "statement": "When a host key is replaced, the old key of the same type is written as @revoked in termdeck's known_hosts so copies trusted elsewhere are refused.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L43-L65",
+          "version": "repo-lines-v1:sha256:97b219bf27d77aae68fab4d09d42ef34bf5d61b8345da06d3b69b822b6046544:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZmYmJhODE2ZDVhZmFkM2RlYjAxNTY1YTgzZWUzNTE0MDViZDM1OTEyMmM4OGMwZDEyYzQ1YjYzMWU0YTQ2OTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkNzU4MDI2NGI1MTNmZDViZmU0ZDU1OGE5NjU5ZTdjZjk1NTQ4YzdjMzE4MGU0NTczMGIyNzQzMjcwYWNiYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY2MDFkYTk5ZjlmMDMxY2MyMWI5Y2YyYTlmMDM5ZTlmZGRkZDc0MTA2YWZkNWZkODU4NGJmOTBiZjBiYmE1YzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk2NTA4M2U5MWQ4OGE5OTU5MGExMzZkOTEwNDNmMmEyNDk3MTM1ZTA3OWJmZWM2YzJjOWY3ZTU3ZDIyYjgxN2UifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f1994ae0b9364d69ae58d640e40fb352",
+      "statement": "Pinned trusted host keys bypass known_hosts: any other key is refused without asking and nothing is saved.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L305-L331",
+          "version": "repo-lines-v1:sha256:ffb84b3de6223715581b33533247552e2bdb489bf77467540378b13ce18e32e0:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEzNWU5YThkODFmYzNmZTYxOWUxMTRmZWJlZWE0YWVlYjAxMzY5MzZkMzQyY2I4YjBlMWMwYTE4NzAxN2M2NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk4Y2I1ZTkyYjdmNDUxMWZlYjEzZWQ0YmU4NzIwNzMzNTAzMTlhOTI0YzZiM2FhZWUyYmZkOTM5N2M5MTg4YjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkwMzliZTFjMGVjNTYzNmViYzc4Zjk3ZGI3MzIwODM0MmY0ZTI5YjY0MDEyNjE5ODcwYTU3NGQxMWJhMDU4ZjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI3OWM1YjVmNDgyNzM5YjUzMGY4NTUwOGNhOWE3NjEzOGQwYjlhMjVjZjkwMDY5ZjU3OTE0YjQ0ZjZmZWY1ZmIifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/ssh.py#L95-L107",
+          "version": "repo-lines-v1:sha256:35ae3a225c1565fd9996e2b1c35b1089ca51bed328f99bbda85097b770419e71:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVjMDkzYjIwNGRlZjMyN2M1ZDU3Y2I2MzJkMzNmMmRmZGMyNjYwMGNkM2U2YTlmNWJiYzk4ZWRkZmNmMDY3MjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI5N2M3MTI0N2FmM2NkMWVkZjU1NWE3ZDEwNzU5MzE1N2Y2ZGMyYTIyYWYwZGU4MmU3Nzc0YWJmMTBmOGFkZTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdkOTQ1MzJmMzRmNGM3MjAzMzEwYTM1MTgyNDkxNjdkNjZlNzczMGJlZmIwMmIzYjI4Zjc0NWJkMWY4MGI5OWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ5NDE3YTNmZWZlYTA0YzczMjZjNjljMTdjNWQxZDUyNWZkNzcyMTZmYjYxYmE1ZjMyY2ExYWQ4ZmI5YTFlZmUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7281b23551934bd29fa15dd797f67c35",
+      "statement": "The last typed SSH password is kept in memory only for a password change and cleared after authentication or connection loss.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L80-L127",
+          "version": "repo-lines-v1:sha256:dc6f090a3fb45ecbfc489170be245144453637501c2b56605b53af04917563f6:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhhN2ZkYjc0YTU1OTVkY2JiYWM4MmE1M2EyNDFiMGUzNjg5NjU4NmE2MTRlNGE5ZWU2N2YwMmI2Yjc4YjkyODgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRmZDgzMjFiYWIzZWI0ZDljYTI0ZDc5NmY4MDEyY2Y4ZGE1ODE5ZGU5NDc1ZmFkMmZjMjc5NmIwOGE0MDFhMmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg3MGFkMDZhOWJkMjI3YzMxYjU0NmM4NzA0ZjJkNmU5OGI3OTU3M2E5OTk2ZmQzY2FmMjM2MGM5NWIzZGM2ZDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhhYjhhZTI5ZTQwNWRhZmU4MmJlNjMwOGI3ZDc3NjkxZTdhMzJlYTQzMjQyYzhkNGU2MDJhMDgxNTRmODQ0ZTAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_470fa4d1e9974307bfc99c003137f9da",
+      "statement": "Host names containing characters that could alter known_hosts lines are rejected before writing a host key.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/profiles.py#L84-L96",
+          "version": "repo-lines-v1:sha256:9b1a8a43490750ac4ebabf4ef2759375c5cddb5b7d5fe250b2b40781b2ecb62b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEzZTk2ZmQ3NzY4MWVmOTk4ZTRmNDljZGUzNDZkYjJkOWNmMzY1NWJiNWM4NzA5MzZhZGIzOGVhZDU0ZWVjMDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzNTExMjNkN2RiOWY1YWY4MGE4YmU0OWI5YTA5YmZmNDEyNWNjMTQ5ZDk4MGI2NWE3OGUwNjY5ODdjMDY3NWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVjYTNmNGI5ZjlhMDQ4NGUxYjYwMTkyODMxZTFkMjc0NzkwY2I1NzZlMTBjZTk2MDEyOTRjOWRjNGU4MWJiZDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgzMjY3MmVhZDI4ZTQ4NDBlNTdjYTZlNGFhODBiOTljYmFmNzIyZWU3ODYxOTAzZDhiOTg2NGRlNDk5OWNlYzUifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/ssh.py#L49-L49",
+          "version": "repo-lines-v1:sha256:cbaf7875309fbfd79ef7d743253d2d5335f9cf3bf0ad8225b99f3b9c0c59a288:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2JhZjc4NzUzMDlmYmZkNzllZjdkNzQzMjUzZDJkNTMzNWY5Y2YzYmYwYWQ4MjI1Yjk5ZjNiOWMwYzU5YTI4OCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2JhZjc4NzUzMDlmYmZkNzllZjdkNzQzMjUzZDJkNTMzNWY5Y2YzYmYwYWQ4MjI1Yjk5ZjNiOWMwYzU5YTI4OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiY2Q1MzFlYTE4NDdiN2JjOWE4MzM3ODgwMmM3MjE1YzQyNGQ2MTJjMjAzZDg1YWNjZmI2ZjUzZTQyMjcxZmUyYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODAzMzkwMGE0NTEzMzA0MWI0ZjhhNGI1ZTI4YmMxYWFmYzM3NmJlNjVmYTQ2NzNmMGEzMjM4NTE5MGVmMGY2MyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_6723854688a8444783d764a1484c5095",
+      "statement": "SFTP uploads are written to a temporary .part name and only renamed onto the target when complete, and existing files are never replaced without overwrite.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/sftp.py#L152-L180",
+          "version": "repo-lines-v1:sha256:60f06ed203e155aa8513a79a95bd5fa1c56982ddaf7927eb782fb3350dcd2e84:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwM2Q0MzM4N2U4MDJjNzlhYWViODY4Y2JlZDE3YWVmZmYxOTViM2FjMmRlZDJmNTU2ZDdkMjFlY2MxMzIzMDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRkYTIwYzBjNmM1MWUzMDE3YWQ4NjkwNWJmZmI4ZDc3NmIxNTY2NzE4MGEzYmJkYTBjNWY0ZDgxOTBiYjRjOTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY3ZDJjNDY5ODY0NTk2NDE2ZGZhNzljYmE0MDIzY2YzOWMyZDhkNzY4MGI1ZTNkNDgwNzQzYjk0MTJkYzc2NDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY2MTNjMTc2ZjI0Yzc4YjEwYzY5MzA2YzFjNzUzODhhNWU5YjM2OThjYjI4ZGU4MDI3NGI3MjgyZmRmYjY2NTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_08f42cf9683c4bbcab00d225b4183f41",
+      "statement": "SFTP downloads do not preserve remote modes (avoiding setuid/world-writable bits), and on Windows names that cannot be stored safely are refused.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/sftp.py#L224-L242",
+          "version": "repo-lines-v1:sha256:981f25f57e0c8ccb9874a0f5ba648a430f8611a5e13207baac883eb2cbbed545:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRjZTdjYjc4MWI1YmRjNjMxMjY3YTgzODRkOWJkZjgyY2M2YmUyMzVkOTc4MzAwN2M1ZGIwZmQ0MDcwMDM0MDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMzMmYyZjFjNmQ3MmJlMjVmOTZlYzM5ODUwYjgxZmQyYWRmZDcxYmM0NzgwYjIyZWY5OWM0YmUzMjE4ZWUzNjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc0MzE2YmI0MDk1YjgyMDA0M2JmMWJhZmY4ZjBmNzljMTJjYjlhY2Y5YTdkOGY2OTgyNTc3ZDAyMTVhNTc0NTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY3Yzk1MmQwNzE2OTBmMGNkZmJjOWY3NmFmNTM3OTA3N2M0ZmVkOGVlNmI2MDJjNWJhZGE2ZGY0ZTllZDA5MjIifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/sftp.py#L315-L320",
+          "version": "repo-lines-v1:sha256:4e2b69f53af57c8caccee1aeb0dcd2a434acfe54d48dec247837af61c197aa5a:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTMzM2E4YmEyMjQ1ODMzZmFiYmUwMmUxY2ZjOTI4NmM1NjkyZTdiM2RhNThkZTZiOTkxMGM4ZWRhNmI1Mzk1ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjViMzdiNjg4OTQ1YjUxMDI4MGMxYmE1NjM2OTE3MGE1YWRkMTQ5MGQ3Mzg1YTZmZDQ0MTlkNmNkNzUwOTZlMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjRiODc0YTg1NzllYTM1NTI2MmI0MTM4ZTA4MThjNGJlZWI3OWViMTUyMWI4YmVmNDMzYTY2M2UzZmMzZDEyYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2RkMjJiNjgwMWEwYmJhMDRlOWY0NTgxYTBjZmQwZDY4YjIwM2E3ZDNhZTcyNWI3OGE1MzQ0NzM3ZDk1OTBhZSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_6f68cc2cec6b460da9f709841a495c45",
+      "statement": "Port forwards listening on a non-loopback address produce a warning when opened and are flagged public in their status.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/profiles.py#L70-L73",
+          "version": "repo-lines-v1:sha256:3983f7972e89e9c5c3953a793fb2d716ee5b90a7586b2a8f478def2050a79a0f:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDdiNjY4ODgxNTkzMDE1MzVlYWU3NmFhZDRlOWY2NjFiZjJmN2VmNzg0ODZlMjcxMjUzMjM5MGE2OGU5MzliNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTEyZjdlMmI0MDNhMGIyYTNlMjg2YzkyZWRlZDIxMzM4ODc5OTA3ZGFmZmEwNjM1ZDEzMDllZWZlZTlkZGZmYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjM1YmM0NTcyZTRiMzMxN2NmNzhhZjg2YWM1Y2EyYzRhMzIzNjMyZjNhMTZjMmVlMjQ5YTM0NWI4MGFkM2EyNyJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/ssh.py#L344-L369",
+          "version": "repo-lines-v1:sha256:17c2fec2edd5b66270e1524a723ba42bf032d672792adc05af18cb12b1ec10c3:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM1OWRiOTcyZThiYjlmMjUyN2JiNWY0MWE2NzQwZTY4YzkxYTQxMzc4YmI5OTZkNjFkZjhjOGRlNGExYTU0MzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM5MTk0MzEzNmFiODliOTk2NGY1NDlkMDQ1MjUzOGVmYzE2NWJkZjE5ODBlMTA5MDJhMjA0NDVhNjg1Yjk2ZTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5NjYzZjVkNjNkNGE0YTAzODlkM2QwYTRjOTk4ODkwM2JjYmYwZTNlYzU1YWI1Mjk5MmQyZTc0ODA2ZTA3M2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ5YzM1NTIyNWVhYjE3ZTQwMzkyYjVkODQxNTkwMTNiNDdhOWU5MjZhZTE2M2Q0MDcyYWMwNzgxZmE0MmI4MzIifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-18T13:56:19.871Z"
+  }
+}

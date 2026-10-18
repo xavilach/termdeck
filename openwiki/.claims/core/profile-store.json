@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:cdac51bc03641a3cde8d3e31f454bc8cab9a640db827355894caca81e6a21aaf",
+  "claims": [
+    {
+      "id": "claim_53f83ea67d454aa4959ff52b2f077341",
+      "statement": "config_dir() returns TERMDECK_HOME when set, else %APPDATA%\\termdeck on Windows, ~/Library/Application Support/termdeck on macOS, or $XDG_CONFIG_HOME/termdeck (default ~/.config/termdeck).",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/config.py#L12-L22",
+          "version": "repo-lines-v1:sha256:2ca5a12877b6f96614654191db6e32410a3bac380f13f4627bea25ab22abdd19:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEzNjgzODc3NTA3MWIyYmQyMDhkNmRmNTJjOWI4MzQwYzZhM2YyYTVhMjRjYjYxM2U0OTUzNDNiZTAxNjk0YTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjExMGVmNjIxZjJhYzNlOTRmNTM5ODczZGVhYjNlZDk0OWI1ZTNjZjE4N2NjYTA1ZDNjMTU0ZWI0NzQ2NmI2MWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5MWJmM2Q5NmYxYjExOTY4OGRlZWE5YTAwNGIyYjNmZWJiMTgwYmI4ZmIyMzQ0NjI1NjE0YWRjODU5NTYzYWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBhNWVlMzA1MzgyZWFmNGVmNzU0ODJkOGU1M2I0ZDA2OTE1OWM5MDFjMTgwZWNhZGE5NTgwZGYyZjc2MDUwNzgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9d6615d6e5044228a9df20d5d34437d2",
+      "statement": "ProfileStore refuses files with invalid JSON, non-UTF-8 content, a wrong shape or a newer format version by raising ProfileFileError, and since every write reads first, nothing is saved until the file is fixed.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/profiles.py#L799-L822",
+          "version": "repo-lines-v1:sha256:75ffd09441dea26208c76be6559d5e422d189082a7bf2ab906031058ffb45f92:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2NWY4OTg1NGQyYzAwMDhkYjk1OWY3Nzk0Y2RkZTg4Y2ZmNGE4MjYzMTI1NjE2MmI4YTA4NDJkNzRmMGI2NmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUyNmIxNDMyYWMyYmZlMmRmMzgwZDQ2YzE2YzBmMzc5ODE3ZGU0MDVkZTI2ZTk5ZmMyN2FkODY4MzEwM2Q3N2MiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZkNjVlYTkyMjU2ODYwYjQ2ZmM0N2ZkOTA1Mzc2ZDdlODg4MjNiODk4MWFlMjgyZDAxMmYyZjM3M2Y4MGNkY2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQzOTM3MmNiNzQ2YTc4NzZlZmU0NzQ4YzAxODQ4YzkyZWZmNzZmZWY1NDVhMjZjZGM5ZThjNzBmNmUyZjkyZDgifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/profiles.py#L847-L898",
+          "version": "repo-lines-v1:sha256:e4f7b9ea7552fdd1969e5b9a5ca1a06d6ca58cab582b4942ee0e592da88983da:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxMGNmZjU4ZDEzNTc0MDFmMjVkNzQwNDI1ZDRmMzZjZTAyMzk4MDg5M2E5ODkxNzM2ZjJjZDVhMTNiODRhMTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNlMTYxMGY2YjdlNDM5ODg1M2FjNjA3YTk0OWU0MmJmNTNmMTAxNjc5MjdlMDZhMDdlMTc3MDlhNjBiMWJmNzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIzOTVmMTFhYjZlMTc5OGQ1ZjdjMjgyOWE3ZWQ1NDkyMWM1ZDE2NWE2OGI0NWIyOWJmOTRhYjk0NTRhYjYxY2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQyNDY2Y2IzOWViMzQwY2U1MmZhODUxYTA5Y2YwYzRkNDVkMmYxNmNlODIzYjFkZjk3MWNjYzFjNTJlNTJiNzgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e106a4f126bb4a8d9b39a978c9886abe",
+      "statement": "Entries that fail validation or repeat an earlier name are skipped by load() and reported via invalid/warnings(), but written back verbatim so no data is lost.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/profiles.py#L782-L834",
+          "version": "repo-lines-v1:sha256:ae16222acc7e7622477deb59e7bd7abb6c54a374b64c66af50827338bd141b4d:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1M2M4ZTgzYWMyNWI2NjgwM2ExMzc5NGZmYWVmZDQwMDZmMzEyYjU2ZDk0MzY3ODRiNTAyMDY5NjI5NDk3OTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM0ZTliM2E3YjNjMjA1MzQ5MzJjNjMxYWUwY2MyZWI1ODNkZGZhYWEwODZiODFlY2E2NGFiNmQ2NGJiZjA4MTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ2ODlhMWI4ODQzMjhhNjgxYWQ3Y2E2NDNjYmU5M2ZiMzlmOGZjNzE2MjkxZTE3YjJiMmY2ZmM3YmMyMWU3NjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM5MzhmMmNiYzIzMDhhYjgzOTEwNzQwMjQ1ZmMwN2Y2OWIzNDQ2NDhlOWQ5MmViMjVlZGQyMzYwYWI2Y2QwNTAifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/profiles.py#L894-L897",
+          "version": "repo-lines-v1:sha256:e256a55eeba613e5c812a38c1fd50d8ced6ecb7d845a8416bad0809b8d0c7733:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDE3Mzg0ZjZmODk1ZGY5NTUzMzkzMzhiOGFhNWI5NWFmNTc3MDYyMGRlNjZhNDNiNzM0M2IxODljYjE3NDAxYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzhjNDYwZGFkNjM4Y2U2ODc4OGYzMjJhMDIzOTY2MTM0YzgxZWRlNDJlNzhlZWM1MjQwMmMzYzU3MzNiNjk0MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDA3YTAxNDY4OGFlODAxYmFmYTMxNDZhYjU0ZDkwYjU5ODMzYWZkN2QzOGVmMjY2MDJhZWU0M2VhYjFlNjQ0NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNGY3NjhkZWRjYjUzMmRmOWQ1MDczYjBkMjY4MWFhMmFiYmYzN2MyNzJjMmY5Njg2NzVhMTEzNTdmZTUyYjNhMSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_bd938af3a6934470a478bfef6461df8d",
+      "statement": "Every ProfileStore change holds a cross-process file lock while it re-reads, modifies and atomically rewrites the file.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/config.py#L161-L206",
+          "version": "repo-lines-v1:sha256:7661ab52f09296dbf73def147800d9582a09c68ef979d95f28d86ba9ad3b18d0:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRhYWFmNzEzMTZkZDEwNTgwMGRhOGQzY2RkMDg0OGY4OTAzYTk3ZDc2Y2E1NjA2ZTFlMDg2NWNiMzEwYTRjNGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk5OTQyNmMwYmEzMmExMjY5M2E4Nzc4ZjYyYjBmMWIwZTc0ZWMxNDgzYWYyNTRmYWZhNWE2Y2E2MzM2NTJjMTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM5ZWZkOWUxNzJlNTE2NDhjYzY1N2RiZWEwNDYxM2ZiNzc5M2Q2ZjZjYmViOTIyZjE2YWVkYTZmZDRhMTlmNTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/profiles.py#L857-L897",
+          "version": "repo-lines-v1:sha256:363b45a062c0e37cf589d06454e857e2a710f06a74eac0ae1de74e094e9e6bfe:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM2NTIxMzYxZWMwOGU4NmU1NTY1ZWE3YjhiYWZiODUzZGIyNGMyOTkwZDI4N2FhMTIwZmQxY2YxY2U5NmUwMDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM4YzQ2MGRhZDYzOGNlNjg3ODhmMzIyYTAyMzk2NjEzNGM4MWVkZTQyZTc4ZWVjNTI0MDJjM2M1NzMzYjY5NDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1ODMzZjdmNmMxZWUwNzA2OGIyNDAyNWZlODUyZjEyZmUyZTliNzM4NmYzMzdjZTJmOTY3MTY4OTM1MzY5ZjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRmNzY4ZGVkY2I1MzJkZjlkNTA3M2IwZDI2ODFhYTJhYmJmMzdjMjcyYzJmOTY4Njc1YTExMzU3ZmU1MmIzYTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ad0a457121f64174bed2b8c1870131a6",
+      "statement": "add and update record the USB identity of a serial profile's device via serialport.update_identity; save does not.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/profiles.py#L857-L888",
+          "version": "repo-lines-v1:sha256:095d928eea7a56c4ee27d6d9d53782939593c9c68a1b122f32f42e38a591d470:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM2NTIxMzYxZWMwOGU4NmU1NTY1ZWE3YjhiYWZiODUzZGIyNGMyOTkwZDI4N2FhMTIwZmQxY2YxY2U5NmUwMDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4MTZkY2QyMjgzNGJkYjU1NGU5ZWM5NTQ1NThmNjE0OGE1MjEyMGU0ZGI2OGNlMjU0NmNmNzNhNGNlYmU4N2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1ODMzZjdmNmMxZWUwNzA2OGIyNDAyNWZlODUyZjEyZmUyZTliNzM4NmYzMzdjZTJmOTY3MTY4OTM1MzY5ZjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE1ZTM0YWUwMzEwNjU4ZTQzNTgyZjlmMzAxZDU0MTk1N2ZiNzJhMjM2YTFkZDJlNDE3MTc2N2RiNzMyZWY3NmYifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/profiles.py#L913-L918",
+          "version": "repo-lines-v1:sha256:56bc1bcf960a9b5a78cc188e18800acf08d458c6f39c26298d57a8f677223cab:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWNjYzk4NDhiZTBlYTE5M2NmM2I2YTNkOWI3ZjMyYTkzNmY1MWViZmRjZjA3MWFkMmE1OTBlZDZjMDM4NjNjOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDdmZTY0YmNkYTYwYWExYzZkMzIxNmM1YWRmNDI2ODYyMDhkN2RkNmJiOWY1ZTcxM2E3YWMyNTFmMzVlMzc4MiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODRmOWVkZTU0ODc3YjIwMDFlMjMxZDhkNDBiY2UzZjBhNzQ5M2ZhNjAyOWU4MDdhODAwMzBiNjRmNzRmMDY3YSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_959ef65c75f645f7b8080fcf9fcbf6d3",
+      "statement": "open_private with own_dir=False uses O_NOFOLLOW and refuses existing files that are not regular files owned by the user with a single link, truncating only after the checks.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/config.py#L120-L158",
+          "version": "repo-lines-v1:sha256:d190fbb2afb5f735f647f5918d9198533e12d571c4628bb5dc8ae708ea02f23f:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE2OWM3OTEyZjliNzNmMDFlYmQzNDhkYTVhYzE1MTEzNjA0Yzc3YTg4Y2FlY2FhZWE0OWNmODM4NjE5YTAxNDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEzYjIyMzQzZTljNzU1OTIzM2RjNDZkY2VhNTg5OTY1OGY2Yzg2YTczMTRmYTQ2MjA5OGYyOTI4YWY2YWQzZjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc5MjNmYTY5MmJjYmNhY2ZjMGVkOTIyYWU4OTQ5ZGI1ZmFiYjkwZGZlNzdhMjJkYzI0YTkzZjBmYTM0MDllYTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhmNGNkMWUzOGIwYjYyNDU4NzQ2MjQ1NmEzZGM3MGE5YThiZTYyOGQxMTViNDNjNDkwYzQ2NmU0MjI4MDdkNDkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_30aff8077110401685f454eaf18294ae",
+      "statement": "On Windows, private folders and files get an owner-only protected access list through pywin32, and new log files are created owner-only from the start with CreateFile.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/config.py#L44-L117",
+          "version": "repo-lines-v1:sha256:14172b3494bd9ad8d6778f4e21f1dc0f13829394e13bfbfc4cb7a19e5f17fd7f:eyJzZWxlY3RlZExpbmVDb3VudCI6NzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBlODFhNDE5ZDczMjIzYjVkMTEzOGM3OGEzZjI1MGZjOTJjYmJjODc4ZDU3ZGEzODc0OTUzYzdjMWM3ZDZmNzMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhY2JjMjU0NDU0OWNmOTY4OGUzZjIwNjhhNmFjY2Y3YWEzMmMzOGQ2YjFkMDRhYTY1Y2IzM2ZiMTU2ZTE1N2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMyZTFmZTUzYTE1MTJhM2ZkZDE3Y2E1ZmQ2Y2Q1ODA0ZjM1ZGYzMWNjYTM0NTFlMDg4ZGY1MzE5YjA3ZThhNTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUzNDMwYjg3OGQxZDlmMzhlMmQ1ODE4OWQzOGFmMDRmMDE5NDM5Zjg5NTk3MjM2ZGYxNGRjNWUzOWQ4YjkxYjAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f3772df31244425791ff7bd008eb986e",
+      "statement": "atomic_write uses a temp file unique per process and thread and retries the replace on Windows PermissionError for up to 10 attempts.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/config.py#L161-L181",
+          "version": "repo-lines-v1:sha256:61c532118657a97c745fe6f7a7fe3cee2507d0a486bc042c660a48f190bbdd8a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRhYWFmNzEzMTZkZDEwNTgwMGRhOGQzY2RkMDg0OGY4OTAzYTk3ZDc2Y2E1NjA2ZTFlMDg2NWNiMzEwYTRjNGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI0NDViNDJhMDNkNWI5ZTBhYzFhNDZkMzZhNzAwY2I3OWUyMzUxNjZjYzMwYWRjMjUyMGM0MTQzOTAyZjE0MmEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM5ZWZkOWUxNzJlNTE2NDhjYzY1N2RiZWEwNDYxM2ZiNzc5M2Q2ZjZjYmViOTIyZjE2YWVkYTZmZDRhMTlmNTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFmNmYyMzA3OGNiNWEwMjYxNjMxN2Y2ZmQzMTM3MjM2NjBkMWE3N2FhMDMzNjM4N2Q1M2VjMmIyODY1MDQ0NjgifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-18T13:56:19.871Z"
+  }
+}

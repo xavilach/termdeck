@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:0cabe53e5cc9847528f533bd426530c0402c89f477ce812a391627ba573e99aa",
+  "claims": [
+    {
+      "id": "claim_d25381c11c884ab588296aeb2863f848",
+      "statement": "Profile options are dataclass fields declared with option(), whose metadata (label, help, advanced, choices, widget, kinds, hidden, min, max, wide, group, when) drives both forms and validation.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/profiles.py#L25-L46",
+          "version": "repo-lines-v1:sha256:ce82e23628796f4201c18316eed217c02dc2ee1977ea27df0ecbc6ce378201c7:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ1ZjMyMWY0ZmUxYTY2ODIxMzQ2ZTJiNWNhYWUxMWVmNzRhMGNkNjU2OGFkMGZhM2IzNmFhMzQ2NjVjZGJmOTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQyMjQxNTc5YWJhNmQ4MDJhMmY5OThiZjhlODczOWY5NDEwZTNjMjE4MzQ2NGM2YWJlMWQxZTViNzE5MzZhMmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkxY2ZiZDg1M2I5YmY1MTJiZTIxMjFiYzg5YzA3MmQ3NTAzY2VlMzFkNzYxMjJjZjYwYzE5NTBhNmE0NmJjZmQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9e87e4ed4e9d4f8198a9c7c74a9f8ea1",
+      "statement": "describe_options() returns a JSON-ready per-section description of every non-hidden option, with kinds defaulting to the section's connection types, for UIs to build forms.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/profiles.py#L681-L723",
+          "version": "repo-lines-v1:sha256:011ffdf2e94e4ec8d6e7402d0a8eb0fd1d10a88792826b4e57d33932c884041a:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiMTg2ZWM2ZmEyZmI1OWI4ODRkMTM4NWQ2NDcxMmM3NWFjYWY0Yjc0NWQ0NTkwYmNkMjk2YWRhMTYyZjQ2MGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMyZTNkNWQ1MDYwODcxYWVmYjI3MjlhNDdmZTM2Zjk1MmUzOWNkM2YzY2I5MmIyZGQwNmE2ZTE1NTM4MDJlOTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3Mjk5MTFjOTI0MjBhM2Q1YmI0MjhiYzI1MDQ4YzE5NThjNzY5ZGY3ZDk3ZTVhMWY5MjQwYWE2OWRkMDUwODYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgzNjdhMDYyOWQzZDlmNmNhYzNmNWVkYzU3ZDk5ZTdiZjg3ZDExYTQwODUzNTQ3YjQwNWQ4NWIzZGJmYmQ0NzMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d2f4bc6ec40d461c949f8efefc3faea4",
+      "statement": "Profile.validate raises OptionError carrying the section and key of the faulty option; the _option context manager converts ProfileError raised inside into OptionError.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/errors.py#L13-L23",
+          "version": "repo-lines-v1:sha256:871aa0e4ac2bfc3d930f62b7ea8d1fb1acaeccd44873d7e6d80540bf92965f0f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc4M2Y1YjVlZWJkN2U3NTVmNGVjODMyMDgyN2QwNTJiN2U2OGM5NDMzYzU3MzNjYzAxYzMzZDNjM2Q2Mzc3N2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImExZmVjMGQ1MmYzOGVhNGM3NDJjYWRiZGM5OWViZTQxMDMwMGE2YzU4ZTMxY2RiOTQ1NzgyMGJjZTkxYTczZTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjczMWQyN2Y0ZjJlZDU3NzgyYTc3ZTUxNzZkNTAxZGM1MmRkZTk5OWNkOGQ5YjdjZWYyMjA0OGIzMDA4MTk1ZmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY1ZGQ5ODE0OGM5MDZjZDllMjU3NDY3MjU3NWRjNjhhZGYxNTNkYzE5OTBmYjEzNWY4MTczNDAwNzUxMGZjMTIifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/profiles.py#L495-L597",
+          "version": "repo-lines-v1:sha256:49921f9cd592d978ec0ef3c02cfd85fca2c1aec9f80c5ae23a7abc38fde3534c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAzLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIyYjFkOGIxYTRlMmE0MWFiYzY0YTU3ODc3NjRlNTk2MGY1ZmYyNzBkMGIxZGEwOWVkMTczZDgyYTU4OWUyMjRjIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI3MWM0OWM0YTc5ZjBhNzM0NWM1M2VhZDkyYzBhZDU1MmFkNWIzMDE3NWRhNGUxNDE0MDMxMzE0ZGY5NTg5MTBhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI3OTdiOGE4OGU2M2E2NjRkMDNlNTc1NmFiYzhiYTE5MGE3MmVkYzQ1NTkzMDdmM2FmYjQyYTcxYWYzY2MzMTcxIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIyZDJjY2E3ZWQzMWUxMjEyMDg0ZmRhZmU3MTZhMjBkMWFmNDExMzc5ZmRiM2U2OGVlOGZiMzk4N2FhODRjNmQ2In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_7b069d12c8654581927f879fab2c003f",
+      "statement": "check_option enforces choices, exact types (bools are not accepted as numbers), min/max bounds, and refuses negative numbers when no minimum is declared.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/profiles.py#L650-L673",
+          "version": "repo-lines-v1:sha256:01aa6c8a17fb9c0aff489b85c176eb02a687867affd5fcc49d1fd7f3c75073d8:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlZGIwNmYyMDEyNzY1Mjg0MGFmOTdjMGEzNTA3M2Q0N2I3OWU5MDQxODAyMDE4ZGFmY2Q2NTc0YTgyOTM5NGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM1ZGFhZGI5NDVlOWViMmQyNzhiZmQyN2JhZDcwNmZlNjM1ZGUxNDQyNDhkYmRiYTMzMjA3ODU4MTNlNGM3OGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBkOWE1YzJhNWIzZDg4ZGIyN2U0ZWFhOWQ0NmZhMTFlYWQ4MTcyNDIzYTY3MmNjOGNlZDczNGNhMmMzNjc0ZTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYyMTI5NjkzNjJkNzdiY2M4Nzk5MWEyNTNmMjVkYmFjOTc0N2NmZmU3OGNjYzZjZjJjMDZlNmI3M2ZhNDkzYTcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_40ae417986e143eaafbc1f30b6ac1ddd",
+      "statement": "Validation normalizes values: serial COM device names are upper-cased without the \\\\.\\ prefix and trusted host keys are canonicalized to SHA256/MD5 fingerprints.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/profiles.py#L456-L492",
+          "version": "repo-lines-v1:sha256:ccfcbab978bb8e41f29971919b0cfad3ad34c34bdddcb3b10c932f3bcf4651ac:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwMGRjNjBlNzNjMjc0MmRiNTJmYWQ2MDBhOWQzZGQyYzJmMmI4MGJhZWZhMDk2NTg0YWU2ODgyZTIyM2FkM2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFkMTk3YzljYjg0ODAwNzM3MmE5NTA1MGYzMDhiZDI3NThhN2IwYTY1NDVmYTE0MzRkNWY3NjYxMGExOGFlNGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ3MGRiZjFjN2U1ZTNlYzQ0YjEyZmM2YzZlMjE1NzYyYzZlMWM2NDc4OWMzNzcxODc5ZjQ5MmU2Yjc5YTJkNDcifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/profiles.py#L553-L578",
+          "version": "repo-lines-v1:sha256:970f62dd9e2727432c98622fec034c16e3e6f6a8858ab5efbfeebc22df8ae0a5:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ1ZmEzMTRlNjE1MzMzMTg1ODNlOWJkNzY4MWZmMzAwNjdlN2MxZjNiZjA3ZTIzZmI1NWYwYjY2ZWViNjhiNjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg2YzgyOTFiMTlkYzU5NmIyNDdiMjk4Mzk5NWQwY2I2MWE1NGZmNzA1OWIyNmJkOWM3MjlkYjQxZjJkZmYxMzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVhY2ZjYjRhNDY1ZTg4YWU5ZDBkMjkyNTJkODA1ZDc0ODFjMGNkZDgzNjJmNWEwYWY3NGYxYzY4MTM5MzE4N2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjEyZmMyNzM4NzFkZGQ4N2E0YWU2YTA5NDg1OTE1NTkwMmJiNWExMmMxN2UzZmMxNGIwODI2ODYxYTMxMzRiM2YifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_de9a287b6ec34ed29e39507f9819dc33",
+      "statement": "parse_target treats a bare word as not a target; SSH targets need a user, a port, a dot or a bracketed address, to avoid sending a password to a mistyped name.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/profiles.py#L726-L747",
+          "version": "repo-lines-v1:sha256:0074aa9221a425d4adebac47a50581b68faaadde8bfb4fbc950f52e02ab2e084:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3OTFiMzcxNDlhNmMwNTcxMDE0M2Y4ZjhiNGQ5MzY0YmQ2MmVhY2I4NjNkMTZlMDNmNTY2YTMzZTBkYjMzMTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTYwMGE3M2QyZTAyZjM1MmI5MGZlZjFkOGQ2MzgxMWJhNGE4ZWUwYzFiZWFhN2FlNDY1OGYzNmFhMmUxOTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM2MGRiM2Q4YWZlMmI5NGVhOGIyOGI1ZGRkYTY4ZWQ4MDlmNTU3MDlhNjg4ZWQ0MzVjNDE5NmRmYTE0ZGExZjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQzMWFlNGFjZDNiZTI1OTc0YmFlYTQzMTM2MzZmNzdhODVlODgyNjc5N2EzMDVhMjM0MzI0ZmFlYjJhOWY4OWQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fa96c1949d734e91b8b28df62a446072",
+      "statement": "Serial device URLs are restricted to the rfc2217, socket, loop and cp2110 schemes.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/profiles.py#L253-L253",
+          "version": "repo-lines-v1:sha256:54eec89865fd43d1b8328edab78bacaa64683569933732ae99acc480d353522e:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTRlZWM4OTg2NWZkNDNkMWI4MzI4ZWRhYjc4YmFjYWE2NDY4MzU2OTkzMzczMmFlOTlhY2M0ODBkMzUzNTIyZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTRlZWM4OTg2NWZkNDNkMWI4MzI4ZWRhYjc4YmFjYWE2NDY4MzU2OTkzMzczMmFlOTlhY2M0ODBkMzUzNTIyZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjZmMjAwYzFhYjQ5YzEyY2YzYjgwZmJiNTNjNGEzZGM5MmUyZTI2MzU5MjY3MDc1OGJmMTYxNzk4YjE1MTAyYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmMxZjAyZmQ3ZWMxZDQ2MmMwY2I4MThiOTQ4ZmZlNGY3MTViMmMyYzQzMjYzMGMyMzJkZmUzNGQ0Mjc0M2ZhOSJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/profiles.py#L571-L578",
+          "version": "repo-lines-v1:sha256:1c4de97ced8f0d6e7c0b10cf09749549720dc67f037ba6f4571893434bdb7674:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2Y3OTY3YjQzOTA3NDk0NTFkNGY3MDJiMjI0OTQxNGE2MDQzYTljYTA5M2M0NmNiMGFmYTkyNWM3YjkyZjlkYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODZjODI5MWIxOWRjNTk2YjI0N2IyOTgzOTk1ZDBjYjYxYTU0ZmY3MDU5YjI2YmQ5YzcyOWRiNDFmMmRmZjEzMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMWFkOTg1Mzg1ZWJkYmM2ODY1MDc4NzU3YzY2YjdiYjRlMTdlMmFhODM1ZDgxNWIxYzM3NDBmZGEwNDBmYWYzYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTJmYzI3Mzg3MWRkZDg3YTRhZTZhMDk0ODU5MTU1OTAyYmI1YTEyYzE3ZTNmYzE0YjA4MjY4NjFhMzEzNGIzZiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_0b3aafa3b394496e8ff61078f8aadfd9",
+      "statement": "The CLI's set/--set coerces text values to the option type and checks them with check_option; forwards are excluded from settable options.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/cli.py#L94-L134",
+          "version": "repo-lines-v1:sha256:6bdd617a7642491e0f45badf7d7b533ade9680e7627e8e47bb02d4e779e42877:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiM2RkYzAxOTI4MjU2YjIwNDhkN2IyNjNjYTUzMGM5ZjQ5MDc1Njk3NTY0M2VlM2YyMTY5MTM4ZjcyNmExZWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg2NTY4ZWIxNjVhOGMxMTg0NzU3MWY3ZTBkYWVhYWNlODAwNTRjOTdkYzNhNjZiNTI2MTIyODBjYWJmYjY1ZDQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI0NGZmM2FmNjY4NjQ4MTc0ZTMxMGRiMjM0ZTBmYjI3ODBkYWQ0ZTUwYzYxZTE1YWRjOTIxOGM2NTZiMTFhMDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk1N2U4NGQ2M2Q5MGJmNTJlODRjNDI4YjdlN2VjMThjNDA5MDZiOTExYTg1Y2U4ODNjN2M4MThkNmRlMDkzYzMifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-18T13:56:19.871Z"
+  }
+}

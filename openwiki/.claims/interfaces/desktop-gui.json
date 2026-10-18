@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:3d02df014fc97242dd959cae29227b3e74f6c3c2b885b9deca19e0e4a7162d31",
+  "claims": [
+    {
+      "id": "claim_2eaa13d118b6463280ba2e2293b20838",
+      "statement": "The desktop GUI runs the web UI server on a daemon thread with its own event loop and shows its start URL, with desktop=1 appended, in a pywebview window.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/gui.py#L166-L171",
+          "version": "repo-lines-v1:sha256:cddccfeba5e968aca2c572a9a11400f5dcce0186500c46f7b87f75257d244249:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNmQ0ODRhMzg0NDg0MmViNjI4Y2RhYzhlMGEzZDgwNjQ1Yzk0NDk1MzMxODk2NmM4Yjg0NTAxYjg5NGFlMzk4NyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOTEyZTkzY2Y4MTNlOWYyNTllN2RhNzcyMjkxMjdkYTI0ZDcyNmVlOWRhOGZhYzFiNTk2ZWVkYzk2YWNmMWZkNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNThmZTUwZDNjM2U2ZWJjMGQ5NGM3ZTBlMmI0OTRlM2Y2NDNhNzkxMGRmNTU1NmQ0Y2Q4MzI1MzBjMDg0ODU3YiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDAxNjExOWYyNzI3YWQxZDU4MjM2YmFmMDkxNjkxYjEzZjUyY2IzNmJkOWQ3MzI5MWJhNzIxNGIyNWVkOTIzOSJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/gui.py#L19-L63",
+          "version": "repo-lines-v1:sha256:99629440512fdac51d5cbebe97acb52f7434e46c0ef767921bc2dcb52ba62608:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQwZjQwNGU1YTY5ZDg4ZTQzYjcyOTExOTdjMTA4Yjg5MjRhZDFjNmRhNTAwZDQxMjgxOTljZmRhMzFiNDk1N2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI4ZDEzY2JmYTRjNmU5Y2ExNWZjODkwYmMxZGFmNTNiNGY1Yzc1YTNlNDI2NzZhOWIzMzY5NWYwNzM3NjQ2MzgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY3NmJjNWM4NzBiZTZjNDRjMWM2ZjE4Nzg2ZDVhODgzNTQxYTJjNGJiMzlmNzhkOTViMGJiNjE1MGVkZGFiMjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRkMTZmYjI5MzQ3MDVhZGExMGNmMTI4OTcwMjNkOTFhYzA5MGYyYjA5MjM0ODQzYTk4NDMzNDMyZjU1YTg2NWIifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/web/static/app.js#L30-L35",
+          "version": "repo-lines-v1:sha256:3a266f1e3b4a8f7c7d5f0c853aa487a6fc140486fad08131ddaf5439a00db5d9:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTg4ZDc0ZTFiMjQwZTkyZDIyNmMwYmI5NWQxZTk3OWUxZGRkMmFiYzJiMmQ5MmIzZTljNDg0NmI2ZGMwZTFlMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDIyYmY5OTlkZWNlNjBkM2YwZGZhOTRiZDk5MDI1OGIwMGU3NzYwMTNmNjAzMTM2ZTk3ZmI5ODYyNzM3Nzk2OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjg2M2U1NzI2MmI0MmVhY2RmYzkzOTJkNjZhOTcyM2UyODdkZDVhZDA2MzE3NmUyNjNlNmIzOWZjYTA1Y2NjOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOGYwNzc5NTQ4MzZiZGI4Njc3ZTZkYmIzNTBiN2Q2MDA0NzRiNWEzZWYyZGZkMGRlM2IxYmI5MDU0ZmUyZWM3MyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_e8b7313152b64b028fdf3b84a358d875",
+      "statement": "On Windows the GUI refuses to start without the WebView2 runtime and forces the edgechromium backend, since the IE fallback cannot run the UI.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/gui.py#L158-L164",
+          "version": "repo-lines-v1:sha256:822458ded6b371ff7acb4a0e9706464f7f2a3c520f8d9db1c00d367a780a3e26:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmM4MmRkYWIxMTM4OGU5ODNkMTNkMWM4YzY0ODVjZWIxNTAzYWRjODdhMDNkNGU5ZmVlODUwNTQwMzhjOTEwNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjAyM2JlZmY0M2RhMzNhMWRiZTUyNWE4MDlkMTZkZjc2ODY3ZTI3MjMzNDA3YzUxMDc3ZDA0NTkxMTA0YmM4MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGM0NjIzMDE0MDA0ZDQ1M2IxMzFjOWMxNGMwODZlZDdkYTdkMWRkZDE5N2I4M2Q2NmU2NzA2NTYwNjU3YWY1NiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMWJlOTZhODg4ZTJmZjJkOGJjYTA2OWI2ZTk0YzQxOGU5OTAwZTljYjA5MDFhOTU2YmE0YmM3ZjA4OTYzNjZiMCJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/gui.py#L66-L85",
+          "version": "repo-lines-v1:sha256:8cc407f177fb0b17b0f84323fd880c249380e9f671d0658eb2cdb8fddbfe2ee3:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg2NTdkMmNmMmI3MzYwNTg1N2FhZjczMzcwMmY1ZjhkYTM3ZmI2Y2VlMDg3Y2IzN2U4MjhlZTg1N2I0ZTQwNjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU1YmM0NzExZWNjYTA0NTBhZmM4MzI3NzlhODg2NzZhN2M2OTYwZmEzZGE1YWY0MTBlZTAyZDFlMDE1MTU5MWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFkYjE3MjMyYjZlMTkwOWM4Y2U5ODI1NGU0ZTJiMTE5NjM5Mzc0MTMxODg5NjU4NjliMjA1NzNmZjliZWE2OWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU1MmQzYTliZDk0M2FlMjE3NWYyNDM5Y2MwZjNjZjRhZTQ1MjA1OTAwMTI4YmIwNTJiYzlmY2U2NGM2MTdlODEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_27e20b1404b6419d86c57dbe14907d83",
+      "statement": "Only plain functions (toggle_fullscreen, set_on_top) are exposed to the page, not a js_api object, so page script cannot reach private attributes via getattr.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/gui.py#L135-L150",
+          "version": "repo-lines-v1:sha256:b89fb76a6c2f8fde4d35a149d09344892e4ae1f9fbff4dee1c7a60742b022405:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyMWJmODA4MjkwZjU4NGNiZTU1ZTVmY2U3NDFlM2I2NmJiMzEyZDc1MTE5ZWNjOGI2ZGI3MTg2NGNjODJkMmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNkMTEwMTA2YWRiMGMxMmQ4Y2VkMTgxOGNlZWQ2MjUyMGEzOTA3ZTIxN2IwN2JhMjc0ZDEyMDk4NTg3ODNlNjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM0MzZlNzUzZTIxNzZiYzA3ZmVjM2YzNmUxMmE0ZjlhNTI2MTEwNWJlYmZlM2RkMzFlYjJjZjQ3ODg1NWVkMTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjEyZWQwZGIwN2U1NGJhYTIxNjEwNGQwMjZmYjczZDQzODJjNjM5NzlmNzhjOTI1NGVhMGQ1ZDc3ZjJkNzUxNmYifQ"
+        },
+        {
+          "resource": "repo://tests/test_gui.py#L169-L186",
+          "version": "repo-lines-v1:sha256:98e05ca1ac9350b7fea010b5b06d329dfa6140dec36a6c3b4f0a7b08a08a1dbd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQzY2JmZGFiZmFiMGE5OTRlZjUwMmMxOGViNzgyNzAwMDU3OGY2ZTc3MzljZTg5ZWQ3NDcyNDA1MzFiZTEzZTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg2OTI1ZTZjMjQ3ZTFkODAyYmMyMTUwNTMxZTAwMWI3ODQ4MWUyODk1MmYwMWI0ZjUyZjdiZmVmMjc1NDI5YjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ5OTdkNmZhZDJhNDEwZGNkZDcyZDBhYjM2ZDE3YzkwZDUwYmIwNjQ0YTMwNzNjODIxYjkyYjJkODliY2ZkNmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYyM2RhMTc4NzNhMGVhODEyZjZkYjBiZTA3ZDgzOWMxYzFjNWY4MzZkZjE5MDcxMjNkOGU3Njg0ZjRjYWQxZmQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_45787fb59b9243318e5791f8df89a7ae",
+      "statement": "Closing the window asks for confirmation only while sessions are connected; on GTK/Cocoa the question is asked from a helper thread to avoid deadlocking the GUI thread.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/gui.py#L190-L218",
+          "version": "repo-lines-v1:sha256:897a3cb8428dc2bc2d95553196702542baaee2ae179c5ff93338a1b13d9f21f1:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3NmZlMmFiZTQ4YzE3Y2ZkNzVjZDE2MjgxNGMxOTZmMTU4NjI0YjMyOWNmNDFmN2VlOTAyZjliZjY0ZDljM2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZjMTAzMzAwZTAzMDBiOGQzNmM1ZDc0NjJhYTE2NjZlYmJiMWEzNDU5NGM1NWYxZGE3YjVjOGUyZjIwYjkwZTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY5ZGZiZmRhZDFiMDBhNGZjZWZmOTYwYWNjZWI3MTYxOWViZWQzMDZmOTE1ZTRiNGM0YzkwOTg3Nzg2ZjllZmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBjMjZkNDg3Y2NlZGUyYWI5M2RmOWQyYTI3NmFiMDdiNzIzYTQ4NjZiZGM2MTBhNGVmY2E5ODExOTkzYmIyYzYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2e66c25c426e4ff7bc287e0cfe52c695",
+      "statement": "Only the window size (not position) is saved, in logical pixels, only from the normal window state, and loaded sizes are clamped with a 1280x800 fallback.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/gui.py#L103-L132",
+          "version": "repo-lines-v1:sha256:7cd5b31ada8c5a95ad7af1aa5482d15ff971de49f4ebea3714fa6ec12d2babb5:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRiZDlhZDE3NzE0NWZiZDFkNmMwNDc2MDA1ZjJmMGRhYzQ1Mzc0MTdlYTViMjFkN2JjMDkyYTdjOTBmZTZlMTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJjMzI0NDIwODBhNjg0ODk0NDM2YTk2NWEzNDdhODI3OTIyYmY3NTMzZDMyZGI3NDkxMjg0NGMwNzI5NTkyNzgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJlZTllMTYwM2ExN2MwZTMyNmE0MzYwMmQyODFmNjYwZjc0ODA5NTlhMzZlZTA3Yzc4ZTQwYTQ0MWUwMjJlODQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIwNjFmMmQwN2MzODFlOTU0OWMwOWY4ZTMwZjE1ZGJlMTA2MDJhYmY3MmVkZjg4YjBjYmM1MGRjZDk1ZGYzN2YifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/gui.py#L173-L188",
+          "version": "repo-lines-v1:sha256:0e5162112d231a1a7985611ac6fc44eb306336c5029d678d98932447fbdb4590:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM3OTc5YmE0MzMwZGYzZTUxNjNjMTVmODdjMjMxMmFkMjhkMmIyZmY3MWIyNzk2NmQ5ZjA0ZWIzYmJiYjEyZTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJlZWU5YjVlMDA3NzJhZDMzM2JlZjNlNWUwYWE3MTczZTJmNTI2MWUxYmQ4Njg0Y2EyMmM3NTI5MTViOTcwY2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJkMjE2NGQzMWM1OGRkZmFhYTg5YzBlYzk0NDdiNzdiZmVjYmRlNDA0ZWFjNzBkOWIyODAwZmQzZDdkYmY2MzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc5ZDJkMWFjYjk5MTliOWViNGRjNjBjNzJlNWIyN2FlZmMwZTZlN2I5MTY5ZGUxNjQzOTRiNzY1YmJlNjUzMTYifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-18T13:56:19.871Z"
+  }
+}

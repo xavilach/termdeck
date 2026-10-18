@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:f6e7cf47f174d128ce33594c8c6a7ddd2ba8428fce94342d7af7681b82c10818",
+  "claims": [
+    {
+      "id": "claim_404619756b9048acbf47ee23d79670fd",
+      "statement": "In the TUI every key in a terminal goes to the remote side; Ctrl+] switches to menu keys and Esc returns, and Ctrl+Q inside a terminal is sent to the device.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/tui/app.py#L489-L507",
+          "version": "repo-lines-v1:sha256:3e7f13a3db1bbae3e623297423ccff94d92771cfb7e13f025043106740f690da:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhjYWQ5YmQyNWYwNjZjZTYyOWYwMDZkZTg5OTc2ODdhYzFjNmY3MTY2MjA0MWQ1OTBlM2E5NmUyOWFhM2UwNTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkZDI0NDU4MmI2ZmIwM2QyM2I4NDE1YWJlY2QzNDZiMGM5ZjQ2NmI2Zjc1MmIwNjgxODljZTdlOWEyZGMzNTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjUzZmVlZTU0MTI1ZDMxNzhiMDViNmQ5NDBjZGI1NDljMTU1OGM0MmY5MWYxZDhhZDVkZDQyMjdiNjNhM2NmYTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU4NjdkYzM2YTExNDBmYTVjZWY1NjBhZWJkYmNlNDZmN2Y2Mzk4YWIwMWU5NGNmODU3YTgwMDE3MjJhNGIyMjAifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/tui/terminal.py#L314-L336",
+          "version": "repo-lines-v1:sha256:ff69ed51a1e4de9514df5241bee72cc498cdc1c09d3d3bfb67026087b923dba7:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUyMTg2NTY2ZDk2NzJjOTI2MDM5YjcwYmFkNjY1ZTBiZGRmOGRkYmVkMjY4YjQxNzVkNmMxYjM3NGJlYmVmZDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNiYTBjMGIyNDRiMGZjYTQwN2NiZGQzMjlhNjIyYzA0OTk5ODVhNTQzNWY4OWRjMzEyNzdiMTkxNjY2YWMxMDUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcxMDM0ZTczMjA0ZTY5Yzk3ZDY4ZjEwMjQyNTY4MDM0MTk0NTIxYTkxZTFmOTJkOTE1YjI0NmIzZjRiNWM4YmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjcwOTY4Nzg1NGQ0ZjMzMTFlMjUxNmQwM2EwYmM3YzE0ZDY4NWQxYWMwODhjYmM1MWU1OGE1OTQyMWVhYTFhYjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8fdce3bc03504359adbb40ec3115d324",
+      "statement": "A serial break from the TUI menus needs B pressed twice within BREAK_AGAIN (3 s), so a stray key cannot reset a device.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/tui/app.py#L508-L508",
+          "version": "repo-lines-v1:sha256:4835ed7089f090aa6dc378bd1b2ac4694154a1a81b038520715d48d923667248:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDgzNWVkNzA4OWYwOTBhYTZkYzM3OGJkMWIyYWM0Njk0MTU0YTFhODFiMDM4NTIwNzE1ZDQ4ZDkyMzY2NzI0OCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDgzNWVkNzA4OWYwOTBhYTZkYzM3OGJkMWIyYWM0Njk0MTU0YTFhODFiMDM4NTIwNzE1ZDQ4ZDkyMzY2NzI0OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDEyMWY4ZWI5ODRlMzc3OGI3ZjM3MjcxNmYyMTc5YzliNWZjNjlhMmIwYmViZDA2ODQ1NzRkODRhYTk5OThhNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzlkMDgxMjNjZDFiMTA4YmVlZWI2Yzg5NjBjMmIyYmU1MDVlZWVlYmIzOWUwMzgxM2VhOGE4YzRlZWI3MjNiZCJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/tui/app.py#L775-L790",
+          "version": "repo-lines-v1:sha256:8038997f9029c20ccfbe97f0bdbd77acb308db5ca0542542aa1e26044542d89a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiZTFlZTNiNDRjMDQ5OGNmY2QwYjIzMDg5ZmIzMmQyMGQ3ZDQ5ZmUwOWMyY2FhOTdjMDEyOWZkM2ExZTE4NjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQzNjk0MTZlNDgyMGRjNmI0M2E4YzFhZjFkMWE4N2Q4Mjg2ODMyYzQ5YmFmOWUzZTc5MzIzOTE0ZjNhNDdlNTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI4OTg2ZTI3ZmY4MWU1Y2MyOGNlYjRmYmVmODkyYzc2NzgxN2Y5NDViOWRlZGFiNmQ5YzQ0OThiNTg5NjVkZWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI1OTc0YmJlNzE2ZDI0NGE5NzQzODliN2MxYmEyNzIwOGFjMzliNWZiZTVhYjE2MGY1MGY0ZmQwZjYxYzAzMGEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_54dc6f089e9848cfb4b054cdd0c4ba04",
+      "statement": "Each TUI tab's TerminalView owns a SessionController and feeds output to a pyte screen in 16 KB slices, yielding between slices so floods do not freeze other tabs.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/tui/terminal.py#L165-L233",
+          "version": "repo-lines-v1:sha256:84dcfe3bb54d9a69348f5a2cc0b2c2922a1cd170f513a227aed683f25595cc43:eyJzZWxlY3RlZExpbmVDb3VudCI6NjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVjYzVkMjUyNTJhMTg0ZWU0MDc5Y2MzODRmY2M0NTE3ODNlNDJhY2NkZTkwZDc0YzgzMjZhNGQ3ZjU4YzQ4ZDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc2ZTYxMTM1YzU2NTAxNGZkZDNlNjNmZWU3MTExMzdiZGJiYzBiZjIzNWE5N2FlMjE1NjA2NmRiZjFhZDc0NzEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ0ZTliZTk4NmRjZWIzZWVhYTFkMjY2MjhjZWZjYzRlNTdlM2U4N2QwZTA3MzkzNDEzMmQ0ODlhODI5NzhjNTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFjYjRkYmI0NjY4NGNjNzM0NDYyYjcyNmQwYzMwZWVjMDRmNjdmNGEyZjFkYzZhYjc4OGE0YzcwZGVmMjdlMTAifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/tui/terminal.py#L21-L21",
+          "version": "repo-lines-v1:sha256:d457055a29605eb5f254db80903a5d29de446636dcee96014b489147b3da0f45:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDQ1NzA1NWEyOTYwNWViNWYyNTRkYjgwOTAzYTVkMjlkZTQ0NjYzNmRjZWU5NjAxNGI0ODkxNDdiM2RhMGY0NSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDQ1NzA1NWEyOTYwNWViNWYyNTRkYjgwOTAzYTVkMjlkZTQ0NjYzNmRjZWU5NjAxNGI0ODkxNDdiM2RhMGY0NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzgwYjI0ODkyODVlZjQ2ODIyM2E4OWU1MzRlZTVjMzc2ZjdlNzkxNmEwYjdkYzE4YzFkNzQ0Yjk5YWQ1YjY0NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTgzZDQyMWIwMzcxYmFkMmU2MDY0NTY0NzYyYjI4YjE0OWUyZmZhYmYzOWJmYjk2MWJmNzJmMzdkMjFkZDg0NSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_31c548610b4c42db9762893396a84f6f",
+      "statement": "Keystrokes and terminal replies go through one queue and writer task so they reach the session in order.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/tui/terminal.py#L183-L185",
+          "version": "repo-lines-v1:sha256:ed73d50595d878894bf609f0bb7af68984bf0a3d1f157fdbf57affa58e0ec3f7:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDY1MzIwY2JiZWNlMDNiNDFlZGVkNDRhOTU2ZDMzMDdmZjVkM2RmNTBhZDBmYWFhZTVjMGY3ZjI2ZDlkODdiMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjg4NGE4MDM4YjRmZmQzMzIyZGUxMGFiZWI2MGJiNGYyNzc0ZmJjZjNiMjBmMTJlM2QwODdjMGYwNTg2YjU3ZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTA0YWM2Y2RjZjBiMmQzOTk1OWI4NDMzMzUwNDRlYjRlOWQ4ODhlZmM3ODUyNmUwYjQwMzQxM2Q2N2U5YzYwZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDNiZWM0ZjA2NDQwNzY5M2JlYjM0NWEwNGIyNGQ5OGYzODQwY2ZmN2E0MjhkMmVhMjQxZWZkYTdmZGNiY2Q1MiJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/tui/terminal.py#L235-L241",
+          "version": "repo-lines-v1:sha256:300023ef14657821be6c256bc01bc90b1e4e97fd87470d0fa4d91524e99b4721:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNmE0NjFlNTkwYWUwNDFlYTU5OGZiNTkyYzBhOWM0MzQ1ZGY2NDJjMDg2MWE2MGQyZDUzMTRmZWM2MzkwZTc3YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzczMGU1ZGQyZDk0NWNiY2QxNzdkNzVkODUyZjNhMWZiYjVhYTIxMzk0NDgyZWM1N2ZkZmM5YmEyOTYyOGQ5NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzA5ZDFjODg5MjkzNjA3YjVkMzQ3ODIzZjhiY2NkMDJhM2UwNzM3N2ZhMmJhMjEyMWQwZjZlM2NjZmE4NTcxNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiN2Y5ZGIzMTdhOGZmOTNkM2M2MzgxMjg2NzgzY2Y4NGMzYTA2NzJlNzUxMGEwZmMyNGVjYjEzYTRiMTU3YjlmNyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_42cfd3dbd9c744b0a169d625a9f11b6f",
+      "statement": "The TUI profile editor is generated from describe_options(), shows only the selected kind's sections, hides advanced options behind a switch, and maps OptionError to the faulty field, revealing advanced fields if needed.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/tui/app.py#L161-L376",
+          "version": "repo-lines-v1:sha256:3d5cbca38e75567ad152d0778c966168545af1e9a527cfcee25cbe3ce46c2a15:eyJzZWxlY3RlZExpbmVDb3VudCI6MjE2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI4ZjlkZDMyMzQ1N2I4NzBkN2NjODhiZmZjMWUwYWY1NGFjYWQ0ZjA2NmY0YTliMjc0MGE3ZmZmZTBjYTAwZjBhIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIwMWJhNDcxOWM4MGI2ZmU5MTFiMDkxYTdjMDUxMjRiNjRlZWVjZTk2NGUwOWMwNThlZjhmOTgwNWRhY2E1NDZiIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJhODBlMWExZTUxOWRiY2UxNDk0NGYzYmMxMDI0ZTk3NGQ5NDQyNzJkOGU1MDFhNDJhNTZhMDBmZmJkOTI3M2YxIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJiODA2Njc1ZjUxYTE5MzI3OWIwMWE1NWQzODAxMWMyYjRmMTg2ZGRmNTAyMThhNDI2NmY1OTNjZmQzMDJlYjA2In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_979b980dbfee47e3ada3aeabc0325b4b",
+      "statement": "TUIPrompter shows host key confirmations with Cancel as the default button, and a changed key gets a warning, the old fingerprints and a danger button.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/tui/app.py#L98-L135",
+          "version": "repo-lines-v1:sha256:f49434dc40e5f621b43d2adab0977cfa40d46aa1b0d88b9a45df797b5280134d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNlMWYxYzY5NDRiMTEyZjA0ODZmMjRlMGQyNWIwNDk5YjIxMzg3MGY0MzY2NjRjOTRmMTg5NzVmYmFhMWY4ZWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY0YzJhZTlmOTA1NDk1ZDM1ZjBlMTU2YTRhNjI2MDUxNWExNTlhNDRmZGVmY2RlMDMwMzMxNDk3MGI5ZGM5MTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgxMTgzMDcwZDhkMmZiMzBjMjY2NjUzODE2Mzk4MjA0Y2JiODY0MWIxNTA2NGQ4ODE2NjJhOWUzN2UzZjViMjQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_52f9557d7085413abae9c1bef7bb1949",
+      "statement": "The TUI displays remote or user text in widgets with markup=False.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/tui/app.py#L42-L45",
+          "version": "repo-lines-v1:sha256:1da8194f178e8955d2e53460a6af732a3aadbe26d80e229f85e10495875bb2b8:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDhkMGNkMzc1OGY0ZjJlODFkMjdmOGZlZjQyYThiMTMzNTNhOTM3MjI0NWEyMTNlNjdhNDc5YzBhNjY5ZjdmMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODBhZGRmYTJhMDExODMzZjY1N2VjNTYxNGZhNzRiM2MxMzAyMTJkMTViZDhiZmU0NDYxMzYxNmM4ZDhlOTVhMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzcyMzlkNjIzNjkzOWI1OGJhYmZiYTIxZDU1OWJlMzg0Y2IyNWI2ZGRjNDUyZGQwOGZkNjdmMzU2NTM5MmZlNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjQ1N2YyMTc3YmYyMmMwZGJiYjQ1OTEwNDkzMGMwNGZlNjJkMGY1ZGY2Y2VlNDE2ZWRjOTI0OWY4YTM3YTQzNyJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/tui/app.py#L564-L571",
+          "version": "repo-lines-v1:sha256:fd74c93dfbcf90d8c8646ab32f6834e20f9e47eadd15688fb0703bc57b124da2:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWFkYTE0M2Y4OTQ0MWQwMTRhMmFjZTFmNGE3Y2M4NWIxNjdjNDZmMmQ0NDVjMGViM2EyNzc4ODJjZGMzNDFmMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGU0ZmVjYzE2ZDYyZTk1NTY1ZTc1ZGQwOGZhOTI2YjZmODA3NmY4NGJmODcyZDk5OWNkYmJhYTgxMzA1YjFjMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTIzM2IxZTU1MjU4YzBhZTY1ZTZlYzI5ZmZkM2JlYjI2YTQ1MDAyYWQyNWVlNTI0MDEwMTQ3NzMwNDAwYWNlZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODUzM2QwNmY5ODgyYTE5NTYyNjNmNTE0ODFkZjQ1ZWU1ZWE5MzcyZTExMzA5ZTYxYTFiZjRlNzA0MDQ4NDBjZSJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/tui/app.py#L75-L76",
+          "version": "repo-lines-v1:sha256:196d793c156de887c23a19da7f69509c854e732aac1945534ae1e7aee6a2bd51:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDhkMGNkMzc1OGY0ZjJlODFkMjdmOGZlZjQyYThiMTMzNTNhOTM3MjI0NWEyMTNlNjdhNDc5YzBhNjY5ZjdmMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjUyMGYxMDg5NDQ0MDQyNDljNGQ3MTY4YzlkZTI2YTAxYjJiYjFkZmM1YWQ5YjlhMGQ4ZDVmNDRhZmNhODdhOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzcyMzlkNjIzNjkzOWI1OGJhYmZiYTIxZDU1OWJlMzg0Y2IyNWI2ZGRjNDUyZGQwOGZkNjdmMzU2NTM5MmZlNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDlkZDczZTYwMjk0NDIxOGJhZTBlODY3ZmJhYjgwODU5ZThhMjU5NjQzZjE4ZDI0ZGM0YzA5ZmQ4YzE4NDYwZSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_0fe82756491848f3a6ecd43cc6d04812",
+      "statement": "Selections in the TUI are copied via OSC 52 and, on Windows, directly to the clipboard because the console host ignores OSC 52.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/tui/terminal.py#L370-L380",
+          "version": "repo-lines-v1:sha256:29bb5f57faead2c3e9e237c19a4ce2689a42d3cbcceec7e5d142863262ef0021:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFhZTZmM2JjNDgwYjBhNjUxOTdhODAyN2ZhMjJlYWQ2OTcyYzgwNWE4ZjgxZDQzZTE1YTQ4NTQ4NzZhZDAzYTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE5N2I0N2JiODFjZTkzY2JhNjdhZmMwODY5OGE4MGNmYTA5M2E4NjY3ZTljOWY5NjUzMzc4MThkNjU3OGQxODUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc5MTQwZTJmYTA2YWJlOTdhNTI2NWQ1Y2ZjOTEyYjA1OTZjMDBjM2VmNWZmYzE1Y2NmYTgxOTg2ZTZmZDhhZWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJjMzcwNGQyMWM3ZWY2MzNmODU0OWJkNmI5YTI0YzJkNTRhMTc1Y2E3OWIzNDg4OTYxMTRiN2RkOThhMWIxZmQifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/tui/terminal.py#L62-L93",
+          "version": "repo-lines-v1:sha256:515edd7bf5bb6e732b4f69702d0beb0cf573f63b8b033bdea2d9067ddd73e58f:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRlYzYyNThlY2M4YTFjZGU5MTU5ZGRlMDIzY2EyZDU4NjM5ODQyYzFlZmY3MTAxZWU3NGNkY2VlOTc0ZTRjNzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ3MDE0OWUwNjlhZDY3ZWNjZjQ3MzY0NmZmMWM3NTAwNTBkMzI5ZDExMDAxOGRjNTc2Njg3OGVhZmExZDYwN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkxZTEyMjNiNjg3NGRmZWMzNWU3ODYyZDllZTVkMmExNWM5MWY2YWNmOGE2ZWI3NWVhZjcyZmZlYzExNzcyZmUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-18T13:56:19.871Z"
+  }
+}

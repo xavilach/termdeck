@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:efc93f06919ed4cdbaeb4614393226a2a2737e9a69fb476ccf6b4e8661acb3c1",
+  "claims": [
+    {
+      "id": "claim_fa80bbd3e2d24e8a9c4551cea45a2148",
+      "statement": "Prompter is the protocol each UI implements: ask (None cancels), confirm_host_key, and an optional notify for banners.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/session.py#L88-L104",
+          "version": "repo-lines-v1:sha256:4ed1ab4220314e9affb895c4f528eef1be7375f9151e67720b204cf99eca1991:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQwNzFmYjNlMGVhODFkMGUzYWI5NTQ5NDAzZDczMjhjYTFhMzYyYWI3ZmNkYTE0MjAzMzlkZTQ2NGRlNTJkNDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4NTI3ZDllYTY3ODlhZmJhZDc0YWE4ODMzYzUzZTI2ZDBiZDk4NmExOGE3ZTA1OWU4Nzg3ZTU5OTI1MTNiZmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5MTllOGE2MGM0ZWVmYjBkMzdjNWE5YTE1ODE1M2Q0MjYwYjNlYjBhMzg0NDc5MzJhYjA2NmZlZTExMjkyOWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM1Yzg0YjhiZWQ1YTRhNmIzZjM5ZmY4M2QxY2Y1NTdlYWU4NGQ3ZmZhNmZiZmQyMzlkN2JmYzhlN2RlMjNkZWIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_eb3270c8b82d4f66bcbde087a3e7e976",
+      "statement": "Session notices issued before a UI subscribes with on_notice are buffered and replayed; notices are never logged.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/session.py#L146-L159",
+          "version": "repo-lines-v1:sha256:dc4b63cb9e74a18546b14f8c0eb3040bd1bcfdf1786d52556d70482a5d4d70d2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2NmM5NDQ3MjhhMTk0ODM0OWEzODA5YWM4YjY5OGE1ODM2M2YxNjVkMjdhZmIzYjMwZGQzOTJjMDQwMzc0M2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBkOTQ0OTJhZDAzMDhlODg0ZTg3MmNlNjgwNTk5ZTRhM2IyNGE5ZTg2ZGY4M2VlZWMxN2UxMjM3Y2IyYmE5ZjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdhODcyOGMzYjBlMTRmZjA3YjRmNzVkNTk2OTkxN2I0NzUzZWQwZmM5ODU3ZDBhYTNkMDg5Y2I4N2MwMjU1ODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU5MGY4NDQ5MDUwN2ZlOWI2Njc0YWM3MjBiNWEyYjlkYjc4MzdmMTlhZmRiZTIxM2E5ZGFjNGQwYTg2ODJiMTMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_049a58d77f464f81be810c28217a7883",
+      "statement": "TerminalSession lets at most OUTPUT_BACKLOG (64) remote chunks wait for the UI, while local echo and notices bypass the limit so typing never blocks.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/session.py#L162-L193",
+          "version": "repo-lines-v1:sha256:72e1abf8eccfe43ad168190273da512b144af7cca7ca5f9316e0fc943638983e:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1YTM1ZDJlODFiZmYyYWVlMDQwMTQ4ZDRhODMxZWUxNjNkYjI5ZmMzNDRmNjUxYjY1YzBiNzg1YTAxMGY2MzAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYzY2VmMTg1ZDdkYmQwYjRhMzVhYzk4MGQ3MDFhYzlhNmUyZThjMTViYWM5ZGY2MjJiZTFmY2MwYzA5OWYxZGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQxZDZlMTIwZTg4NGQ3Mjk5MDFhMDY3Njc2MTRmNzU0ZjYyN2NkYmVjM2FkYTAxMDE0YjY4ZDI5YzI0MTcwZTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNjOTc0YmFmNDU1OTc2MTgxOTgyMTJlZTIzNTFlZmI1NWYwMTQxZTJiZjQ3N2ZmZDJhYjU3NWZjODQzNDVhMDIifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/session.py#L301-L362",
+          "version": "repo-lines-v1:sha256:82a8b405b181d47a04294287dd9b1789ecd69079d2f89003c39e6756c9c7ebb6:eyJzZWxlY3RlZExpbmVDb3VudCI6NjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJmNzkzNzMzY2MwNDM4NTg2NDdkNTI1ZGUwNTRmMTc3M2E2ZWI3Y2NlNmMzNzJhYjljZGM0ODVlYjI2MGUwNTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhjMjVlM2FlYzFiMTNmOTBhMzhjYjJjY2NiZjlkZjgzYmM1ZmU2NjAyODE3OTJlYzczMDc0MjcwMjMwYzcyYjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY5MmQ5NzE4NzBlZGI4NmFhNDUwMWQ2YWYxZDI3OTY1N2Q4MmQyNTJjMTY1MDFjYjI1NzIxNmYyNmMzOWZmYjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI2ODc4MTc5OGI5YzllMjNhODBhY2MxMmVlOWU0MDkyNmUyNDY4NWY1Mjg5NWRlMTY4MzYwZWRlNTBlODFhNzgifQ"
+        },
+        {
+          "resource": "repo://tests/test_session.py#L65-L95",
+          "version": "repo-lines-v1:sha256:b2c3ff4a3f9b4c89abcd8d7703e38bbc9d93d87b74917271eea78c8ab1d8aa51:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJmODQ5ZmVmMmI4MzM3MTBmZTRjMmRhNzIwNDAwNDFiYmViN2Q1YTA1MTA3MmY1MDkxMGRkZjFhYmNmZmJhMjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1NTEyODJmMmM5MTMyM2M4OWJlOGQ1ZWU4NzQ0M2UwNDRmYTVlZGUwNGZmOTllMGQxNjlmNWY1NGU2NjNlNGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYyZDI3ZTBkYmIxOGYzMWNhZTAzNGY1MTAwZjI0Njg5ZjVmNzRkZDUyNzdjMzI3MjgxODJhMTNhN2M1N2M3NDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjllYjMzM2FmNmQ5ZGFhNzU3ZWY3MjVjNmVkMTU2ZTg0YWM3YTY1MmZlODE5MWJhNzEwYzJhZGQ1NDc3NTFlY2MifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f91a359635c449aab2de007eb30326b6",
+      "statement": "Remote output is decoded from the profile charset to UTF-8, passed through printer capture and the RemoteFilter, then implicit CR/LF are applied in one pass so each CR or LF becomes exactly one new line.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/session.py#L246-L265",
+          "version": "repo-lines-v1:sha256:cd829a7525f62201c9cb21ae9f36dccfc961f4397f0e140c7e5016ebc4ab0df8:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkxNTU4NzRlYWQ1N2FiNDNmZDUwYTllYTM5NzhmMzUwNWE0MTI5N2I5NzQwMDU1MTE1MTIwMDM3ZjRmN2M0ODMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhjMjVlM2FlYzFiMTNmOTBhMzhjYjJjY2NiZjlkZjgzYmM1ZmU2NjAyODE3OTJlYzczMDc0MjcwMjMwYzcyYjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJjMWViMTA2NWMzMWNkNzYyY2U4ZDA1YjUwOTA1YjRiZWQ0ODlmNzQ5MzZjMjkwYzkyYzgzOWE3Y2YyYWRlYTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM5ZmEyYmRhODBlMTU1ZWExZGUwNjE3ZDgzNjlhZmE1NDRkZmQyY2ZlMGEzNWU5NGI4NzlhYWExZWM0MDVkN2MifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b8361a32e40b4ab0b75ebfd173fd9a27",
+      "statement": "With line editing on, the editor switches to secret mode when recent output ends like a password prompt.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/session.py#L29-L30",
+          "version": "repo-lines-v1:sha256:979d59582bc9ab7e0f807b8f6a3b458dca191116ed965c446363e9f2ef5eed58:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2IzOTI0MDhmMDYwYjk4NGQxNWQ2NjgwMGZlZjhlZmY4MjNmZTM3NjljMDRlOTUyMjZhZTJhZDdmZmZiNjRhMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTUwZjM2OTA1NmZkOGVkNzZkM2NhZTE2NTdkOTg0MmE5ZDdhYjM3MGJkMzg3MWU1NjNiMDI2YzE2ODU2ZjBkOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzIwZTI5MDAzNDNhNjU5NTEwNTUwYzAwNjQzYzExYjRhNGU3OTcxYWRmMTdiYWU3ZGQ5OGU5NDJhMDViM2E3MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmVhMzRhNDEwYzE3MDkxM2RhMDQxYzRlMjc0MmFkMzc3YjdmZDg5MTg1ZGNkZDNiYjA4NWE5MzJjZjZlYmFmMSJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/session.py#L319-L321",
+          "version": "repo-lines-v1:sha256:28a865d2c9a4e1f4201db27db93a5f1f7cfc5d664639edcd0320407a9d0775ac:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjY1MDcyODZmYjFmZmQ2NTNmZWNmYjkwZDEzMTAyMGQwMTg4ODBjYzUzNjQ0NDlmODllNzk0YjE2ZjVmZDFkNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTdjZTFjZDdkNjQzZGM0NTE4YTAyMDFmYmY4YWI2NzhiNGEzMjE4YTNlM2U3MWY3MGZiNjA1Y2U4OTZmNWEyNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDJhZTRiZjBlZjQ1ZGI4NGVlNzI0NTI1YWRlNjBhY2I3NGVlZjU0YjcxYjgyZTVkMzVjYWRiZGJkNzIzNWRhMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjJkZmIxN2VhM2JjNDM5NGY5MjhhNTBhMjcyYzExZDEzZTg4ZDNjODAzZDA1NWU2NzY1MDZiNjg3ZWQ1MGViMyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_cd6f6097f07f4eeabbfca8440a2167fc",
+      "statement": "Input is translated (Enter, Backspace, key remapping) and encoded from UTF-8 to the profile's character set; raw sessions pass bytes unchanged.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/session.py#L364-L390",
+          "version": "repo-lines-v1:sha256:9255fec0a4f5e0e2a45e42dff80ed4b6bf647d782f926bf77623fd265f5c0d15:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA4YWExNWFiODQ4NDdhZjNiMjBhZWZmYWQ2Nzk1YjVhOTQ1MjBkMDNjMzdjMjgzOGNlMDlmMTgyZTM2M2MzZjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZjOTk5MDk2NTI0MzUwZGIzNTU0N2I3NTJmZjYzMDY3ZDUzYTBkMDYzMmFjZGI1Y2FhMjIyZWZkZGYyYmNmMDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQyYjEyNGE3ZjFjNjI4ZDhmMzEyMzY2MjU3ODk0OWUyODUwOTgyYzY3YTgzOTYxZjlmNDllYjFmZjQ1MzFkZDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjcwOTg4OTg1OThjNzA0YmQwM2M4N2M5NDA3MWNkZjk4Y2Q0NDBjZGUzOGY5Y2VlNDRkODFjM2VlYTlmYzI0OTgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4b05f4ac62894bb6889441542dd0e056",
+      "statement": "Log or printer write failures stop only logging/printing with a notice; the session continues.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/session.py#L272-L282",
+          "version": "repo-lines-v1:sha256:008f3aadb0bd445c08066b7ec0e95d6652ee9a37745d5e2373e818391a5cd920:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg5MjNkYzg2NmViNzdhMTI1NzgxMmYxN2Y0ZDZiNDY5MDdkOGJhMDkwNGI4YjM5NmIxOTUzNzBhNTRiOGIwNDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1ZDViYWRjYzVmMTU4YzBmMzk4NGYxMjk3NzAyM2E5YzI5M2I2MGFkNGExOGJkYTlmOGM3NWJmOTM1NDZjMGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxMTljZGZmOGM4N2VhZTg5NmU5OTU4YTYyODc5OGM3OGRkZTU3YTc4OTJhZTQ4OTQxMWQxZGZhYTQ0YmFkNDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNkMWQxNzg3NmY0YTVlZGNmYzFlNzBmODg1MmU0YTI1MTc0M2RhMmY0Y2UyMjVjZjVkNTgwOGMwN2JmNGIwYmQifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/session.py#L345-L352",
+          "version": "repo-lines-v1:sha256:1ccd3d9f47040844ea5a4ab771784afa80f65d6bbe13ec4abe588771ffe0f28c:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzJiMDQ3MzVkZTYzOTJkM2U5ZGZmZTgzMWRhYWZmZWFlMzJlOTA2ZDRhYjNjNjI0OTY3MTA4Mzg3ZWE5MzUwZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTU3Nzc2MjMxZjQ4NWU1NGQzZWI0NjI4Mjg2ZTljMzY4MTA5YmQ0MGE2ODRjMzEzNjU4MTEzZWMyOTY2MmYwNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTFlYTJjMWJlYzkzY2M3ZGI4M2I4ZjRjNjZjZDI4OGQyM2U2YWM3OTRhNjVhZGFhNjk1YTMwNDgyNzM5ODE5YiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTUwYTU3YWNhMzc1M2E4YjdkNDYxYWJkN2NlNTgwODg3MTJmN2FhY2IzOGY3NTQ5ODMwOTI0NDM5YzcyNjAyZSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_85a2ccbbae3740dfafdf5d1344960056",
+      "statement": "SSH packet logging attaches a handler to the process-wide asyncssh logger at debug level 2 (not 3, which could include typed secrets) and restores the level when the last such log closes; environment values are hidden.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/session.py#L413-L466",
+          "version": "repo-lines-v1:sha256:304f1ed25db202e70e5fad4a72eba7ab2a324cb5ae6fb7ba4ee1e33f0431cd70:eyJzZWxlY3RlZExpbmVDb3VudCI6NTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRhNzBmZTYyZmU0MjgxNDc2YTU3OTg4NDAxNmExNGIyZGEyODlmYjIwYjU5MTQxNzQ0YWU3ZDJlODlmNjM2ODEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhhMWRhYTcyNWNkOWFjYjRhZDYyZmUyOTM4YjZiMzhjMTdlNzQ3ZGExMGM2NDA5OWFlN2M1MzE1MjdmZDVhNTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA1OTg2ZThlNjVkODI5ODkyMmQxMGE2MTc5YTQ4ZWZiNDY0OTY2ZjhiNzRmMmI5NTUwMzgwOGQ4MmU2YTAyMDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU1MTNhZGRjNGMzZTk4N2ZmZGI2YTU4NDQzM2RlYTViMTNlMzI5NDZjNWY5MWJhNjgyMjExZjBiN2UzZDA4YjgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a2a1fd4db6614856ae60ca51ab8d196f",
+      "statement": "log_path replaces {name}, {host} and {date} with file-name-safe values, prefixing Windows reserved device names, and keeps other text as typed.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/session.py#L33-L50",
+          "version": "repo-lines-v1:sha256:e438f2d3e8218fe729e1a021a99e23b543e2bf5a5c2628feba14998a57318cb7:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEwYTZjMDkzYmE3MzM5OWI3YmNiNjY3YjNkYTgwYzAzYTFjZDViOTQ0YzhkYjk2MTA4MTNhYjc3ZDFmYzJmMTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlMjE2Njg5NWZhZGE4MTc0ZTIwNGY1ZjM5MmE1ZDE5MWYxNjJkNmFlMjg1YTk3MzgzNTU2NTljNDRlMTJmYjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjliZjhiODU4NzIzNWU0ZmMyMjViMDY2ZDEzZGIwNTUwYTZlYjU4NzhlM2ZiNmJhNTYzMTBmNTU5Y2FhMzBjMDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZkYTU3ZGFmZDE0YWEyODQwMzJmMjI1ZWFiNWMwY2E1NmYzYTFlOTg1M2RlMWQ0NGQxZDNiNTMyYzAwODMzYTMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fa41f46ef0c04df38a69ee41d89faf83",
+      "statement": "describe_error consults loaded transports first and passes the message through printable(), which strips control and Unicode format/separator characters.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/session.py#L502-L521",
+          "version": "repo-lines-v1:sha256:1cc6bfd655079a26d9fc265b303fd980e9ba6e10ff3152b8122487512b31df79:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1MWNhMjMxNjBmZDE5YzVjNjdjNDIyOGE2ZmJiYWQ3MDE5ZTE1ZTdhMGMxNWNmMjFjNWY3MjgyM2YyYTAxZDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY4ZWE3ZWYzNTgyOTY0MThkYmNkNDFiM2M3NmM3Zjc2NzA0NGE2MDEzYmUzOWYyOGJhYTk3YjQxZjRjYTdiMDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRlN2IwYzE5NjNkNjgyYTVmODQzMDI3Y2EyMTliYTU5NTU2YzQ4NDc1YzQ0NTc2MTRkZjhmNTljOTI3NGJlNjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY4OTY0N2NhZTUzODhhZTIzYjIxYTVkMjgwNzI3Zjc4YWI1NTViYTE4NjJjZWE1NmIwNjU1Nzc3MmU2NDU4MTAifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/session.py#L53-L55",
+          "version": "repo-lines-v1:sha256:b73049446a7e80dd3633b4496d00a0d374dd498c7b1a29213387359e231953e9:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzMyNzNiZjZhMmZiN2RiMWYyMzkwMmVjNTg0NTBiYzM2NTcwNWZkMDM2MzU5ZGRlNDljMTk0Y2ZiOWE3OTBiNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTNjNjQwZGI3NGNmZDNhMTY4YWEyY2M2MmU1MWI2OWRiOGJhNDU5NjJkYjFiODNjNzY4MDU4NTM2MDJiNmI4YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTZjMzEwMWM5M2ZiNGZmOGE3Y2RmMjc0YzU0YWNiY2Q0ZmM5OGU1MTkzM2E4OWM1M2RlY2YxNzEzZjBjOTdiMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmMxZjAyZmQ3ZWMxZDQ2MmMwY2I4MThiOTQ4ZmZlNGY3MTViMmMyYzQzMjYzMGMyMzJkZmUzNGQ0Mjc0M2ZhOSJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-18T13:56:19.871Z"
+  }
+}

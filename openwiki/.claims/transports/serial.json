@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:303f08cf94840304ff90ffbc1e3a1be5ff40c96f96a06f30fb3a2876ab6c1126",
+  "claims": [
+    {
+      "id": "claim_715b7768c7a94a5fbdc06aabf73ca1a2",
+      "statement": "find_device never guesses between adapters: it returns the current port if still the adapter, the unique port with the model and serial number, the unique candidate on the recorded USB socket, or the unique port of the model for adapters without a serial; otherwise None.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/serialport.py#L56-L82",
+          "version": "repo-lines-v1:sha256:93ee94ff66ec18909f36253ae4b810574a0a9e2679ad669a856b48ad4a949618:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgxNTk5NDU1MzNkNjU5MGUyN2RhY2EwMjhkNDM0NDc2YzI1MTFhZDlmNTI3NzQ1ZjQ1ZGI4MmEyMWEzMTRkMzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTYwMGE3M2QyZTAyZjM1MmI5MGZlZjFkOGQ2MzgxMWJhNGE4ZWUwYzFiZWFhN2FlNDY1OGYzNmFhMmUxOTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM5MTdhNTk0NjkyNzBkODJlMjFmODJmMDdjMzk0MjkyMzNmMTlhYjRhYjI1OTRiMmNhOWNmMjE3MWY0Y2JkMzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJkOWIyMTVmNTk0NGJiMTk4NmE4YzRjZjZlN2NhYzIwYmFlZmIwNjA2MzExMjRjMWEyMzgyZDY5MDMyOTE1MzcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d1c3026d2add4a75a9c59154997c3684",
+      "statement": "Windows-invented serial numbers containing '&' are treated as absent because they change with the USB socket.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/serialport.py#L35-L47",
+          "version": "repo-lines-v1:sha256:6086d6a81c523c92a1c35d3de534667ecbd846685d7554b76500c055e6463d8b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFmODhhNzQ2ZGVjMDk1MWQwOTI5NTg5NTcxNmM5ZmIzYjc5YjQyZDdhMmFiYWY4NmJhMWRiNDI5OTkwN2IwYTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkMWFlNDg3MGU3N2IwOWMzOTNlZTZlMDc5MTE0YzhmNzczOTNmZGM3MTVjZTBhNjNmNjI0MDQwMWM5N2Q3MjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYwNTk4NzlmNDM4YTdiMTJiMDllNWViZTU4Y2RjODQ3ZTNmOTc4ZjU2NjZlYTk1MDRhNjYzOTFjYWMzNDVjOWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlmMTMyNTVlZmRhZTZjZmM3ZGIwYjA1M2NiZjZiZDc5ZDFiZDlmZjA5ZmU0ZDdhYzRhYTFhM2EwZTMwYmEzYzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e542840543a1403889e1fbd915a2bf79",
+      "statement": "resolve_device raises WrongDeviceError when the recorded adapter is missing and its old port name now belongs to a different device.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/serialport.py#L106-L127",
+          "version": "repo-lines-v1:sha256:637d4a011fe3df40525e229c8b8ea48f4e9626afa43973de2c1e0bb1c3b42ea1:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwMTRhM2NhZDA5N2YyMDY3MDkwNDkwYzk1Y2EzMzk1MjgwOTBlZDEyZjczMmUyM2Y0OTY0NzY0MDg4Y2I0YmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5Yzg2ZTAyNTBmYjcyZWU1N2U1YjI0Y2U2ZjJhMGFhNTQ0MGY5NmU2YmZhYjJjMDk0Y2FhNmY3NTFhYTY0MjEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYzNzMyYWExOGE2OGViODBiZWQzODU1MzA0NmJiMzgxZTg1MTQzMWUzZmEwODdmNDMzYjNiMjYxNmRjM2RjOGQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJiNWE2NDQxZDM2NmI2NzAzYTk1NDA5NjNmNDA5MWNiNDBiNWViZWQwMjg4MTlmYWIyN2RkZTliYWExOTA0NzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_5f0fbe86dc3a4410b990248f4779c539",
+      "statement": "update_identity records the USB identity of a plugged-in device and drops the old identity when the device name changed.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/serialport.py#L89-L103",
+          "version": "repo-lines-v1:sha256:ae885c821a03ed98317c03481b6e6c4e20d89b8ee31046929e2144797a905aef:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM4YjIxYTgyNTA2ZmYxNWViMmNmNzlmMzE5NmE2YjExNTMzZmUzMjVlY2E5ZGY4OWYxMWMzYWZiZTg1NThhMGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVlN2JjZDM2ZWY1M2I0NDUyM2U2NWU5OGQxOTQ0OTkzZTBmZjE3NDZmNTUzNmMxYTUxMTc0NmYzZTAxZTc1NmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjExMDE5NzY2ZjM5YTgzOWU4ZjM2MmE1ZjU2YmQ4Nzg5NmU3ODcyNGI4NTYxYzdiZTk1MjhlM2I3NmU4NWRkNTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkwMmVkYmNiZTAyOWFkNzNiY2FhODdkNWU4OTJjODFlM2YxMTJiNWY0ZGUzYzJjNDhkYTI1ZGEyOGFmN2E4YjAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9f14e317a7c940da9194adc5348448f9",
+      "statement": "DTR/RTS are set before the port opens, DSR/DTR flow control is used only on Windows with a notice elsewhere, and on POSIX HUPCL is cleared so closing does not drop DTR.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/serialport.py#L142-L156",
+          "version": "repo-lines-v1:sha256:6e075dca95295f82d3701a1df8c4dd3ce81ecceaea416d7750914d411201e014:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhlZDJjYTY5NGU2Y2QzNWY0OTAzNmZmZDM4NzFmOWJmYjQ2NjRiZmJlZDdlNzU4NDA2MTdiNzUyZDg0OGMxZGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwNjJlNThlYTBiMGZkMTk1YmEwNzY2MTNiNjMwZDU5ZTY3YmQ0NzBiYjE5ZTk3YTIwYzkwMjM2NmU1YmEwZTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjlhODJlYmU5ZWQ0MDdjM2E2YmE0YjAwMzQyOTJiYWE1MmMxMWNlNWFlMjg2MTA3NDAyZGU0NzkyZWVlY2FjZmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM4YTY3NmM1YWNmY2I5ZmY2Nzk5YTFiM2I0ZDQ4NzVhNThkNTQ4MjlhODA2NGQzYWQ3MWVjNDdjMmQ5ZmUyMTAifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/serialport.py#L176-L215",
+          "version": "repo-lines-v1:sha256:138e401819aafdbd000d1f38440b65e081160e0761d6cc6d5680b3cc2dcfd91d:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU5MzgyNWY1NGZmNTc3Y2Q2NzU3NGU2YTgyYThhMjNjYTJkOThiNzQzMGY5N2UyMGQwODRlOTZhNzVkMWE1MDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ5Y2FmNjRhYmMyYTYwNmY1MzlmZWI2YTFhZjgyZmY2MjZiYTM1OTFhOWMxZjQzYjU3NDU2ODM0MTAwMDMzYTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM2ZTZhZDNlNWNhYWFkYjY5YzA0OTM5NDJmZDE3NjUxZWUzYjU5YTU4OTFiNTllYmRmZGQ4MjA2ZDE3ZDUwNDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRmMDQxYzQ3MWM3OGUzZWNmODIzMjJhNDQxNWM3MDA4MWMwZjBhM2Q1ZWEzNjk4MmQ1NTQwYjNjN2RhZGQzNTMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e821e9d6e268460a9c79147eece450c4",
+      "statement": "A serial session uses a reader thread with at most BACKLOG (256) chunks ahead of the UI and a single writer thread so keystrokes stay in order.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/serialport.py#L159-L182",
+          "version": "repo-lines-v1:sha256:f81ed5c7a0354759bb217a91f88e8db61644847e6a948b9dcc2a7653ff241b5a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRiNGRkYjY1OTEyZjdkMjE0OTQ1NGNlZjQ1OTc1ZjU5YTcyMmY1ZDZmMDNhMmVkMzRhODEyOTEzZjVlNzY0NzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQwMTg2MTU0M2ZjOWY5MTAyMDk0ZDYzMTQwYTg0ZGE1YWMwMTc2NzgxOGNiZDgyZTljODZlODZlNGVjNTVkZGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZhMjhmMzA0MGRmYmViNjhjYzk0NjA4NDdiODVkYjU5ZDNlMGFkNzA5Nzk5NzFhNzM0YzQ5NWEyMTBiOWViN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk1YWI5MjJmN2IyYjgxNjZmOTdkNjQ3ZWE3NmY5NWQ3NWJhN2FhZjNmZjQ3NzM3YjM0ODVmZTE5ZGQ5MDVmZmUifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/serialport.py#L218-L255",
+          "version": "repo-lines-v1:sha256:b9da0401195e71fbc572e455844b0badc9269ea9ade9612a26145be291156d68:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY1ZmUxZTM5MmM1YmZmYTJjNjJhYWY4MzRiM2M0Yzk3YjBhZDVlZDM3ODBlMGY4YTYxMDYxOWFjMTg0NjVmNWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE5N2I0N2JiODFjZTkzY2JhNjdhZmMwODY5OGE4MGNmYTA5M2E4NjY3ZTljOWY5NjUzMzc4MThkNjU3OGQxODUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE1MTNhZTFiNzZjMWNlODcwNGJkYWMyYTU5YTk4MGM4ODU3MTE4MjA4MmUwYjJmMjFhNzU1MDJjZjJmNWIxM2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjViM2FlYTQxNGZlNmRjOTNjMDc0M2FlZWNlOGJkNDZjZTA4ZTA0NWFlYTBlYWE1YzY4NWJjYjdkZjIyMmUxM2MifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ab069dc81ae54d9489a7475e26b28785",
+      "statement": "A write timeout shows one notice and then typing is dropped for WRITE_TIMEOUT seconds per attempt while the session continues.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/serialport.py#L257-L273",
+          "version": "repo-lines-v1:sha256:d6fa46f6fbfd72bb05daec3e47ac4c6ec068e6685c7baa5192250b6314fcb17b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhjMjVlM2FlYzFiMTNmOTBhMzhjYjJjY2NiZjlkZjgzYmM1ZmU2NjAyODE3OTJlYzczMDc0MjcwMjMwYzcyYjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAzOGFhMzNkYjBkNzljNzRiYjRkYjI0NGQwMTE4OTA1YWU0ODIwMjNiNDFjY2NhYTY3N2ZkMzkyMGNmOGZmYzYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgzMmQ5YjMzZjBhODMwYTAyODY3Y2ZlZmM5ZTU1YjZmOTI2ODU1ZWRlMGExMzZmNThlYzVlNjJmMDZhY2YyNTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFkYjFlNTA2MjlkMjY3MzViMGFmZjA5MWMxMWFhYzAzODM2YzQxY2EwNzExYzkyOTZlNTQ1OGVkZGNlYzQwMWIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_bd67211b00434c909876f91ff351e132",
+      "statement": "Serial describe_error reports 'in use' only for errors while opening, since an unplugged adapter on Windows reports Access is denied after opening.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/serialport.py#L297-L316",
+          "version": "repo-lines-v1:sha256:207b2c40af413cd5fd40101291e91f560c60442aa042813e82c6c32abe55b38f:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU1NTcyNDgxMWRjYjJhMWE1YzljNWQzODE5NjRkNDljYzRiNDJkMGE4MDgwYjEzYmY5NmUxMGM2NDIwZjZiYTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk1MzkxYjQxZWRjODVlMjg4MThkNWIyY2NkZWNhZjk5NTZlMzFjYTJiOGYzYjQ0MTM1NTM3OGNiYTA2YWUzYjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNkMjI3MGE4YjMzMTIzZjFiNGNkNDBiOTkyYTBiNGY3OWE0ZTZjOGNjYTM4ZTgxOWM3YjA4OGE2M2JjMGYxYzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-18T13:56:19.871Z"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:39535162f9b6905109f78f7e77a2b7f9a6a63e1e4cf9d9a605eeacd4fb790145",
+  "claims": [
+    {
+      "id": "claim_6cc7839469dc4328b6a4380d4c7f77f3",
+      "statement": "An autouse fixture points TERMDECK_HOME, HOME and USERPROFILE at a temporary folder and removes SSH_AUTH_SOCK so tests never touch real configuration, keys or the agent.",
+      "evidence": [
+        {
+          "resource": "repo://tests/conftest.py#L11-L18",
+          "version": "repo-lines-v1:sha256:3eaa08cd171e1c31bc7de1b3699638919a9aec3cafb3e40427ac09048fd2c7c5:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNmYwODY2ZjQwMTFlNTg1ZmZjMDkwOTJlZGYwODMyZTE3YjUyZjRjOTBjNGNhMGI0MmRjZmEwNTBmYTM3NWI1YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjdjMWNhNmQ5ZWVkZjJmZTg5MTY4NGM1N2JkYTY0MGYxNjZlNzFjOTc0MmM0Y2Q3ODY3MzUwNGZlYjFiZDA3YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzM2NDA4YTg1MGQxNGExYjQ4MmVlNWM2YWM3NTJlNTUyNzE4NGNiZTIyNjM0ZGJhOWQxNjFkMzUwNzEyZjhkMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYmFiNmQ4NDgyZjc4NzZiNTJkYmI1M2JiZjIyZTE3ODBmZWIzZWNmZTVkYmQwM2UzMDU4NTc2YzE4YjljYzIxZSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_148d0fe40c4741a8aa286547eab3d441",
+      "statement": "The ssh_server fixture runs a local asyncssh server on 127.0.0.1 with a generated ed25519 host key, password user alice/secret, and an SFTP server chrooted to a temporary folder.",
+      "evidence": [
+        {
+          "resource": "repo://tests/conftest.py#L134-L166",
+          "version": "repo-lines-v1:sha256:e52e639dcde2158c77127e69f139b1d0195476ca4af30d4f92f7e5720317982b:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJlZDNjYjA2MTNjYzVmMzhjOTMzMjJkMDU5ZmJhNTMxNzliZDVjMzIzMTUyMjZjYWRiZjY5NWQxNjgzZDgzNjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYzZDBhYzQyNDA0MGU2Y2UxZWE1NTRlNGJhMzEzMzcyOTUxNTEwZDJhMzI5MWU0MjI5MGNlYzg4MTliMzFhNzciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgzMzAyOWU3MGI5MDlhMWUyOGI2MjEzYmEzYWY1OGYyOGUzNjRhMmY3Mjk5OWFmZjY0MWJkNjlhN2Y0MTlmZTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgxYzE0MjZiZWE3ZmFiYTA1YTEyYzFlMWM4NjBkYTY3YzYxNzM4ZmZjY2NjYTRmNjc2ZTRiOTI2ZGVhNjZlMDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d1091335fc2347f6a076a738d7c7091c",
+      "statement": "The test SSH server's shell scripts behaviours by command name: exit3, abort, disconnect, kill, enq, err, other commands echoing their environment, subsystems, and an interactive echo shell reporting terminal type, size and resizes.",
+      "evidence": [
+        {
+          "resource": "repo://tests/conftest.py#L88-L131",
+          "version": "repo-lines-v1:sha256:574908280e87e78744006ce95f422cbe1a4e3734441150dda717c106264ab61f:eyJzZWxlY3RlZExpbmVDb3VudCI6NDQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRjMjM0ZWQzOGYyMmIxOTFlMGRjOTAxMmE4ZmRhZTJhYWVhZTJhNzA5OGRmZjI1MGU0ODAzYTQyYjllMjcyZWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU3YjJlYWZmMjA3N2MzMWQyYTllNjE5NWZmOThiNDhiYWE4M2I3M2E3M2I0N2Y0NWJkZjNjNzRiNzMxYWUzMzgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY4YTE5YzQ5NGE0NDJkNGUyMzJhMzJkNGE0NzZmNjE1YjVlMDhkZjZiODkzMjhmNmJiNWI1ZjBkZDc1NjU2MjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1M2ViZWU3Zjg2Y2UyNjVlZTVmYjEzYmM0ZjA0OTdmNGFkMGRlYjY1YzRmMWQ3Y2U4MTMzYzU5ZmQ5Y2NjYjgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e1f0f80d35da4481a364ea3b296bb924",
+      "statement": "patch_port replaces methods on every serial port opened through serial.serial_for_url to simulate failures, and returns the created ports.",
+      "evidence": [
+        {
+          "resource": "repo://tests/conftest.py#L169-L190",
+          "version": "repo-lines-v1:sha256:d3d4830c492b852be3e2c003c71a7803cf8930e6ec54ec0ef2e66c41c1367af8:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzZjM2NmI5YmQ5YThkMGYzNDBhMmJjMGJlMWUyMmVlYTIwNTY4ZGQ3OGE0NTI4MWI3MjFiMzBmMjJkMDg3ZjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIzNjg4OWI4YzIzZmQ2OGQwZjAxMmJlMWE5NDFkYmRkYzIzMWZhNzIxMWE5YmVlYzU0ZTE1ZmYwY2RjM2RmMWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI2NWY4N2I4ODhiNzQ4Yzk0YzBkNTQ0OWI0YmM1OTZiMjcwYzlkMjJiY2VkYTBlYjRlZjU1NDZlOTc2NGI0YTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY1YzBhYTM0YWQ3OTdmMDdkNjY2YWU4ZmU5ZDgyMDgxMTBlM2QwZjk0NWUzMDEyMTliNTkwNjI3NjY3ZjlhZjYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c3cd95e4839145628b679f91c6df3d1d",
+      "statement": "pytest runs with asyncio_mode auto and a function-scoped event loop from the tests directory.",
+      "evidence": [
+        {
+          "resource": "repo://pyproject.toml",
+          "version": "repo-file-v1:sha256:670f9a27c747346ea7c5f01100555c5157507a13553e7792bc2dd71dad2fe2d8"
+        }
+      ]
+    },
+    {
+      "id": "claim_deef24fde4494782a693ce5de514c3b1",
+      "statement": "tools/screenshots.py renders TUI and web UI screenshots with sample profiles in a temporary TERMDECK_HOME, using loop:// for serial profiles.",
+      "evidence": [
+        {
+          "resource": "repo://tools/screenshots.py#L1-L30",
+          "version": "repo-lines-v1:sha256:dc9a7d63aa281b717863944f1906610797aa4d35e5af473537d544df4a4c3944:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMzOWJmNzNiYTBjNDYyN2YyYWM4ZjA4ZjkxYTA3YjE1MmI2YzAxYjA5YTA0MWU3Zjk4Y2MyNDljNmZhMzUxYzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJjMTgyYjNkZDIzZjIyNTNhNzQyZmRhMjIxYjIwMDk3NWFhNTc2ZjAwNDk4MTA0NWIxYzQ2NjA3MjE0ZjljZmEifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-18T13:56:19.871Z"
+  }
+}

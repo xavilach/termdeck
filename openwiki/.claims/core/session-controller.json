@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:7b57785ce65c1a3ec3d8499aa00aa94086c327e87589398e2231f341cbc7fd11",
+  "claims": [
+    {
+      "id": "claim_317a7567645245ff9c103907a02d6ac6",
+      "statement": "A tab connection has four states: connecting, connected, failed (never connected) and ended (was connected).",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/controller.py#L13-L21",
+          "version": "repo-lines-v1:sha256:ded80dba3a5aa60e18fe1b95eed66309b1413a6a342e90c86f3c5d204d88740a:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDFkNGQ0MDZkYWRlODg3OTcwNzU4YWQ1MmRiNWUzMDY1N2M3ZWNhNWVjNDYyYTA1NTIzZTA5NWM4YjNlNGY5ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzhkMjFmMjAyODFmOTRkNmZhM2ZhZDhlOGYzYjY2ZGJkOTIzYzc3ZDM1ZjNlMTFkNzhhMGZmOWFjMTc5YTQwZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzE3NzlmZTQwNzA1ODhiZmUwYTUzMGNlZjdiNDE5YTAyNWEwZmUzOThjYWYwN2Q3ZmEzY2YzNWM5Y2QzMDkxYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzBjZTNmMjRhYjQ3YzJmNWE5ZDMzN2YzNzdlZDg1NzNmYTU2NTg0MDc2NDAyZjFhZjA1NGEzZGVkNjE5NDYyZiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_7b0711646bb04021a53c5d203f2ccbf4",
+      "statement": "For a saved profile, each connect re-reads the profile from the store in a thread, so reconnects use the options as last saved.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/controller.py#L69-L97",
+          "version": "repo-lines-v1:sha256:c0aad89454f6d9a3d60d7236749a26aa5afefc120f5635d4ac84a5c9bfe40e2f:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA0ZGVmYTg5YTRmNzE3NTI3ZmExZmY2MTQwMjhkOWNkY2ZiMDZmN2FhN2YzODUzMjQxM2I5ZjE4MzNlYTEwOTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxMDQyNGJkZTNhZDkxZmY4ZGFlYTgxYTRhYTUwNGIyZmU5ZDM3OTIzZjU5Mzc5MTUyZDU0M2Q3YjRkZWFmNzEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFhODY3ODcwMzc0NTVhNGFiNTViNzJjODNlMDYyZjY3MmNkZTM2YWJiODI0M2JiNTVhNjJjMTJkYjc5ZDk2MWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU2Y2Q2NWRhZmJlNGJhYTViYjU2OGRiYjVkYjA5MWVlMzIyZDFmYTJhZWFiOGMwY2I3ODk4YTgxZmZjMzZkMjgifQ"
+        },
+        {
+          "resource": "repo://tests/test_controller.py#L102-L116",
+          "version": "repo-lines-v1:sha256:08dec0d37bd78008e89dacf71086d5c42a63720db7e37a29ad3ec1511acc0f8f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzYjU1N2IxNWEwNzdmNGI5YjZkOWEyZDNhYTg2ZDM2M2QwYTE4MGFiMjJlM2UwYjAyMDg4OGU1NzM2ZWM0OWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE2ODNiNTMxZjc1Yzk4NGMwOGEwNjUzZjNkMDE2MGZjMDA1ZWU0OGU0OTM1Yzg4NWI1MThiMDNmNjk1ZWRhZjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjEzMjY3MjZmY2UwYTIyY2I2MmFkZWFkMGMwNGIwNjk2OGZlNDNiZDEyYWQ1NzdiNmJkMWY1Y2JlY2M0YjMyOGEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_84d209035415421d977a1b941207f681",
+      "statement": "close() bumps an epoch; a connect that completes after a close discards and closes its new session instead of becoming connected.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/controller.py#L149-L158",
+          "version": "repo-lines-v1:sha256:fac18bf21ccd4278cdbc6416075b80889a9cdd5c73e9034128c73fe9405345c0:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZmMzFhMWRlZTMzNGY3NTMwNTkwZjJhZjRhOGI1ZTJjZmQxNmU2ZDlhMzkxMDk0MDNhZWE2ODNlMmNjMzgwZjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImViZGVjOGUwY2RhMjI0MWE5MjEwOTYxMTQxZDExM2RjMDZiZWRmNzRiNGViNDQ2ZWYzNDZjNzM5ZDU2NTZjZDkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNhYmJmYWYyNzczYjg3YWJiMzliYTdhMWNkYmRlYTYyM2E5Zjc0YThiZWMxZGQwMDNlODZmMTQxZjRjZjRlZmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/controller.py#L69-L97",
+          "version": "repo-lines-v1:sha256:c0aad89454f6d9a3d60d7236749a26aa5afefc120f5635d4ac84a5c9bfe40e2f:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA0ZGVmYTg5YTRmNzE3NTI3ZmExZmY2MTQwMjhkOWNkY2ZiMDZmN2FhN2YzODUzMjQxM2I5ZjE4MzNlYTEwOTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxMDQyNGJkZTNhZDkxZmY4ZGFlYTgxYTRhYTUwNGIyZmU5ZDM3OTIzZjU5Mzc5MTUyZDU0M2Q3YjRkZWFmNzEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFhODY3ODcwMzc0NTVhNGFiNTViNzJjODNlMDYyZjY3MmNkZTM2YWJiODI0M2JiNTVhNjJjMTJkYjc5ZDk2MWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU2Y2Q2NWRhZmJlNGJhYTViYjU2OGRiYjVkYjA5MWVlMzIyZDFmYTJhZWFiOGMwY2I3ODk4YTgxZmZjMzZkMjgifQ"
+        },
+        {
+          "resource": "repo://tests/test_controller.py#L320-L342",
+          "version": "repo-lines-v1:sha256:50c18f323037ec2b3da5648de05de2da751ec5f3ef1bbfcf0983f9837e125422:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUwZDFjMDUxMzEzNmNiNzQ5NmU3OTUxOWVhNzdkYTU0MWRlZTkzNjBmNzQ0MmUyN2MwYjU2Mzc3MWNlNWI4NmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEyNWE1M2FmOTMzNDQzZWVhYmEzZmQ5YTYwNzhmYWYyM2FmNDc2OTk0NTI1NzZjNzFiMWU0NGZjMTY3MzZkMjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE2MTAyY2YwZDhlN2Y5OTY0YmQwMTFjZWEwZjYxNTEyOGFmNmYxZWRiMmY1OGU5YzEzOWRhYmVkY2VmNDcxNGMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9fd029762e584a83bdabdc6a453047d5",
+      "statement": "close() sets the state to ended or failed with 'Disconnected' and closed_locally before closing the session, so a local close is not reported as a clean remote end.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/controller.py#L149-L158",
+          "version": "repo-lines-v1:sha256:fac18bf21ccd4278cdbc6416075b80889a9cdd5c73e9034128c73fe9405345c0:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZmMzFhMWRlZTMzNGY3NTMwNTkwZjJhZjRhOGI1ZTJjZmQxNmU2ZDlhMzkxMDk0MDNhZWE2ODNlMmNjMzgwZjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImViZGVjOGUwY2RhMjI0MWE5MjEwOTYxMTQxZDExM2RjMDZiZWRmNzRiNGViNDQ2ZWYzNDZjNzM5ZDU2NTZjZDkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNhYmJmYWYyNzczYjg3YWJiMzliYTdhMWNkYmRlYTYyM2E5Zjc0YThiZWMxZGQwMDNlODZmMTQxZjRjZjRlZmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_85319c31b77240fd93fb816114318ffb",
+      "statement": "A tab closes itself only when the session ended (not locally) and close_on_exit is 'always', or 'clean' with a clean end (no end_reason).",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/controller.py#L99-L114",
+          "version": "repo-lines-v1:sha256:3a6adcb1163e4ab115e7bc511b1dc228e458ec2488be7edc01ad2015960475c1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzMTZmNzI1Y2RjYTVmZTE4YzU0NGQxNjQ3ZTg0OGY5YTQ0ZGUxY2FkMTIwZjcwM2YzNjY4ZGVlNmMyYjdmZDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJiODcwMjY2ZmE5MjQzZmE3NjFhZTQ5MDE0ZTc0MzM0NWQ5NGEyMWVlZTI1ZDkwZGM0YTM5OWE0NzdhMTIxYWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc3YWYxMmRmMjRlMTBmY2RmYTdlZjZlYmQwNGM3N2MwMjk0MGI4OGU4ZTlhODA3OWUwMDdjYjUwODcxODE5ZjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBjNWQ3MTdhNmE5MTIwNDQ1OTM0OWZiYWIxZDIxOTNhN2JmZjNlMjkyNWFiMWIwM2VjMzdjMzJhM2EyODllNzEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_18d24edf9ff240fe85f3b0b89982cdc1",
+      "statement": "Capabilities (send_break, sftp, typing) come from the connected session's can_break, has_sftp and interactive attributes.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/controller.py#L24-L33",
+          "version": "repo-lines-v1:sha256:dfaece2391ade0d3244f09fc3d4a40b0cb28d07536c00a9934078f0a35da2a49:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2OWExMzk3NWMyNTZlYzgzMjBlMjAxNjA4M2M5NmRmNjM3Y2EzZDM1YmViZGUyMzE0YmVlM2E0NzExYjU2Y2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4MmUzMDZlZDA4OGRmMTI0YjhhYjI2YWU0MGVjODVlMGQ1NTAwZjJmNWZiNGVmMDI0MzFiY2IxNGIyYzlhZGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU5ZmQ0OGY1NzI2YzkyODQzYjM4Y2U2MDI0ZTU0NmJjN2Q0YjhhYTA5ZjFkNGUzY2FkZmYxZjM1ODhlOTQ5NDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE3YjZkNTg1NmE5N2Q3ZWEwMzg0YTQyNjY2NjZkMDljZjczM2VkN2FjMWY5M2Y0MjkxZWU1MjdhMzI3ZWIxZTMifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/controller.py#L94-L95",
+          "version": "repo-lines-v1:sha256:e5be359044a29647580d264358166f4f9b91b2e1969cf2b6a29fe1a85715f93c:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTQxY2U3ODA1NzMxNTI0NmZjYmRkZGI0YzRlYWI1MGJhOThjODIyMDVjNTZlODgzNWEwYjkwNjhhNjQ5NzY5YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNmE3ZWUxNzlkYTkzOGRhMGQyOWZhNGE1NDUyYmU4OWM1MDYxMTA3NzkzZDhlNjk1ODYwYTgxMzJjNWVlMjEwNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTgwZDE3MjZkN2MzODVlNTU0MWUzYjJlYjU1YjI0MzVhOTdlYmJhZmMwNTRiMzUzOWMyZDhjMGQxZGUyOThmMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzdhZjEyZGYyNGUxMGZjZGZhN2VmNmViZDA0Yzc3YzAyOTQwYjg4ZThlOWE4MDc5ZTAwN2NiNTA4NzE4MTlmMCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_804dffda03754922b1999ec00c2f4186",
+      "statement": "snapshot() is the JSON-ready state the web UI sends as is and the TUI reads, including forwards and capabilities when connected and clean/close_tab when ended.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/controller.py#L137-L147",
+          "version": "repo-lines-v1:sha256:04b1038266ad2f74019c6d33b494e9e402c1ae8f80af3269500a6f51cb8f905b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIxYjFkMDIwZTJiOTZiMzI2NjFhMDMwYWY1MjBjOGYxMmM2ZTg0ZTA0MGU3ZWIyNDRjYjFhY2I0N2YxOTlkZGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJiYjU0MmE5MDcwY2FhNGM5OTg5ZmQxN2U0NGE5NmIwMmViNTBmY2JjZWQ2N2VhMGU0N2FjODgzZTg5NjgwZGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZlYzMwYmEzMmViMWQzMzRiZWI5NDBlM2NmODg5NWNhOWZiYjBjMTgxNmQ0NjQzYjNiODcxYzQ0ZmQ1NGI3MWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIwY2Q4MTkwODM1YmZkZDExMmRlNTZhNTUwNjdlYjZhZGYwNzkxMTRjZTg1NmIxMDAxYjE4YjE0YzJmNmIxMTQifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/web/server.py#L329-L339",
+          "version": "repo-lines-v1:sha256:1ccb8216674268ddf05016201213f90dd8d2fde4209ecd8e1764c56800fe5f97:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE0ZjkxZGMwMDdlZGRjMTQ1NjMyNmNkZmJjNmNlN2FmY2YxOWYxYWU2MjljZmJmMGNhZWM3OTY1ZDY0MzMzYTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjcyZTUwMzIxM2NjMjE3Nzk2YjQ1MzJiZDhmMWEwYWRiMzg2NzQ2OGFlMTExNDMwNDgwYWNiMWIzMWFiNGViNGUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-18T13:56:19.871Z"
+  }
+}

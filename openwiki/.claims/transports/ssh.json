@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:c3177c19a28d06a4caf31c175806bf6650e30e7b97848fa70a7cafe5d3bb0007",
+  "claims": [
+    {
+      "id": "claim_81b3b3802fc140a3a793d3351f6bc7a3",
+      "statement": "open_session connects (or reuses a shared connection), opens the port forwards, and starts the shell, releasing the connection if anything fails after connecting.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L693-L717",
+          "version": "repo-lines-v1:sha256:42f0b081ddb4aae0373840283e8d02a816dcf15a44d52d775f95b4ecbd7959d5:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5ZjQwNjE3MjI3ODcxMWZhMjQ3NzU1ZWM4NWU1Zjc1NTZiMmI3MTcxYzlhNWE4MDY0OGE2NmZmOGU4NDJiODMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEzYjIyMzQzZTljNzU1OTIzM2RjNDZkY2VhNTg5OTY1OGY2Yzg2YTczMTRmYTQ2MjA5OGYyOTI4YWY2YWQzZjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNkOGNkOTlkOTk0MWEwMjBiNzk0MDg1NTM4YWM2M2FlN2Q3ZGNhZWJmYmNhNTZlNDA0MWE1YjFiNGQwNTIzOTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIwZGNiZjAxZDkzZWMyNThmZWViNWY2MmU2NmRjZTU1NGNkOWRhYjU2OGUyMjhhMjlhNDVjNGUwNzQ3MzczZjkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e1c59134239d4dcca02baa641cf722dc",
+      "statement": "A jump host profile inherits the target's connection options but gets no agent or X11 forwarding, environment, command, port forwards, logical host or pinned keys, like ssh -J.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L213-L223",
+          "version": "repo-lines-v1:sha256:23039024eca013c4169dc0944f2fcd9454b50ba6646ad72907abd9ae66f26cca:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA4YmZlOTE0ZmU5OWQ3ZWRkMjM0YTIyYWM3Njc5M2EzYzU4NWM2YjYwMTA0NTgwZDlhMjEzNWVkYTE5MzM3MzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzYzRjNDhiZDljYjVhYTA4ODk3ZmM1ZDU4ZjBmN2FhNzFlNTJlMDI1ZDEwY2JhOTdkZjBiZDQyZmMxNjA1ZTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRmMWU0YmMzNWVlOTZlYzVlODNmMDhhMmVkMmFiOWNiMzVjZmNjZDUxZWVlMTEzZWJiYWFmMjdiYmM4ODIzMGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM4NDVkMzFlZTRmN2MyZDljYWE4NmEwYjEwMzgxMTI3MjI1MTUxNDIxMzhhNjViYTA1MTIzOGFhNmE5ZDM4YjAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f7316a0ac162435aba151c94c4dc17e6",
+      "statement": "With use_ssh_config, ~/.ssh/config is read and profile options left at their defaults are not passed so the config's values apply; otherwise no ssh config is read.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L253-L265",
+          "version": "repo-lines-v1:sha256:24b948d24b51bb0e5f43e01cadae1e9827e4ebbaff6e30ad5285af13c32be20f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRkYjY2MDI0YmIyNGZkNjQwZTQwOGE4ZGNlMDVmMjJmODA4ZTQwYzY2ZjM1NTA4MTc5NjhhMGRiNTMxMTE2ODAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVkMDAyY2E0Y2IwOTljNDE1MTE4Mzc5MDk3NDQ3M2E4YjNlMGUwM2NhNDk0YjQzOWZkYjJkOGU1YTg5YTc0NTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFjNDczMDdiZjBiMGU5ZTQxZmYxNTQwODBhNzZjNjJlZTVlNzAxNDYyMWRhZjc3MjMzYzVhMGY3NmFhNjYxNjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b159e64f7e7c427688dc7893ec399f89",
+      "statement": "Password prompts are limited to 3 tries, and the last password is kept only for an expired-password change and cleared after authentication or connection loss.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L109-L140",
+          "version": "repo-lines-v1:sha256:88936a73303670af157b27aa0952363020e338a62c3cbce84df4cc75301fc67c:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MDU4ZDMzNGE5Y2I3ZGYyNzkxZWViYWNiNTk1NjEzNjJmODM1YjMyYzY3MDQ2MGNiYzBiYjMxNTNiZmVjOGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhMmMzNDQ2MGE1YjAyMGU4ODVlYmZjMThjMGUyNTQ2MWRlNjE2ZjU2YzVjZTUzYWIxY2VjZmMzZGU5MzkyMWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwMjkzYjY2ODFiZTNmN2I0OTgxNWIzY2NlYzI4OTBiNmE0MTJlNWZlODRhNmNhNDk3MTBkNjg5MDQ5ZjE1NzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY0OTkwMWExY2YxNDg0MDI1NWFlZTE2MjY0YjVjZGIyMDg4YTVjOTcyY2YzYjEzZDFiNWY1MmI4NTA3NmNmYzkifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/ssh.py#L23-L23",
+          "version": "repo-lines-v1:sha256:b4088b7ae69ae02a7ecb8172b04ee6dd768dee4af8e6ad4614247782d31043b6:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjQwODhiN2FlNjlhZTAyYTdlY2I4MTcyYjA0ZWU2ZGQ3NjhkZWU0YWY4ZTZhZDQ2MTQyNDc3ODJkMzEwNDNiNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjQwODhiN2FlNjlhZTAyYTdlY2I4MTcyYjA0ZWU2ZGQ3NjhkZWU0YWY4ZTZhZDQ2MTQyNDc3ODJkMzEwNDNiNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTU3NTBkMTRmNzNhNjcxNGI4MWU1MmFhMjBlYTYxOWI3YmZlNTFkODQzYTFjZTU1MTRjOTFkMWZiYTdlMmQxYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiN2I4NWE1YzhiYTAwOTZhZmRhNDc0Njg1YjJlN2NkZWZjMDAxNzQ1ZjMwMDkxYmU4YzA1NGQ3YWViMGIzMjAwNyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_110d7d4f90574808a6152cc9360300ad",
+      "statement": "Unknown or changed host keys fail the handshake, the user is asked through confirm_host_key, and if trusted the key is saved and the connection retried once.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L311-L342",
+          "version": "repo-lines-v1:sha256:ec8fa472ead98c206ef4ae9d982cf829b1a0538269f2c2e2cfcf270ee349d868:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFjY2EzNmFhOWRlOGFjOTA1MDkzNzJkMWQxMjQ3ZDkzOWE2OWQ5ODJkNjNhZWY2NWVlNzQyZmYxZTU4MGNiYzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiNTE4ZTk3NTNlNTc1NTc2OGNmNGUyM2M1NjNiZWVlZTIzMTUxNzIxOWJiZjlkMDIzNjIwZDY5MTlmNTNiYTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI2NDE1OTI5YjhiNGY2YzQ3MjIyMzYzNWJlNzU3NmE5YWY0M2U1MjQ1ODYyZTI3OWQyOTEwYWRhYWNhZWIwMTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI5NTE4MmRkM2Q4ZDg1MzVhMTdmZTY3ZDYzODI2MjZkNzg4MjljOWY5ODlmMTNkMjIyYWE4MGZkMzQ2OTQyNjYifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/ssh.py#L95-L107",
+          "version": "repo-lines-v1:sha256:35ae3a225c1565fd9996e2b1c35b1089ca51bed328f99bbda85097b770419e71:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVjMDkzYjIwNGRlZjMyN2M1ZDU3Y2I2MzJkMzNmMmRmZGMyNjYwMGNkM2U2YTlmNWJiYzk4ZWRkZmNmMDY3MjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI5N2M3MTI0N2FmM2NkMWVkZjU1NWE3ZDEwNzU5MzE1N2Y2ZGMyYTIyYWYwZGU4MmU3Nzc0YWJmMTBmOGFkZTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdkOTQ1MzJmMzRmNGM3MjAzMzEwYTM1MTgyNDkxNjdkNjZlNzczMGJlZmIwMmIzYjI4Zjc0NWJkMWY4MGI5OWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ5NDE3YTNmZWZlYTA0YzczMjZjNjljMTdjNWQxZDUyNWZkNzcyMTZmYjYxYmE1ZjMyY2ExYWQ4ZmI5YTFlZmUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2d615f22128848388954669a5bf0959d",
+      "statement": "termdeck reads its own known_hosts (created private on first use) and ~/.ssh/known_hosts.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L27-L36",
+          "version": "repo-lines-v1:sha256:29c0fc0a904cdfb25c91c411da957d98c40031d8c4dddb9cb831ba88c999ccf7:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFiYjE4N2Y0ZTAzNTkzOTI3NzQwMTI4OTE3NDRhMTViNjViNDY4NDg2Nzc5ODcxYzhmZmE0OGI0MDQwNjNiMmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhYzNlYzhjYmQ3ZDc3ZDNkNzE5NjRkZmM3Y2E4YWNmNTJjOGM2NDNhNTBmYzIyMzdiNzUzZWE2MjdlYWZhZGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdiODVhNWM4YmEwMDk2YWZkYTQ3NDY4NWIyZTdjZGVmYzAwMTc0NWYzMDA5MWJlOGMwNTRkN2FlYjBiMzIwMDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI3N2FhZWU2ZjNhMWIwNWQ0MTE4MTk3ZjAzYThlMTdhYzhlNTAzZjkzOGMwOGJkODM2OGFjMWZiMTFkMGNhZDgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ee10ce6f85504a6eac3a6281d692d12c",
+      "statement": "Port forward failures are recorded per forward in ForwardStatus and reported as notices without aborting the connection.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L344-L369",
+          "version": "repo-lines-v1:sha256:17c2fec2edd5b66270e1524a723ba42bf032d672792adc05af18cb12b1ec10c3:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM1OWRiOTcyZThiYjlmMjUyN2JiNWY0MWE2NzQwZTY4YzkxYTQxMzc4YmI5OTZkNjFkZjhjOGRlNGExYTU0MzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM5MTk0MzEzNmFiODliOTk2NGY1NDlkMDQ1MjUzOGVmYzE2NWJkZjE5ODBlMTA5MDJhMjA0NDVhNjg1Yjk2ZTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5NjYzZjVkNjNkNGE0YTAzODlkM2QwYTRjOTk4ODkwM2JjYmYwZTNlYzU1YWI1Mjk5MmQyZTc0ODA2ZTA3M2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ5YzM1NTIyNWVhYjE3ZTQwMzkyYjVkODQxNTkwMTNiNDdhOWU5MjZhZTE2M2Q0MDcyYWMwNzgxZmE0MmI4MzIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_580fe5855c554571bcc270df0b3b24dd",
+      "statement": "With a pty, terminal modes default VERASE to the Backspace setting and IUTF8 to the character set unless tty_modes override them.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L195-L210",
+          "version": "repo-lines-v1:sha256:ea67bc711326e25a54dc3b4ebbbad710d5d14184c30836174d802fd9c179bda9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA1ZWQ5NDBmMjlmZGJkMmM2YjRkYjg4NDJjZmZiYjg2MGEzM2YyMTRmMzA5MzQyMDU1YjUyNGU2MTU1ZmJjMzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE4OTM0OTJhNDc0YmJjMTg5NTBhNzc2NDg0NDBlYzI0OTIyMTBjZTIxMzcxMDcxYzM0ODMwYTY4OTZkNzE4MTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFkMTk3YzljYjg0ODAwNzM3MmE5NTA1MGYzMDhiZDI3NThhN2IwYTY1NDVmYTE0MzRkNWY3NjYxMGExOGFlNGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE3Y2RkMjJlNGI2NGRiNGYyMTFjZTg3M2RjMzVkMDgwMjFiMGQ4NjExMDQyYTU5YWU3YzllMzVlMTJiM2IzNDMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_dc8e9a55d7054c19b5fefc32ed758843",
+      "statement": "When an SSH shell ends, a signal gives exit status 128+n and a non-zero exit gives an end reason, making the end unclean; no status means the connection went away.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L469-L488",
+          "version": "repo-lines-v1:sha256:3170317cca319f5064ce817893e93b83776fdda7f5e4194058e008a4d7fcc65e:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI4MDIwMDQ3OWE5ZjJkYzc0MGFiMjVmMGVlYzhiNTRkMzkwZjRlYWI4NDdhYzQyZTNlMDY5MmQxODNlN2Q4ZDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhlNDljYzUzNjY0NDNkZDFlN2M4YjQ4NmEzNzcyYjgwMGQyZDgwZGM5MzlkMDQ3MmM0ZDk2NDIwOGVlOTY1NzMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU1ZTM1Mzk0ODEyMWNiNDA4ZjIyZTYyYWVlOWE5Y2FiNGViNThkMmI3MTNjODZiZTAwYjE3ZmEyNmRjMjk3YzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA1ZDdjZmViODkzNmU4NWU3MTU0NGQ4YTEyMTM4NThiNjNhZjA5MTVkNzRhMDdjYTgzODE3ODczNjU1NTk0ZTcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1eb852b10fef4ad9a343f07be9ef1a99",
+      "statement": "no_shell gives an SSHForwards session that is not interactive, waits for the connection to close, and ignores input EOF.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L592-L628",
+          "version": "repo-lines-v1:sha256:552f024bceb051c15135c38e9f8cca0665c3f19bf6a36c08a4ead0f065d125bd:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUwNjUyZTZlODVmMWFiMDAxMmRlOTJlODkxMTUwNzQwMTUzZWJkMWUwY2UxZTY1MDdmN2QyNWE2YmVhZjE2OGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE3NTE0NTE0NjY2MWE5ZjFkYWIzYmY4M2VkNWYwYjEwMDIyOTEyZGJkZGIxYTE1M2ZjMGE4N2M3MTBkZTA0Y2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImViNzJmYTI0MzdkZTUyOWFmN2U2MmM4ZTg4ZWI3YTRkMTkyOWVhNTgyMzNjNjY0MTI3OTFmODQwNzMxZGQ0ZmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZmZTgyOGJjNzJkZGNjMDdhNTE4ZTYxOWNlNGJjY2E1MjE2ZTdmMzBmZDljNzljZmQxZGQwZWEyNmVmYzBkZDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a8aa85a8ca2645f0948984973d76aea5",
+      "statement": "Connection sharing reuses a live connection whose username, host and connection-wide settings match; per-channel settings may differ, profiles without a username are not shared, and the last user's release closes the connection.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L418-L426",
+          "version": "repo-lines-v1:sha256:8a0e66e07724aa972884ceb8369bc6f3ddf1074b9f97ce68c1322b77968fb293:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjkyYjk3YTc4YTM2NTcwMDkxYjU5ZDMzODY0MGE2Y2Q1ZTRmM2NmY2IwYzZkMzAyOWE5ZjRjY2UzMTZkOGVhOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTNkMmI0NmM1YmE3NTRiMWNiYzc3M2EwNjQwN2E4OWY5MjM4ODU0NmUxNDhmYjAxMDg5MDZhNzE5ZmM1YmQwNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZGE3NDgxYWQ2MGRlNTc4YjJhNjE3N2VhNWNjOTExMzNlNDYwMjNjNDBiYWRhY2E3Y2U3MmY2YjAyNWMwNzcyMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjNiYTVkOTQ1YWI5OTM0ZWYxYzlmMDVhN2Y5MTlmZjMyNTNjYWE1MDg5N2EyN2VmMWMyZDE3ZGY2ZWJmYTBjMCJ9"
+        },
+        {
+          "resource": "repo://src/termdeck/ssh.py#L670-L708",
+          "version": "repo-lines-v1:sha256:9620281ac0e642278fb67dff9f46a2bd9fde21435e5d058ab503f8dfcf3ffd6a:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMTIxZDVkYzQwZWRhNDZmYjAzNWZiYmM3NmY3NzY5ZmY0Y2I3Yjg2NGU5ZTQzMzBjZmI3MTAxZmVmYzA5NzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyOWM1MjQ0MzRjMDA5YWFmMGQ3ZmU5ZTJmZmU3MjJiMTcwY2Y4ZWIxYzhjMTU3NWU0ZTNiZDUxZTkyNmM3MWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcwZGZiOWNiMjQ5ZTY4MDdjYTQ4ZDU5YTQzNGJlZmJmNGQ2NmNjNTIyNGI3MDNkMGRlOGY4MTEyYjg1ODk4MjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFlYTYxZWVhYTI0YWVmNGRjNTZmNmZlYzQ0ZGRjMmIyMDA3NGQyY2IzMWFmM2FkMTE1MjZlYmMzMjk0OTY3OWYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f0a5458a7dcc4c39b949cefc83607438",
+      "statement": "Legacy algorithms explicitly allowed in a profile trigger a weak-algorithm notice.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/ssh.py#L182-L192",
+          "version": "repo-lines-v1:sha256:bc5e41c61c7809149c6507bae89699b810f5167843583e2050ed62617d467ca2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVmMDZlYzkzYmJlYmM5MjJhMmFjMmFlZTUzNTIxNTRjYWU3ODA1YWI0Y2UwZWY5MmZkMmU3NzUzZmY2NDUyNzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlNzAyNGRhZjYyZDY4Mjk1NjRlNzEwYzE1YWFmM2Q0NjYxYWVmMTNhNjhiZDQ2ZmYzNDg0ZmYwYTg0ZDQ3ZjEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZlMzZiYzQzYTM3ZTVhZWY2N2Y1NTViZjQzNThjYTY1MmZlYzNmYWU0MTM1ZjdiYTBmZDU3NzVlZDMxZGUzYTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE2Y2I5NTNlZDA4ZmQyZDMwMGU4NmJlZTNlYTZmNmI5ZDMyMjQ2MzVkNmZiZjM4ZjNiODZiYjNiZGEyZWExNTAifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-18T13:56:19.871Z"
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:f1cb1e216671e1c7522e400711210e55fff76b6dd8e01ceb16a25ddbd3806bb8",
+  "claims": [
+    {
+      "id": "claim_a579e1c0f5794a53a1ae6287553e9d53",
+      "statement": "termdeck has four interfaces on one core: the TUI (termdeck), the connect console (termdeck connect), a localhost web UI (termdeck web) and a desktop window (termdeck gui).",
+      "evidence": [
+        {
+          "resource": "repo://README.md#L1-L11",
+          "version": "repo-lines-v1:sha256:208bcc87f5f1187818ccd6d8ff3ea999d9681b38961cfbbab2127661797ecfa6:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzMWE5OTA0ZmNhMjIxYzY2NTVlODRmN2MwZWE5Mjk1ODFlMmRiMThjY2U0ZGVmYmQ5NjQ0YWM0YzE2ZGUyMTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImViYmEwZGI3YTNiMGY0NjcxN2Q0NjZjYzRiZGJkMDdlNjk0ZjEyMjQ0YTVkMmY5NzQ2NjZiYjQ4ZDYxNTU2NjYifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/cli.py#L778-L800",
+          "version": "repo-lines-v1:sha256:1d779f82799aec27d053e0ad86c95bdcbc1b6d5da4a9f9bdbd8c3be02fa830be:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAyN2QxYWJhMmQ5OGU3ZjZiZWEzMTI2NjljOTI3Yjg0OGRjMzNhMmJlOTVjYjIxY2NlZTRjYzNmMTQ2ZDBmYzAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFhZmQ3YjMyMzY2N2Y0NTljNDQ4MDZiMzA2OGVmOWRmNGQ2YjM5MWQzZTdiMTZhYzAyYzVlZGU4YmMzNTUxYWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJlYjc3ZmI0NDQ4NGQ4MTNlN2E5NWE4ZjgwNjk3NTM1ZTQzYjliY2QxNmM3YjZiYzc2YTc0MDQwY2YwZTJkYjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhmMTM0NjNkYTQwYzljZGE2OGQyZDQwODJlOGRjMzQyNTY4NzI3YzMwZjUwMmFiNGE2NGM4NmQ5MmM4YjY2MGQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_338f93b1e57d47a2990d7bbd3adbf371",
+      "statement": "The package requires Python 3.11+, with asyncssh, bcrypt, pyserial, pyte and textual as core dependencies and web, gui and gssapi extras.",
+      "evidence": [
+        {
+          "resource": "repo://pyproject.toml",
+          "version": "repo-file-v1:sha256:670f9a27c747346ea7c5f01100555c5157507a13553e7792bc2dd71dad2fe2d8"
+        }
+      ]
+    },
+    {
+      "id": "claim_4982b004872347fbb6e5be367ec03fb3",
+      "statement": "User data lives in a per-platform settings folder that TERMDECK_HOME overrides.",
+      "evidence": [
+        {
+          "resource": "repo://README.md",
+          "version": "repo-file-v1:sha256:c3f40e4347584986c97baca871e5a73844e72f09cab2c42ff9afde6cc9ea193d"
+        },
+        {
+          "resource": "repo://src/termdeck/config.py#L12-L22",
+          "version": "repo-lines-v1:sha256:2ca5a12877b6f96614654191db6e32410a3bac380f13f4627bea25ab22abdd19:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEzNjgzODc3NTA3MWIyYmQyMDhkNmRmNTJjOWI4MzQwYzZhM2YyYTVhMjRjYjYxM2U0OTUzNDNiZTAxNjk0YTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjExMGVmNjIxZjJhYzNlOTRmNTM5ODczZGVhYjNlZDk0OWI1ZTNjZjE4N2NjYTA1ZDNjMTU0ZWI0NzQ2NmI2MWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5MWJmM2Q5NmYxYjExOTY4OGRlZWE5YTAwNGIyYjNmZWJiMTgwYmI4ZmIyMzQ0NjI1NjE0YWRjODU5NTYzYWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBhNWVlMzA1MzgyZWFmNGVmNzU0ODJkOGU1M2I0ZDA2OTE1OWM5MDFjMTgwZWNhZGE5NTgwZGYyZjc2MDUwNzgifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-18T13:56:19.871Z"
+  }
+}

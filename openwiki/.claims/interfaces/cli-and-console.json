@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:62428e8e39ad88919eeaea8ad7f254cdf4b0e29dca6ce3218964aedfda7b048a",
+  "claims": [
+    {
+      "id": "claim_5b1aae2960be43babb9c3b5da0785537",
+      "statement": "ConsolePrompter asks on the controlling terminal (/dev/tty or CONIN$) rather than stdin, so piped data can never answer a host key question; without a terminal questions fail.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/cli.py#L26-L92",
+          "version": "repo-lines-v1:sha256:8a3bdfe2ad9b1f62b84c7a29245872d6a452d730cddb81ac0cc4686f9ce6c271:eyJzZWxlY3RlZExpbmVDb3VudCI6NjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVmZmVkMTlhOWQyZWU3NjZhNzVhODg4OTIxNGFjMjJhZmE2MjcwMWI0ODg4MjZhMjYzZjJjMjk4ODFjNTVkOGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhhYmQ1YzFmZmUzODk2ZjMxODExMzQ4MDYzMDY5MzQ5ZGU1ODM1YjY1ZjBhNzY4ZjNjNWU1NmEwNzM2M2ZmMWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkxMjAyN2QzN2IzOGM1YzQ2ZTg0ZWJiMGYzYzkzNWVkZDE2OWUyYTlmNjRlZWRmNzFlMTk0NTk0MjlmYjAwYTQifQ"
+        },
+        {
+          "resource": "repo://tests/test_connect.py#L292-L309",
+          "version": "repo-lines-v1:sha256:54f85c27ee1be3032c0a84a22420b01642540d341af04c903aae87487b520520:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMxNmVlNzMxNDY0YzJlOTEwOWNjNjgzOTc2NjQyMzdiNTk1YWQ1Y2NhMGE4NzNhNWQwZWNmODhkMTkyMDZmNWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMzYzMzNzA1ODY1MDc2YmUxNGYwNzg1MzVmYzFlZDg2NGE2MjI2NDI1Zjg3Mzc3YTY2OGIyODA3OWY5YmJhMGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdkMjllZTI4NTg0NzU3MTA4MzBjNDJmNTA1YTM5ZmMzNzk5ZjAyOWY4MzgzZDgzNTQxMWYxMjA2NmQ2MWI4OGYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0ed35a0ac6ef4b9392d6340eac87cdb6",
+      "statement": "--batch uses BatchPrompter, which never asks: prompts raise ConnectError and untrusted host keys are refused with an explanation on stderr.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/cli.py#L288-L305",
+          "version": "repo-lines-v1:sha256:61eaaea9bf5071defd77ad7daca141a36229c91cf6f818ae4637fa57e0dc859d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM5NjE1YjVkMWU4YWZmYzQzOTM2YWQ3MmVjNzFhYTVlMzc3OGYwNjk2ZDQyZjkwZGM4MDAyMjk3YTMxMjZjMDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEyZTA3OWFhMTNiZmMxNDVhZTc0YjU3ZmQ1YzAzODMyNWRlNGJmZWY1Y2Q0YzEwNjNmN2VlM2RhMmJmMWM1M2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZmNzRmMjc4YWEyNjhkNDY4ZjY0YzhmM2ZiOWYwMmMwMmY0MzEwZGM4NWMzNWIxN2VjOTQyOTNhMGE0NDk0OGQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_10a22e1cc6914813af8c19e9fc9fceef",
+      "statement": "PasswordFilePrompter answers only the target host's first hidden password or keyboard-interactive prompt, once; jump hosts and key passphrases are asked normally.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/cli.py#L307-L336",
+          "version": "repo-lines-v1:sha256:3e5e60b7ab46a1bc5a91bd48910480e8e615f49e5c1c80cd3e08ca3cd71cc206:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQzYTEyNWQ5ODNmMDI0ZGZhODYyMWJhNTI5N2UyM2U1ZWM2ZmVkNGZhOTU2NzJiMjM0ZjFmMmVjY2FmZWM5ZDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY5OWVmZWRmZDJkOTcwNmQ4OTFjN2JhOTgzZTdmODRlMDVhZDBlMDE5MWMxMzI3OThiZTVlM2MxY2M1MzA0MjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlhY2JiYTBlYzcwYWU1ZGE3MWU5MTM4MDIwNzBlNDE2OWZjNWFiYTgwOWU3OTA1N2FiMTE2ODdhZmIxYjM4ZWYifQ"
+        },
+        {
+          "resource": "repo://tests/test_connect.py#L311-L349",
+          "version": "repo-lines-v1:sha256:2fd96c3127926212ce20e527166037ce12bc4e7adc5492ee5f81a8cd58fabc4f:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI3ZDRjNWViNDZiNzk3ZmEzZGM3YTllYWU0ZjExZDM5ZTE0YzhhNmVlNWRiNmUyMDM3YzNmZjFhOTE3YTY0OTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFjMmQxOTRmNzYwOGNlZTAyYjA0Zjc5NjQ0ZWNjZDc5YTdlNTZlY2VhYTYyOWVhMDM4Y2Q3YjIwNmZjZmFkZDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYzOGJkYmM4MGI1MTM2YzI4NTViN2U4ODg5ODI1NDdlMTk1NWE2MWIyNjgzZTU1NjFmM2E4ODJiOGQxNGIwM2MifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d9821ec445dd407fb6a6f76f08cff026",
+      "statement": "termdeck connect runs interactively only when stdin and stdout are terminals and a remote terminal is used; otherwise it opens a raw session and pipes bytes unchanged with notices on stderr.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/cli.py#L413-L461",
+          "version": "repo-lines-v1:sha256:00097a126766ea923bebcb29ecf7fc5dd043b6dea4c526ad2ada8f4ef068aa25:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ0MmFiMjRmZTU0NjIzMzRmZWE4MzExYzFhOTNlMWQ5MmFlOWM5MGIzODY3NzZhODQxNzU2OTAyYTVhNjAzYzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk0MjM3ZGJlOTZkZGIzYTA1YThmYWUyNTNiZTRiMzVkMDUxZjY5ZjQ0NDZlZDJhODkwYWVjYzNkZjhiOGQwMDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI2ZmYxNmNjY2NkYjg2NTFmY2NlMjdlYWM3Y2RlYTJhMWY1YWU4ZGY2Mjc5MWQwZjU1ZDdkOTQyZTkwMTcwYTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE4MWVhMmQ5YWUzNzViZGM3OWYwNThmNTQ2ODMxZThjOTkwMDA0NTk4YmVkZjgxYTc4MDc1MDE1OTU5NTYwYmMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_105ea8f02965414e8925eb98fd192693",
+      "statement": "connect returns the remote exit status when available, else 1 if the session ended with a reason, else 0.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/cli.py#L450-L461",
+          "version": "repo-lines-v1:sha256:5f41d20ccbdda824618651678406380288ee47b4f72a33c659e7bf2eee9624eb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU0NDVkYThhMzRlM2U1M2I3ODBkNTliNWJiMWIyZTI2MTdjNzk2YTgzN2M2YTBmN2FkMDU1NmYxNTRhOTgwYzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk0MjM3ZGJlOTZkZGIzYTA1YThmYWUyNTNiZTRiMzVkMDUxZjY5ZjQ0NDZlZDJhODkwYWVjYzNkZjhiOGQwMDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjlhZWNhMDc2ZGVjNzQ0MzQzYzViZWQ3ODNmYjI3YjVhNGI1NDEzYTg1N2UwYWI0MTc0YjRjMzMwYzE4N2E1NTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE4MWVhMmQ5YWUzNzViZGM3OWYwNThmNTQ2ODMxZThjOTkwMDA0NTk4YmVkZjgxYTc4MDc1MDE1OTU5NTYwYmMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_bd24c9c1435f4fbc8f35bdf58cfd9270",
+      "statement": "A command, subsystem or piped stdin gets no remote pty unless -t is given, like ssh and plink.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/cli.py#L349-L388",
+          "version": "repo-lines-v1:sha256:9ce0e896832f963e7988a5979b2ac941931dcc8d41fe88e8625d21a66134ca6c:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZhOWU4Zjc4Mjc0ZTk1MzcxNjdhNzNhN2U5Mzg3ZmQ1ODY4YTM3YWUxYTliODJhN2ZmNWMxZjVkZWE0ZTM3NTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQyODY0NDdkZmMyNTNkMzEwYWE1NDk1NDE0OTczNzY2Yjc0ZTYxZDUyMDQxYzM1NTllZmU5NzlkYmUwMTc5MzUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM0OGFkNGJmZjU5YmUxMTk0OTM5MzNmZTczNDhlOTc3N2Y0NTcxN2I5YzBiNzE5N2JlNDNhN2MxYzEwMjdmNDgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_eb107b8ededc4dcbac10983d4ca0752c",
+      "statement": "Options for connect may appear anywhere up to the first plain word after the target, which starts the remote command (plink-style parsing).",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/cli.py#L893-L913",
+          "version": "repo-lines-v1:sha256:52d9bab3d1a596088e35496b9737454cb3d94f08cd4db65732253659c3fa2830:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiNTBhMjAyN2MwODQ2ZDllZjE5M2Q5MDQ0MzlkMjc1ZDE4MTRiNDAwYTk2NmE4NjI1YzEwNjYxZjRjNDUxMDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMwNjQwODZjOWI4ZDBhNjZhNTg3ZjVhY2YxZGJlNmFhMzRjYjY2OWYwMzUzZDNkMTBjOGE0YmIyODk2MDE1YWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjlkZGM4OTM3NTAxN2YxODU1OWFmNDA4Njc2MzUyZDYyYWI0MDY1ODQxM2JhMTAyZWM1MmNmYTlkNjVkMWJjOTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM0MTU3NzZhOTlmMTQxNTY1OWRlMjZlYjRkYjI2MTg2M2ZhMTIxOTY2NjBjOTU3ODUzYTYzMTMxOWJmZDliODYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_36cb7357ca964d65839d55191beb83b2",
+      "statement": "In interactive connect, Ctrl+] starts an escape (q/. quit, b break, ] literal Ctrl+]); kitty and modifyOtherKeys encodings of Ctrl+] are recognized so the remote side cannot disable it.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/console.py#L21-L56",
+          "version": "repo-lines-v1:sha256:20dc53516a5e9676722e64f36977fed262b4bfbc67aae6b1457719dbcc9ff617:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVhZTg3MDIzOTBlNTUzNzhiMTA1YTdjNWNmYjcxMjMyZjg5YzViNmQ3YWFhMTllNTM5YmY3YzI4MDkxMDljNmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY5NDc5NDY0ZDNkM2IwYWIyNzRjYzIwMTNiZTQ0M2YwNTI1N2Q3YjM2M2RhZTAzODU2MGIwZThkMTZhNTMzNDQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3Y2UzOGNkNGI1OTk0ZTZiOGU0MjJmODJmYWNmM2E0N2Y0NDIxZjg2N2M1MGRlNmZhYjExNjExN2IwYWY4M2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE5Y2E0YTMxN2NhZGYxNjdjNjIwYmE0OWZiZGZjZGMzYmE0ZmI3OTljODlmNWY3MmY2Yzg5N2U0ZmJhNDU1ZTMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_74e1258e9e894d26a1fd28cc144c4256",
+      "statement": "After an interactive session the console resets terminal modes the remote side may have left on and shows the cursor.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/console.py#L228-L285",
+          "version": "repo-lines-v1:sha256:8e6ec254ef92381671b5aba06bfea99aa16cdaf7140e1a7b1bee61ce20113beb:eyJzZWxlY3RlZExpbmVDb3VudCI6NTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE4ZDNkNDNlZGQ5ZGFkZmI0ZWYxZDVhOGVmMzNhNWEzYWI3ZmY2OGMzNDE5NzI0ZGUxMmI2YjRhN2NlNTcyYzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQwYzIzYmE0NzFkMDhmN2EzYjU1NzFmOTZhYWY4N2U2YWVmYzE1ZjFjZDFiZTQ5ZTI4OTM3MjFmZGVkNWEzMTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEyYjFhNDQzNTkyODgyOGYyNTEyYWYxZmRjMDhmNjA1MTU5MDE1ZTZhZWM1YWVhZWRkNjdlZmEzYmUwODEyMmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlhYzdkYzRmMjQ4Yjk0N2FiOTMxNDMzNjlmZjllMjJlOTZjNjlhY2Y1YTBhNWE5Njc5ZWM4M2M1MWQ5ZWVmYzUifQ"
+        },
+        {
+          "resource": "repo://src/termdeck/console.py#L25-L29",
+          "version": "repo-lines-v1:sha256:967a9247f3aa0ed16b2a9f5a580deb1ec366a832126a3206efc0c632105a7e56:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDNkMjk2ZWY5M2FiZGIxNmUyMzIzMTg2NTM2NjgyNWI1OWNiOTZhMTE1YzhkMTZkZjQ2M2UzOWIzNGVmNTNhNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOTgwYzM3NDY3YzZlNzZiOWJkYTQ0OGM4OTNhNjIzYmUwOGY1ODEwYmI0ODUzMWJmNzk1NDQ3MGRhMjJiZWM0OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzdlMmEyZTk0MWFmODliNGZjYmNmOWE5MWE1NTcyNjNiMjk5Y2FlYjMzODBhNDQ4MDliNjkxZTYyYjg1NTdiNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjRlODE1MWZlNGYyNDhlNGExYWIzYTRlNDNjMjBkOWY3NTY5OTVmNDQ2NmQ4OWQ2ZWUxNmVjZTVlNzkzNWIwYyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_4cc5ab7d8c0549e79b649338511f7daf",
+      "statement": "pipe() reads stdin at most PIPE_BACKLOG chunks ahead of the session, sends EOF at the end of stdin, and closes sessions that cannot take EOF (serial) after DRAIN seconds.",
+      "evidence": [
+        {
+          "resource": "repo://src/termdeck/console.py#L314-L362",
+          "version": "repo-lines-v1:sha256:4ab11188872c16b7ca811a3e03cb880c661bb2e746071f6f397dfb026eaa08f4:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZhMjBiMWY1YWRjN2E5ZGI0ZjcyNzNlOGFlMmNkNDZjOWQ1YzRiMDQyOTJmZWUzZWU0NmI5YmQzNTk2NjU2Y2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY2YzI0NTEzNmFlMTgzZTQyYTE2YWQwZWMyNGY4Y2M3ZDQ5OTNmMDVmMTEwYjQwZjE5ZWUyNDY3N2Q3NGUxNDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU2YzYwZTBlNjc0ZTljYzkyYTI4NTU5Mzk4OTBkNGIxMzFmMzBlZDI4N2YwMjcyMzg1ZGM4Y2UyMmE4MGMyY2MiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-18T13:56:19.871Z"
+  }
+}

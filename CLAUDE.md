@@ -29,3 +29,11 @@ SSH + serial terminal. Python ≥3.11, `uv` (`uv sync --all-extras`, `uv run pyt
 - `putty-reference`: to ask how PuTTY does something, instead of reading its source here.
 
 Reviewers that apply to a change run in parallel; fix what they find, then run the tests again.
+
+<!-- OPENWIKI:START -->
+
+## OpenWiki
+
+@AGENTS.md
+
+<!-- OPENWIKI:END -->
