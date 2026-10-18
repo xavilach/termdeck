@@ -29,7 +29,7 @@
     --control: #858d9c;     /* 3.1:1 on white */
     --text: #1b1f27;
     --muted: #5b6474;
-    --accent: #2f6fe0;
+    --accent: #2459b8;       /* 6.3:1 on the panel, also for the small SSH badge */
     --accent-text: #ffffff;
     --ok: #1d7a4a;
     --warn: #8a5a00;
@@ -236,7 +236,8 @@ body:not(.show-advanced) .advanced { display: none; }
 @media (max-width: 720px) {
   #app, body.sidebar-hidden #app { grid-template-columns: 1fr; }
   #sidebar { display: none; }
-  body.sidebar-open #sidebar { display: flex; position: fixed; inset: 0 auto 0 0; width: min(300px, 90vw); z-index: 30; box-shadow: 4px 0 20px #0007; }
+  body.sidebar-open #sidebar { display: flex; position: fixed; inset: 0 auto 0 0; width: min(300px, 80vw); z-index: 30; box-shadow: 4px 0 20px #0007; }
+  body.sidebar-open #sidebar-toggle { position: fixed; left: min(300px, 80vw); top: 0; height: 32px; z-index: 31; background: var(--panel); }
   .fields { grid-template-columns: 1fr; }
   #sftp { position: absolute; inset: 0; width: auto; z-index: 10; }
 }

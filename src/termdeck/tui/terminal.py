@@ -1,6 +1,7 @@
 """Terminal emulator widget: pyte keeps the screen, Textual draws it."""
 
 import asyncio
+import sys
 
 import pyte
 from pyte.graphics import FG_BG_256
@@ -56,6 +57,38 @@ def key_to_bytes(key: str, character: str | None, app_cursor: bool = False) -> b
     if character and character.isprintable():
         return character.encode("utf-8", "surrogatepass")
     return None
+
+
+def windows_clipboard(text: str) -> bool:
+    """Put `text` on the Windows clipboard directly (the console host ignores OSC 52). False elsewhere."""
+    if sys.platform != "win32":
+        return False
+    import ctypes
+
+    user32, kernel32 = ctypes.windll.user32, ctypes.windll.kernel32
+    kernel32.GlobalAlloc.restype = ctypes.c_void_p
+    kernel32.GlobalLock.argtypes = [ctypes.c_void_p]
+    kernel32.GlobalLock.restype = ctypes.c_void_p
+    kernel32.GlobalUnlock.argtypes = [ctypes.c_void_p]
+    kernel32.GlobalFree.argtypes = [ctypes.c_void_p]
+    user32.SetClipboardData.argtypes = [ctypes.c_uint, ctypes.c_void_p]
+    user32.SetClipboardData.restype = ctypes.c_void_p
+    data = text.encode("utf-16-le") + b"\0\0"
+    if not user32.OpenClipboard(None):
+        return False
+    try:
+        user32.EmptyClipboard()
+        handle = kernel32.GlobalAlloc(0x0002, len(data))  # GMEM_MOVEABLE
+        if not handle:
+            return False
+        ctypes.memmove(kernel32.GlobalLock(handle), data, len(data))
+        kernel32.GlobalUnlock(handle)
+        if not user32.SetClipboardData(13, handle):  # CF_UNICODETEXT; on success the clipboard owns it
+            kernel32.GlobalFree(handle)
+            return False
+        return True
+    finally:
+        user32.CloseClipboard()
 
 
 # pyte gives 256-colour indices 0-15 as its own fixed hex values: they are the theme's 16 colours.
@@ -145,6 +178,7 @@ class TerminalView(Widget, can_focus=True):
         self._offset = 0  # lines scrolled back into the history (0: the live screen)
         self._selection: tuple[tuple[int, int], tuple[int, int]] | None = None  # (line, column) from, to
         self._found: tuple[str, int] | None = None  # the last search and the line it found
+        self.last_find = ""
         self._vt = _Screen(80, 24, t.scrollback, self._send_nowait, self._ring, self._title)
         self._vt_stream = pyte.ByteStream(self._vt)
         self._conn_task: asyncio.Task | None = None
@@ -340,7 +374,8 @@ class TerminalView(Widget, can_focus=True):
         if self.app.mouse_captured is self:
             self.release_mouse()
         if self._selection and (text := self.selected_text()):
-            self.app.copy_to_clipboard(text)
+            self.app.copy_to_clipboard(text)  # OSC 52: the terminal puts it on the clipboard (conhost does not)
+            windows_clipboard(text)
             self.notify(f"Copied {len(text)} characters", timeout=2)
         else:
             self._selection = None
@@ -370,6 +405,7 @@ class TerminalView(Widget, can_focus=True):
 
     def find(self, text: str) -> bool:
         """Show the next line above that contains `text` (case ignored); again for the one above."""
+        self.last_find = text
         lines, history = self._lines(), len(self._vt.history.top)
         start = len(lines) - 1
         if self._found and self._found[0] == text:

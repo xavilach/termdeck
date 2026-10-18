@@ -233,8 +233,6 @@ def test_a_bad_geometry_file_gives_the_default_size(tmp_path, content):
     assert gui.load_size() == (1280, 800)
 
 
-@pytest.mark.xfail(strict=True, raises=OverflowError, reason="load_size does not catch OverflowError: a size "
-                   "of 1e999 in window.json (valid JSON, read as infinity) stops the desktop window from starting")
 def test_an_infinite_size_in_the_geometry_file_gives_the_default_size(tmp_path):
     _write_geometry(tmp_path, '{"width": 1e999, "height": 800}')
     assert gui.load_size() == (1280, 800)

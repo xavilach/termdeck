@@ -16,7 +16,7 @@ import signal
 import sys
 import threading
 
-from .session import Session
+from .session import Session, send_break
 
 ESCAPE = 0x1D  # Ctrl+]
 # Ctrl+] as sent by terminals in kitty keyboard / modifyOtherKeys mode, which a
@@ -259,8 +259,9 @@ async def interact(session: Session, banner: str = "") -> None:
             if item == "quit":
                 return
             if item == "break":
-                if session.can_break:
-                    await session.send_break()
+                sent, text = await send_break(session)
+                if not sent:  # said, and the session goes on
+                    print(f"\r\n[termdeck] {text}\r", file=sys.stderr, flush=True)
             else:
                 await session.write(item)
 

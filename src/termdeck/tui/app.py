@@ -32,9 +32,9 @@ FORWARD_FLAGS = {"L": "local", "R": "remote", "D": "dynamic"}
 class InputDialog(ModalScreen[str | None]):
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
 
-    def __init__(self, title: str, prompt: str, secret: bool = False, note: str = ""):
+    def __init__(self, title: str, prompt: str, secret: bool = False, note: str = "", value: str = ""):
         super().__init__()
-        self._title, self._prompt, self._secret, self._note = title, prompt, secret, note
+        self._title, self._prompt, self._secret, self._note, self._value = title, prompt, secret, note, value
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
@@ -42,7 +42,7 @@ class InputDialog(ModalScreen[str | None]):
             if self._note:  # what the server said just before (MFA choices, "passwords do not match")
                 yield Static(self._note, classes="note", markup=False)
             yield Label(self._prompt, markup=False)
-            yield Input(password=self._secret, id="answer")
+            yield Input(self._value, password=self._secret, id="answer")
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="cancel")
                 yield Button("OK", variant="primary", id="ok")
@@ -60,10 +60,14 @@ class InputDialog(ModalScreen[str | None]):
 class ConfirmDialog(ModalScreen[bool]):
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
 
-    def __init__(self, title: str, body: str, ok: str = "OK", danger: bool = False, cancel_default: bool | None = None):
+    def __init__(self, title: str, body: str, ok: str = "OK", danger: bool = False, cancel_default: bool | None = None,
+                 arm: bool | None = None):
+        """Dangerous questions focus Cancel. `arm` also keeps OK disabled for a moment, for questions
+        that can open while the user is typing (by default: when Cancel is the default)."""
         super().__init__()
         self._title, self._body, self._ok, self._danger = title, body, ok, danger
         self._cancel_default = danger if cancel_default is None else cancel_default
+        self._arm = self._cancel_default if arm is None else arm
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
@@ -75,7 +79,7 @@ class ConfirmDialog(ModalScreen[bool]):
 
     def on_mount(self) -> None:
         self.query_one("#cancel" if self._cancel_default else "#ok").focus()
-        if self._cancel_default:
+        if self._arm:
             # Like the web UI: a key typed into another tab (Tab, Enter) cannot accept at once.
             ok = self.query_one("#ok", Button)
             ok.disabled = True
@@ -93,7 +97,7 @@ class ConfirmDialog(ModalScreen[bool]):
 class TUIPrompter:
     def __init__(self, app: App, title: str):
         self._app = app
-        self._title = title
+        self.title = title
         self.show = None  # set to the terminal's notice writer once it exists
         self._note = ""   # the last notice, repeated in the next question
 
@@ -104,7 +108,7 @@ class TUIPrompter:
 
     async def ask(self, prompt: str, secret: bool = True) -> str | None:
         note, self._note = self._note, ""
-        return await self._show(InputDialog(self._title, prompt, secret, note))
+        return await self._show(InputDialog(self.title, prompt, secret, note))
 
     async def confirm_host_key(self, key: HostKey) -> bool:
         where = f"{key.host}:{key.port}"
@@ -170,7 +174,7 @@ class ProfileEditor(ModalScreen[Profile | None]):
         }
         self.values["ssh"]["forwards_text"] = forwards_to_text(p.ssh.forwards)
         self.options = describe_options()
-        self._snapshot = copy.deepcopy(self.values)  # Cancel asks only when something changed
+        self._snapshot = None  # the values once the form shows them (Cancel asks only after a change)
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog editor"):
@@ -257,6 +261,8 @@ class ProfileEditor(ModalScreen[Profile | None]):
         self._apply_kind()
         self._apply_when()
         self.query_one("#profile--name", Input).focus()
+        # Taken once the fields have reported their values (numbers come back as text).
+        self.call_after_refresh(lambda: setattr(self, "_snapshot", copy.deepcopy(self.values)))
 
     def _store(self, wid: str, value) -> None:
         section, _, key = wid.partition("--")
@@ -359,11 +365,11 @@ class ProfileEditor(ModalScreen[Profile | None]):
 
     @on(Button.Pressed, "#cancel")
     def action_cancel(self) -> None:
-        if self.values == self._snapshot:
+        if self._snapshot is None or self.values == self._snapshot:
             self.dismiss(None)
             return
         self.app.push_screen(ConfirmDialog("Discard changes?", "The changes to this profile are not saved.",
-                                           "Discard", danger=True, cancel_default=False),
+                                           "Discard", danger=True, arm=False),
                              callback=lambda discard: discard and self.dismiss(None))
 
 
@@ -421,7 +427,7 @@ class ProfileItem(ListItem):
 # Shape and colour, so the state reads without colour too.
 STATUS_ICON = {"connecting": ("◌", "yellow"), "connected": ("●", "green"), "failed": ("✕", "red"),
                "ended": ("○", "dim")}
-STATUS_TEXT = {"connecting": "Connecting…", "connected": "Connected", "failed": "Failed", "ended": "Ended"}
+
 
 
 def tab_title(status: str, name: str, title: str = "", bell: bool = False) -> Content:
@@ -521,6 +527,7 @@ class TermdeckTUI(App, inherit_bindings=False):
                         "Pick a profile and press Enter, or type a quick connect.\n\n"
                         "In a terminal every key goes to the remote side.\n"
                         "Press Ctrl+] to reach the menus, Esc to return, Ctrl+Q to quit.\n"
+                        "In the menus: f finds in the scrollback, t opens files (SFTP), s hides the sidebar.\n"
                         "Shift+PgUp/PgDn or the mouse wheel scroll back; drag to select and copy.",
                         id="welcome",
                     )
@@ -597,6 +604,8 @@ class TermdeckTUI(App, inherit_bindings=False):
                 if editor.original is not None and editor.original != result.name:
                     for view in self.main.query(TerminalView):  # open tabs reconnect under the new name
                         view.controller.rename(editor.original, result.name)
+                        if view.profile.name == result.name:
+                            view.prompter.title = result.name
                         self._relabel(view)
                 await self.reload_profiles()
                 self.notify(f"Saved {result.name}", markup=False)
@@ -666,6 +675,8 @@ class TermdeckTUI(App, inherit_bindings=False):
     def status_changed(self, event: TerminalView.StatusChanged) -> None:
         self._relabel(event.view)
         self.update_toolbar()
+        if self.screen_stack:
+            self.refresh_bindings()  # the footer shows the actions the session now allows
 
     @on(TerminalView.TitleChanged)
     def title_changed(self, event: TerminalView.TitleChanged) -> None:
@@ -687,7 +698,10 @@ class TermdeckTUI(App, inherit_bindings=False):
 
     @on(TabbedContent.TabActivated)
     def tab_activated(self) -> None:
+        if not self.screen_stack:  # the app is closing
+            return
         self.update_toolbar()
+        self.refresh_bindings()
         if view := self.active_view():
             if view.bell:
                 view.bell = False
@@ -702,19 +716,30 @@ class TermdeckTUI(App, inherit_bindings=False):
         if not view:
             bar.update(Text("No session", style="dim"))
             return
-        c = view.controller
-        live = c.state == "connected"
-        forwards = c.forwards_summary() if live else ""
-        keys = "  ".join(k for k, ok in (("b b: break", c.capabilities.send_break), ("t: files", c.capabilities.sftp))
-                         if ok and live)
-        bar.update(Text.assemble(STATUS_ICON[view.status], f" {STATUS_TEXT[view.status]}  ",
-                                 (view.profile.summary(), "dim"),
-                                 ("  " + forwards, "red" if "failed" in forwards else "dim") if forwards else "",
-                                 (f"  {keys}" if keys else "", "dim")))
+        snap = view.controller.snapshot()
+        caps = snap.get("capabilities", {})
+        keys = "  ".join(k for k, ok in (("b b: break", caps.get("send_break")), ("t: files", caps.get("sftp"))) if ok)
+        # The most useful first: on a narrow screen the profile summary is what gets cut.
+        line = Text.assemble(STATUS_ICON[snap["state"]], f" {snap['status']}  ",
+                             (snap.get("forwards_summary", "") + "  ", "red" if snap.get("forwards_failed") else "dim")
+                             if snap.get("forwards_summary") else "",
+                             (f"{keys}  " if keys else "", "dim"), (view.profile.summary(), "dim"))
+        line.truncate(max(bar.size.width - 2, 20), overflow="ellipsis")
+        bar.update(line)
 
     @on(TerminalView.EscapePressed)
     def leave_terminal(self) -> None:
-        self.main.query_one("#profiles").focus()
+        sidebar = self.main.query_one("#sidebar")
+        if sidebar.has_class("hidden"):  # the menus are the sidebar: show it rather than focus something unseen
+            sidebar.remove_class("hidden")
+        self._focus_profiles()
+
+    def _focus_profiles(self) -> None:
+        """Focus the profile list with a profile selected, so its keys act at once."""
+        profiles = self.main.query_one("#profiles", ListView)
+        if profiles.index is None:
+            profiles.index = next((i for i, item in enumerate(profiles.children) if isinstance(item, ProfileItem)), None)
+        profiles.focus()
 
     def action_focus_terminal(self) -> None:
         if view := self.active_view():
@@ -738,7 +763,7 @@ class TermdeckTUI(App, inherit_bindings=False):
         # Like PuTTY's Warn on close (the profile's Ask before closing).
         if view.status == "connected" and view.profile.terminal.warn_on_close:
             self.push_screen(ConfirmDialog("Close session?", f"{view.profile.name} is still connected. Close it?",
-                                           "Close", danger=True, cancel_default=False), callback=close)
+                                           "Close", danger=True, arm=False), callback=close)
         else:
             await close()
 
@@ -769,9 +794,12 @@ class TermdeckTUI(App, inherit_bindings=False):
         sidebar = self.main.query_one("#sidebar")
         sidebar.toggle_class("hidden")
         if sidebar.has_class("hidden"):
-            self.action_focus_terminal()
+            if view := self.active_view():
+                view.focus()
+            else:
+                self.set_focus(None)  # nothing in the hidden sidebar may keep the keys
         else:
-            self.main.query_one("#profiles").focus()
+            self._focus_profiles()
 
     def action_find(self) -> None:
         view = self.active_view()
@@ -783,7 +811,8 @@ class TermdeckTUI(App, inherit_bindings=False):
             if text and not view.find(text):
                 self.notify(f"No match for {text}", severity="warning", markup=False)
 
-        self.push_screen(InputDialog("Find", "Text to find in the scrollback (searches upwards):"), callback=search)
+        self.push_screen(InputDialog("Find", "Text to find in the scrollback (Enter again finds the one above):",
+                                     value=view.last_find), callback=search)
 
     def action_files(self) -> None:
         view = self.active_view()
@@ -805,7 +834,7 @@ class TermdeckTUI(App, inherit_bindings=False):
         if connected:
             names = ", ".join(v.profile.name for v in connected)
             self.push_screen(ConfirmDialog("Quit termdeck?", f"Still connected: {names}. Close and quit?", "Quit",
-                                           danger=True, cancel_default=False), callback=leave)
+                                           danger=True, arm=False), callback=leave)
         else:
             await leave()
 
@@ -820,7 +849,18 @@ class TermdeckTUI(App, inherit_bindings=False):
         # Single-letter shortcuts must not fire while typing in an input.
         if action in {"new_profile", "edit_profile", "duplicate_profile", "delete_profile", "close_tab",
                       "send_break", "reconnect", "focus_quick", "quit", "find", "files", "toggle_sidebar"}:
-            return not isinstance(self.focused, (Input, TextArea, TerminalView))
+            if isinstance(self.focused, (Input, TextArea, TerminalView)):
+                return False
+        # Session actions show in the footer only when they apply to the tab shown (False hides them).
+        session_actions = {"close_tab", "send_break", "reconnect", "find", "files"}
+        if action in session_actions and self.screen_stack:
+            view = self.active_view()
+            if view is None:
+                return False
+            caps = view.controller.capabilities
+            connected = view.status == "connected"
+            return {"close_tab": True, "find": True, "reconnect": not view.live,
+                    "send_break": connected and caps.send_break, "files": connected and caps.sftp}[action]
         return True
 
 

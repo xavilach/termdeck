@@ -325,15 +325,21 @@ async def terminal(request: web.Request) -> web.WebSocketResponse:
     sessions = request.app[sessions_key]
     sid = secrets.token_urlsafe(12)
 
-    def state_message(c: SessionController) -> dict:
-        m = {"type": "state", "state": c.state, "message": c.message}
+    outbox: list[dict] = []  # state changes, sent in order before the output that follows them
+
+    def changed(c: SessionController) -> None:
+        m = {"type": "state", **c.snapshot()}
         if c.state is State.CONNECTED:
-            m.update(session=sid, title=c.session.title, capabilities=c.capabilities.to_dict(),
-                     forwards=[{**asdict(f), "text": f.describe()} for f in c.forwards()],
-                     forwards_summary=c.forwards_summary())
-        elif c.state is State.ENDED:
-            m.update(clean=c.clean, close_tab=c.closes_tab)
-        return m
+            sessions[sid] = c.session  # before the page hears of it: an open SFTP panel asks at once
+            # The profile as connected (saved ones are read again on each connect): the page applies it.
+            m.update(session=sid, profile=_described(c.profile))
+        else:
+            sessions.pop(sid, None)
+        outbox.append(m)
+
+    async def flush() -> None:
+        while outbox and not ws.closed:
+            await ws.send_json(outbox.pop(0))
 
     try:
         first = await ws.receive_json(timeout=30)
@@ -348,7 +354,7 @@ async def terminal(request: web.Request) -> web.WebSocketResponse:
         await ws.send_json({"type": "state", "state": State.FAILED, "message": describe_error(exc)})
         await ws.close()
         return ws
-    controller = SessionController(profile, prompter, request.app[store_key], saved=bool(name))
+    controller = SessionController(profile, prompter, request.app[store_key], saved=bool(name), on_change=changed)
 
     async def handle_messages():
         async for msg in ws:
@@ -376,25 +382,25 @@ async def terminal(request: web.Request) -> web.WebSocketResponse:
     reader = asyncio.create_task(handle_messages())
     connect = asyncio.create_task(controller.connect(cols, rows))
     try:
+        await asyncio.sleep(0)  # the connect task reports "connecting"
+        await flush()
         await asyncio.wait({reader, connect}, return_when=asyncio.FIRST_COMPLETED)
         if not connect.done():  # browser went away while connecting
             connect.cancel()
             await asyncio.gather(connect, return_exceptions=True)
             return ws
-        connected = connect.result()
-        await ws.send_json(state_message(controller))  # connected, or failed and why
-        if not connected:
+        await flush()  # connecting, then connected or failed and why
+        if not connect.result():
             return ws
-        sessions[sid] = controller.session
 
         async def pump():
             while data := await controller.read():
+                await flush()
                 await ws.send_bytes(data)
 
         output = asyncio.create_task(pump())
         await asyncio.wait({reader, output}, return_when=asyncio.FIRST_COMPLETED)
-        if output.done() and not ws.closed:
-            await ws.send_json(state_message(controller))  # ended, and how
+        await flush()  # ended, and how
         output.cancel()
         await asyncio.gather(output, return_exceptions=True)
     finally:

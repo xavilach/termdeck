@@ -228,6 +228,25 @@ async def test_saved_serial_profile_and_break(client):
     await ws.close()
 
 
+async def test_reconnect_uses_the_profile_as_saved_now_and_sends_it(client):
+    """P1-374: the page gets the profile it was connected with, so options saved elsewhere apply."""
+    await login(client)
+    await client.post("/api/profiles", json={"name": "loop", "kind": "serial", "serial": {"device": "loop://"}})
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "name": "loop"})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "connecting")
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "connected")
+    assert m["profile"]["terminal"]["theme"] == "dark" and m["profile"]["summary"].startswith("serial loop://")
+    await ws.close()
+    await client.put("/api/profiles/loop", json={"name": "loop", "kind": "serial", "serial": {"device": "loop://"},
+                                                 "terminal": {"theme": "putty"}})
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "name": "loop"})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "state" and m["state"] == "connected")
+    assert m["profile"]["terminal"]["theme"] == "putty" and m["profile"]["palette"]["background"]
+    await ws.close()
+
+
 async def test_unknown_profile_reports_error(client):
     await login(client)
     ws = await client.ws_connect("/api/terminal")

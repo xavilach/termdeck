@@ -302,3 +302,73 @@ async def test_forwards_summary_counts(ssh_server):
     assert await two.connect()
     assert two.forwards_summary() == "2 forwards"
     await two.close()
+
+
+async def test_closing_while_output_is_read_is_a_local_close_not_a_clean_end():
+    """P1-370: the reader sees the session end while close() runs; that is not the remote side ending."""
+    controller, changes = _controller(_loop(close_on_exit="always"))
+    assert await controller.connect()
+    reader = asyncio.create_task(_drain(controller))
+    await asyncio.sleep(0.05)
+    await controller.close()
+    await asyncio.wait_for(reader, 5)
+    assert controller.state is State.ENDED and controller.message == "Disconnected"
+    assert controller.closed_locally and not controller.closes_tab
+    assert changes.count(State.ENDED) == 1
+
+
+async def test_close_while_connecting_drops_the_connection_that_finishes(monkeypatch):
+    """P1-371: a close() during connect() is not undone when the connect completes."""
+    import termdeck.controller as module
+
+    opened, release = [], asyncio.Event()
+    real = module.open_session
+
+    async def slow(*args, **kwargs):
+        await release.wait()
+        session = await real(*args, **kwargs)
+        opened.append(session)
+        return session
+
+    monkeypatch.setattr(module, "open_session", slow)
+    controller, _ = _controller(_loop())
+    connecting = asyncio.create_task(controller.connect())
+    await asyncio.sleep(0)
+    await controller.close()
+    release.set()
+    assert await connecting is False
+    assert controller.session is None and controller.state is State.FAILED
+    assert await asyncio.wait_for(opened[0].read(), 5) == b""  # the late session was closed
+
+
+async def test_a_second_connect_closes_the_first_session():
+    controller, _ = _controller(_loop())
+    assert await controller.connect()
+    first = controller.session
+    assert await controller.connect()
+    assert controller.session is not first
+    assert await asyncio.wait_for(first.read(), 5) == b""
+    await controller.close()
+
+
+async def test_a_cancelled_connect_reports_failed():
+    controller, changes = _controller(_loop())
+    task = asyncio.create_task(controller.connect())
+    await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert controller.state is State.FAILED and changes[-1] is State.FAILED
+
+
+async def test_snapshot_is_what_the_uis_show():
+    controller, _ = _controller(_loop())
+    assert controller.snapshot()["status"] == "Connecting…"
+    await controller.connect()
+    snap = controller.snapshot()
+    assert snap["state"] == "connected" and snap["live"] is True
+    assert snap["capabilities"] == {"send_break": True, "sftp": False, "typing": True}
+    assert snap["forwards"] == [] and snap["forwards_failed"] == 0
+    await controller.close()
+    snap = controller.snapshot()
+    assert snap["state"] == "ended" and snap["close_tab"] is False and snap["live"] is False

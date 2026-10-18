@@ -364,7 +364,7 @@ class SSHConnection:
                 self.listeners.append(listener)
                 status.active, status.port = True, listener.get_port()
             except (OSError, asyncssh.Error) as exc:
-                status.error = str(exc)
+                status.error = _describe(exc)
                 errors.append(f"forward {fwd} failed: {exc}")
         return errors
 
@@ -440,6 +440,8 @@ class SSHConnection:
 
 class SSHShell(Session):
     """Interactive shell. Closing it closes the whole connection, forwards included."""
+
+    has_sftp = True
 
     def __init__(self, conn: SSHConnection, process: asyncssh.SSHClientProcess, notices,
                  separate_stderr: bool = False, profile: Profile | None = None):
@@ -590,6 +592,9 @@ class _ProcessPipe:
 class SSHForwards(Session):
     """A connection kept open for its port forwards only (no shell, like ssh -N)."""
 
+    has_sftp = True
+    interactive = False
+
     def __init__(self, conn: SSHConnection, notices, profile: Profile | None = None):
         self.connection = conn
         profile = profile or conn.profile
@@ -625,6 +630,8 @@ class SSHForwards(Session):
 
 class SSHStream(Session):
     """Raw bytes to and from a host:port reached through the server."""
+
+    has_sftp = True
 
     def __init__(self, conn: SSHConnection, reader, writer, title: str):
         self.connection = conn

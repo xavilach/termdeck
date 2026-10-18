@@ -4,7 +4,7 @@ import pytest
 from textual.widgets import Input, Label, Select, Switch
 
 from termdeck.profiles import Profile, ProfileStore, SerialSettings
-from termdeck.tui.app import ConfirmDialog, ProfileEditor, TermdeckTUI, text_to_forwards
+from termdeck.tui.app import ConfirmDialog, InputDialog, ProfileEditor, TermdeckTUI, text_to_forwards
 from termdeck.tui.terminal import TerminalView, key_to_bytes
 
 
@@ -52,7 +52,8 @@ async def test_connect_serial_and_type(tmp_path):
         await pilot.press("w")  # close tab from menu mode: connected, so it asks first
         await pilot.pause(0.2)
         assert isinstance(app.screen, ConfirmDialog)
-        await pilot.press("enter")
+        assert app.screen.focused.id == "cancel"  # Enter alone does not close a live session
+        await pilot.click("#ok")
         await pilot.pause(0.2)
         assert not app.query(TerminalView)
 
@@ -765,7 +766,7 @@ async def test_quitting_with_a_connected_session_asks(tmp_path):
         assert app.is_running and view.status == "connected"
         await pilot.press("q")
         await _until(pilot, lambda: isinstance(app.screen, ConfirmDialog))
-        await pilot.press("enter")
+        await pilot.click("#ok")
     assert app.return_code == 0
 
 
@@ -825,7 +826,7 @@ async def test_break_in_a_session_that_cannot_send_one_says_nothing(tmp_path, ss
     seen = _record_notifications(app)
     async with app.run_test(size=(120, 40)) as pilot:
         app.open_tab(ssh_server.profile())
-        await _until(pilot, lambda: app.query("InputDialog"))
+        await _until(pilot, lambda: isinstance(app.screen, InputDialog))
         await pilot.press(*"secret", "enter")
         view = app.query_one(TerminalView)
         await _until(pilot, lambda: view.status == "connected")
@@ -992,7 +993,9 @@ async def test_renaming_a_saved_profile_updates_the_open_tabs(tmp_path):
 
 
 async def test_renaming_does_not_touch_tabs_of_other_profiles(tmp_path):
-    store = _store_with(tmp_path, _loop_profile("a"), _loop_profile("b"))
+    a, b = _loop_profile(), _loop_profile()
+    a.name, b.name = "a", "b"
+    store = _store_with(tmp_path, a, b)
     app = TermdeckTUI(store=store)
     async with app.run_test(size=(120, 50)) as pilot:
         other = await _open(app, pilot, store.get("b"))

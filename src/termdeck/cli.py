@@ -19,7 +19,7 @@ from .profiles import (
     Profile, ProfileFileError, ProfileStore, SerialSettings, SSHSettings, check_option, describe_options, option_fields,
     parse_forward, parse_target, resolve_target,
 )
-from .session import HostKey, describe_error, hide_secrets, is_expected, open_session, printable
+from .session import HostKey, describe_error, end_message, hide_secrets, is_expected, open_session, printable
 from .sftp import WILDCARDS
 
 
@@ -457,7 +457,7 @@ async def cmd_connect(args, store: ProfileStore) -> int:
     killed = getattr(getattr(session, "inner", session), "exit_signal", None)
     # A script learns a failing command from the exit status; only other endings are worth a line.
     if interactive or (reason and (status is None or killed)):
-        print(f"\r\n[termdeck] Session ended{': ' + reason if reason else ''}", file=sys.stderr)
+        print(f"\r\n[termdeck] {end_message(reason)}", file=sys.stderr)
     return status if status is not None else (1 if reason else 0)
 
 

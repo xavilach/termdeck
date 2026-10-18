@@ -109,6 +109,8 @@ class Session(ABC):
 
     title: str = ""
     can_break: bool = False
+    has_sftp: bool = False      # sftp() gives file transfer on the same connection
+    interactive: bool = True    # False: nothing to type into (a connection kept for its port forwards)
     # Why the session ended, for the UI, once read() has returned b"". None: closed normally.
     end_reason: str | None = None
 
@@ -179,6 +181,8 @@ class TerminalSession(Session):
         self._raw = raw
         self.title = inner.title
         self.can_break = inner.can_break
+        self.has_sftp = inner.has_sftp
+        self.interactive = inner.interactive
         self._settings = settings
         self._utf8 = settings.encoding.replace("_", "-").lower() in ("utf-8", "utf8")
         self._decoder = codecs.getincrementaldecoder(settings.encoding)("replace")
@@ -460,6 +464,22 @@ def _end_ssh_logging(handler) -> None:
     if not _SSH_LOGS and _SAVED_LEVEL:  # the last one: back to how logging was
         logger.setLevel(_SAVED_LEVEL.pop())
         asyncssh.set_debug_level(1)
+
+
+def end_message(reason: str | None) -> str:
+    """How every UI says a session ended (reason None: the remote program ended normally)."""
+    return f"Session ended: {reason}" if reason else "Session ended"
+
+
+async def send_break(session: Session) -> tuple[bool, str]:
+    """Send a serial break: (sent, what to tell the user). Never raises for a refused break."""
+    if not session.can_break:
+        return False, "This connection cannot send a break"
+    try:
+        await session.send_break()
+    except Exception as exc:  # the device went away, the driver refused
+        return False, f"Break not sent: {describe_error(exc)}"
+    return True, "Break sent"
 
 
 # Each transport module (TRANSPORTS, in profiles.py) provides

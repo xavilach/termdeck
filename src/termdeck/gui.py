@@ -170,6 +170,22 @@ def run() -> None:
     window = webview.create_window("termdeck", url, width=width, height=height, min_size=MIN_SIZE,
                                    text_select=True, background_color=BACKGROUND[system_dark()])
     window.expose(*desktop_functions(window))
+    # Only a normal window's size is saved: maximised or minimised, it is not the size to come back to.
+    shape = {"normal": True}
+    events = window.events
+
+    def becomes(normal: bool):
+        def handler() -> None:  # no parameters: pywebview would pass the window to one
+            shape["normal"] = normal
+        return handler
+
+    for name, normal in (("maximized", False), ("minimized", False), ("restored", True)):
+        if (event := getattr(events, name, None)) is not None:
+            event += becomes(normal)
+
+    def remember_size() -> None:
+        if shape["normal"]:
+            save_size(window)
 
     confirmed = threading.Event()
 
@@ -181,17 +197,17 @@ def run() -> None:
     def ask_then_close() -> None:
         if window.create_confirmation_dialog(*question()):
             confirmed.set()
-            save_size(window)
+            remember_size()
             window.destroy()
 
     def closing() -> bool:
         """Like PuTTY: ask before closing only while sessions are connected. False keeps the window."""
         if confirmed.is_set() or not server.sessions:
-            save_size(window)
+            remember_size()
             return True
         if sys.platform == "win32":  # the WinForms dialog runs right here
             if window.create_confirmation_dialog(*question()):
-                save_size(window)
+                remember_size()
                 return True
             return False
         # GTK and Cocoa queue the dialog on the GUI thread, which is running this handler:

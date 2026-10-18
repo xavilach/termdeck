@@ -454,7 +454,7 @@ function forwardsEditor(forwards) {
         el("button", {
           type: "button",
           onclick: () => { forwards.push({ kind: "local", listen_host: "localhost", listen_port: null, dest_host: "", dest_port: null }); render(); },
-        }, "＋ Add forward")),
+        }, icon("plus"), "Add forward")),
     );
   };
   render();
@@ -618,27 +618,8 @@ function connect(profile, { saved = true } = {}) {
     sftpOpen: false,
     fontSize: profile.terminal?.font_size || 14,
   };
-  const t = tab.profile.terminal;
-  const colours = profile.palette || state.themes[t.theme] || state.themes.dark;
-  const mono = getComputedStyle(document.body).getPropertyValue("--mono");
-  tab.term = new Terminal({
-    // Each family quoted on its own: "Cascadia Mono, Consolas" is two fonts, tried in order.
-    fontFamily: t.font_family
-      ? [...t.font_family.split(",").map((f) => f.trim().replace(/["\\]/g, "")).filter(Boolean).map((f) => `"${f}"`), mono].join(", ")
-      : mono,
-    fontSize: tab.fontSize,
-    scrollback: t.scrollback,
-    theme: colours,
-    cursorStyle: t.cursor_style,
-    cursorBlink: t.cursor_blink,
-    fontWeightBold: t.bold_style === "colour" ? "normal" : "bold",
-    drawBoldTextInBrightColors: t.bold_style !== "font",
-    scrollOnUserInput: t.scroll_on_key,
-    // PuTTY lists the characters that belong to words; xterm.js the ones that separate them.
-    wordSeparator: [...WORD_SEPARATORS].filter((c) => !(t.word_chars || "").includes(c)).join(""),
-    allowProposedApi: true,
-    rightClickSelectsWord: false,
-  });
+  tab.term = new Terminal({ ...terminalOptions(tab.profile, tab.fontSize), allowProposedApi: true, rightClickSelectsWord: false });
+  const colours = tab.term.options.theme;
   tab.fit = new FitAddon.FitAddon();
   tab.search = new SearchAddon.SearchAddon();
   tab.term.loadAddon(tab.fit);
@@ -668,6 +649,34 @@ function connect(profile, { saved = true } = {}) {
   activate(tab);
   openSocket(tab);
   return tab;
+}
+
+// xterm.js options from the profile's terminal settings.
+function terminalOptions(profile, fontSize) {
+  const t = profile.terminal;
+  const mono = getComputedStyle(document.body).getPropertyValue("--mono");
+  return {
+    // Each family quoted on its own: "Cascadia Mono, Consolas" is two fonts, tried in order.
+    fontFamily: t.font_family
+      ? [...t.font_family.split(",").map((f) => f.trim().replace(/["\\]/g, "")).filter(Boolean).map((f) => `"${f}"`), mono].join(", ")
+      : mono,
+    fontSize,
+    scrollback: t.scrollback,
+    theme: profile.palette || state.themes[t.theme] || state.themes.dark,
+    cursorStyle: t.cursor_style,
+    cursorBlink: t.cursor_blink,
+    fontWeightBold: t.bold_style === "colour" ? "normal" : "bold",
+    drawBoldTextInBrightColors: t.bold_style !== "font",
+    scrollOnUserInput: t.scroll_on_key,
+    // PuTTY lists the characters that belong to words; xterm.js the ones that separate them.
+    wordSeparator: [...WORD_SEPARATORS].filter((c) => !(t.word_chars || "").includes(c)).join(""),
+  };
+}
+
+// A reconnect may bring options saved elsewhere since the tab opened (the font size stays the tab's).
+function applyTerminalOptions(tab) {
+  Object.assign(tab.term.options, terminalOptions(tab.profile, tab.fontSize));
+  tab.container.style.background = tab.term.options.theme.background;
 }
 
 // Double click selects words: all ASCII punctuation separates them, except _-./~ and the profile's word characters.
@@ -792,10 +801,16 @@ function openSocket(tab) {
       send(tab, { type: "answer", id: m.id, value: trusted });
     } else if (m.type === "break") {
       toast(m.message, !m.ok);
+    } else if (m.type === "state" && m.state === "connecting") {
+      setStatus(tab, "connecting");
     } else if (m.type === "state" && m.state === "connected") {
       Object.assign(tab, {
-        session: m.session, caps: m.capabilities, forwards: m.forwards, forwardsSummary: m.forwards_summary, sftpPath: null,
+        session: m.session, caps: m.capabilities, forwards: m.forwards, forwardsSummary: m.forwards_summary,
+        forwardsFailed: m.forwards_failed, sftpPath: null,
       });
+      // The profile as the server connected it (saved profiles are read again on each connect).
+      tab.profile = withDefaults(m.profile);
+      applyTerminalOptions(tab);
       tab.term.options.disableStdin = !tab.caps.typing;  // a forwards-only connection: nothing to type into
       setStatus(tab, "connected");
       tab.term.focus();
@@ -920,7 +935,7 @@ function updateStatusbar() {
   if (!forwards.hidden) {
     forwards.textContent = tab.forwardsSummary;
     forwards.title = tab.forwards.map((f) => f.text).join("\n");
-    forwards.classList.toggle("bad", tab.forwards.some((f) => !f.active));
+    forwards.classList.toggle("bad", tab.forwardsFailed > 0);
   }
   $("#sb-right").textContent = tab ? `${tab.term.cols}×${tab.term.rows}  ${tab.profile.terminal.encoding}` : "";
 }
@@ -1193,7 +1208,7 @@ function bindEvents() {
   $("#profile-list").addEventListener("keydown", profileListKey);
   $("#sb-forwards").onclick = () => {
     const tab = state.active;
-    if (tab) toast(tab.forwards.map((f) => f.text).join("\n"), tab.forwards.some((f) => !f.active));
+    if (tab) toast(tab.forwards.map((f) => f.text).join("\n"), tab.forwardsFailed > 0);
   };
   $("#new-profile").onclick = () => openEditor();
   // In the desktop window there is no browser to open another window in.
@@ -1263,7 +1278,11 @@ function bindEvents() {
   drop.ondragleave = () => drop.classList.remove("dragging");
   drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("dragging"); sftpUpload([...e.dataTransfer.files]); };
 
-  document.addEventListener("click", (e) => { if (!e.target.closest("#menu")) $("#menu").hidden = true; });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#menu")) $("#menu").hidden = true;
+    // The narrow-window sidebar is an overlay: a click beside it closes it.
+    if (document.body.classList.contains("sidebar-open") && !e.target.closest("#sidebar, #sidebar-toggle")) toggleSidebar(false);
+  });
   document.addEventListener("keydown", (e) => {
     // Seen here first (capture), before a terminal: stopped, these keys never reach the remote.
     if (desktop && e.key === "F11") {
