@@ -319,12 +319,12 @@ async def test_cancelled_proxy_password_is_a_connect_error(ssh_server, proxy_for
 
 
 async def test_proxy_that_is_not_listening_is_a_connect_error(ssh_server):
-    from .conftest import free_port
-
-    profile = ssh_server.profile(proxy_type="socks5", proxy_host="127.0.0.1", proxy_port=free_port(),
-                                 proxy_local=True)
-    with pytest.raises(ConnectError, match="cannot connect to the proxy"):
-        await SSHConnection.connect(profile, FakePrompter())
+    with socket.socket() as bound:  # bound but not listening: refused, and no one else can take the port
+        bound.bind(("127.0.0.1", 0))
+        profile = ssh_server.profile(proxy_type="socks5", proxy_host="127.0.0.1",
+                                     proxy_port=bound.getsockname()[1], proxy_local=True)
+        with pytest.raises(ConnectError, match="cannot connect to the proxy"):
+            await SSHConnection.connect(profile, FakePrompter())
 
 
 async def test_socks4_proxy_sends_ip_and_user(ssh_server, proxy_for):

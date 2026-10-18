@@ -1,5 +1,4 @@
 import asyncio
-import socket
 
 import asyncssh
 import pytest
@@ -49,6 +48,9 @@ class _Server(asyncssh.SSHServer):
 
     def connection_made(self, conn):
         self.conn = conn
+
+    def server_requested_listener(self, listen_host, listen_port):
+        return True  # remote forwards (ssh -R)
 
     def begin_auth(self, username):
         if self.owner.banner:
@@ -186,12 +188,6 @@ def patch_port(monkeypatch):
         return created
 
     return install
-
-
-def free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
 
 
 async def read_until(session, marker: bytes, timeout=5.0) -> bytes:

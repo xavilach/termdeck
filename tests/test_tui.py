@@ -1,7 +1,7 @@
 import asyncio
 
 import pytest
-from textual.widgets import Input, Label, Select, Switch
+from textual.widgets import Button, Input, Label, ListView, Select, Switch
 
 from termdeck.profiles import Profile, ProfileStore, SerialSettings
 from termdeck.tui.app import ConfirmDialog, InputDialog, ProfileEditor, TermdeckTUI, text_to_forwards
@@ -40,21 +40,21 @@ async def test_connect_serial_and_type(tmp_path):
     app = TermdeckTUI(store=_store(tmp_path))
     async with app.run_test(size=(120, 40)) as pilot:
         app.open_tab(app.store.get("loop"))
-        await pilot.pause(0.5)
+        await _until(pilot, lambda: app.query(TerminalView) and app.query_one(TerminalView).status == "connected")
         view = app.query_one(TerminalView)
         assert view.status == "connected"
         assert app.focused is view
         await pilot.press("h", "i", "q")  # q must reach the terminal, not quit
-        await pilot.pause(0.5)
+        await _until(pilot, lambda: "hiq" in view._vt.display[0])
         assert "hiq" in view._vt.display[0]
         await pilot.press("ctrl+right_square_bracket")
         assert app.focused.id == "profiles"
         await pilot.press("w")  # close tab from menu mode: connected, so it asks first
-        await pilot.pause(0.2)
+        await _until(pilot, lambda: isinstance(app.screen, ConfirmDialog))
         assert isinstance(app.screen, ConfirmDialog)
         assert app.screen.focused.id == "cancel"  # Enter alone does not close a live session
         await pilot.click("#ok")
-        await pilot.pause(0.2)
+        await _until(pilot, lambda: not app.query(TerminalView))
         assert not app.query(TerminalView)
 
 
@@ -72,7 +72,7 @@ async def test_editor_shows_only_selected_kind(tmp_path):
                     if w.id and all(n.display for n in w.ancestors_with_self)}
         assert "ssh--host" in ids() and "serial--device" not in ids()
         editor.query_one("#profile--kind", Select).value = "serial"
-        await pilot.pause(0.3)
+        await _until(pilot, lambda: "serial--device" in ids())
         assert "serial--device" in ids() and "ssh--host" not in ids()
         assert "terminal--term_type" not in ids()  # SSH-only option hidden for serial
         dtr = editor.query_one("#serial--dtr").parent
@@ -84,7 +84,7 @@ async def test_editor_shows_only_selected_kind(tmp_path):
         editor.query_one("#serial--device", Input).value = "/dev/ttyACM0"
         await pilot.pause()
         await pilot.click("#save")
-        await pilot.pause(0.3)
+        await _until(pilot, lambda: not isinstance(app.screen, ProfileEditor))
         assert store.get("board").serial.device == "/dev/ttyACM0"
 
 
@@ -103,7 +103,7 @@ async def test_ctrl_q_goes_to_the_device(tmp_path):
     app = TermdeckTUI(store=_store(tmp_path))
     async with app.run_test(size=(120, 40)) as pilot:
         app.open_tab(app.store.get("loop"))
-        await pilot.pause(0.5)
+        await _until(pilot, lambda: app.query(TerminalView) and app.query_one(TerminalView).status == "connected")
         await pilot.press("ctrl+q")
         await pilot.pause(0.2)
         assert app.is_running and app.query(TerminalView)
@@ -122,7 +122,7 @@ async def test_markup_in_remote_and_profile_text_is_shown_literally(tmp_path):
         assert "[link=http://x]" in str(app.screen.query("Label")[1].render())
         await pilot.press("escape")
         app.open_tab(store.get("[/x] evil"))
-        await pilot.pause(0.3)
+        await _until(pilot, lambda: app.query(TerminalView))
         assert app.query(TerminalView)
         labels = " ".join(str(item.query_one(Label).render()) for item in app.query("ProfileItem"))
         assert "[RED]shown trail\\" in labels and "[/x] evil" in labels
@@ -148,7 +148,7 @@ async def test_editor_reports_a_cleared_number_and_saves_a_typed_one(tmp_path):
         port.value = "2222"
         await pilot.pause()
         await pilot.click("#save")
-        await pilot.pause(0.3)
+        await _until(pilot, lambda: not isinstance(app.screen, ProfileEditor))
         assert store.get("box").ssh.port == 2222
         assert isinstance(store.get("box").ssh.port, int)
 
@@ -276,7 +276,7 @@ async def test_many_quick_key_presses_arrive_in_order(tmp_path):
     app = TermdeckTUI(store=_store(tmp_path))
     async with app.run_test(size=(120, 40)) as pilot:
         app.open_tab(app.store.get("loop"))
-        await pilot.pause(0.5)
+        await _until(pilot, lambda: app.query(TerminalView) and app.query_one(TerminalView).status == "connected")
         view = app.query_one(TerminalView)
         assert view.status == "connected"
         text = "abcdefghijklmnopqrstuvwxyz0123456789ZYXWVUTSRQPONMLKJIHGFEDCBA"
@@ -300,7 +300,7 @@ async def test_ended_session_says_why(tmp_path, patch_port):
     app = TermdeckTUI(store=_store(tmp_path))
     async with app.run_test(size=(120, 40)) as pilot:
         app.open_tab(app.store.get("loop"))
-        await pilot.pause(0.5)
+        await _until(pilot, lambda: app.query(TerminalView) and app.query_one(TerminalView).status == "connected")
         view = app.query_one(TerminalView)
         assert view.status == "connected"
         gone.set()
@@ -316,7 +316,7 @@ async def test_normal_end_has_no_reason(tmp_path):
         profile = app.store.get("loop")
         profile.terminal.close_on_exit = "never"  # the default closes the tab on a clean end
         app.open_tab(profile)
-        await pilot.pause(0.5)
+        await _until(pilot, lambda: app.query(TerminalView) and app.query_one(TerminalView).status == "connected")
         view = app.query_one(TerminalView)
         await view.session.close()
         await _wait_for_screen(pilot, view, "Session ended")
@@ -360,7 +360,7 @@ async def test_failed_write_is_reported_and_later_keys_still_go_out(tmp_path):
     app = TermdeckTUI(store=_store(tmp_path))
     async with app.run_test(size=(120, 40)) as pilot:
         app.open_tab(app.store.get("loop"))
-        await pilot.pause(0.5)
+        await _until(pilot, lambda: app.query(TerminalView) and app.query_one(TerminalView).status == "connected")
         view = app.query_one(TerminalView)
         assert view.status == "connected"
         real, calls = view.session.write, []
@@ -961,6 +961,7 @@ async def test_an_invalid_serial_device_marks_its_field(tmp_path):
         await pilot.press("n")
         await _until(pilot, lambda: isinstance(app.screen, ProfileEditor))
         editor = app.screen
+        await _until(pilot, lambda: editor.query("#profile--kind SelectOverlay"))
         editor.query_one("#profile--kind", Select).value = "serial"
         editor.query_one("#profile--name", Input).value = "board"
         editor.query_one("#serial--device", Input).value = "http://nope"
@@ -1049,3 +1050,97 @@ async def test_footer_offers_menus_in_the_terminal_and_terminal_in_the_menus(tmp
         await _to_menus(pilot, app)
         await _until(pilot, lambda: "Terminal" in _footer_keys(app))
         assert "Menus" not in _footer_keys(app)
+
+
+async def test_find_shows_the_line_above_and_again_the_one_further_up(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile()))
+    async with app.run_test(size=(80, 12)) as pilot:
+        view = await _open(app, pilot)
+        for n in range(40):
+            view._feed(f"line {n} {'marker' if n in (5, 20) else ''}\r\n".encode())
+        assert view.find("MARKER")  # case ignored
+        first = view._offset
+        assert first > 0 and "line 20 marker" in view._text(view._lines()[view._line_at(0)])
+        assert view.find("marker")
+        assert view._offset > first and "line 5 marker" in view._text(view._lines()[view._line_at(0)])
+        assert not view.find("marker")  # nothing further up
+        assert not view.find("absent")
+
+
+async def test_find_key_prefills_the_last_search(tmp_path):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile()))
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot)
+        view.last_find = "error"
+        await _to_menus(pilot, app)
+        await pilot.press("f")
+        await _until(pilot, lambda: isinstance(app.screen, InputDialog))
+        assert app.screen.query_one("#answer", Input).value == "error"
+
+
+async def test_dragging_selects_text_and_copies_it(tmp_path, monkeypatch):
+    app = TermdeckTUI(store=_store_with(tmp_path, _loop_profile()))
+    copied = []
+    monkeypatch.setattr(app, "copy_to_clipboard", copied.append)
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = await _open(app, pilot)
+        view._feed(b"hello world\r\nsecond line\r\n")
+        top = view._line_at(0)
+        view._selection = ((top, 6), (top + 1, 5))
+        assert view.selected_text() == "world\nsecond"
+        assert view._selected(top) == (6, view._vt.columns) and view._selected(top + 1) == (0, 6)
+        await pilot.press("x")  # a key clears the selection
+        assert view._selection is None
+        view._selection = ((top, 0), (top, 4))
+        view.on_mouse_up(None)
+        assert copied == ["hello"]
+
+
+async def test_port_picker_lists_the_ports_and_enter_fills_the_device(tmp_path, monkeypatch):
+    import termdeck.tui.app as tui_app
+
+    ports = [{"device": "/dev/ttyUSB7", "description": "CP2102", "usb_id": "10c4:ea60 serial=abc"}]
+    monkeypatch.setattr(tui_app, "available_ports", lambda: ports)
+    app = TermdeckTUI(store=_store_with(tmp_path))
+    async with app.run_test(size=(120, 50)) as pilot:
+        await app.action_new_profile()  # no profiles: focus is in quick connect, where n is typed
+        await _until(pilot, lambda: isinstance(app.screen, ProfileEditor))
+        editor = app.screen
+        await _until(pilot, lambda: editor.query("#profile--kind SelectOverlay"))
+        editor.query_one("#profile--kind", Select).value = "serial"
+        await pilot.pause()
+        editor.query_one("#pick--serial--device", Button).press()
+        await _until(pilot, lambda: isinstance(app.screen, tui_app.PortPicker) and app.screen.query("ListItem"))
+        assert "CP2102" in str(app.screen.query_one("ListItem Label").render())
+        await pilot.press("enter")
+        await _until(pilot, lambda: app.screen is editor)
+        assert editor.query_one("#serial--device", Input).value == "/dev/ttyUSB7"
+
+
+async def test_files_panel_lists_and_downloads(tmp_path, ssh_server, monkeypatch):
+    from termdeck.controller import SessionController
+    from termdeck.tui import files
+
+    from .conftest import FakePrompter
+
+    (ssh_server.root / "notes.txt").write_text("hi")
+    (ssh_server.root / "sub").mkdir()
+    downloads = tmp_path / "downloads"
+    downloads.mkdir()
+    monkeypatch.setattr(files, "download_dir", lambda: downloads)
+    controller = SessionController(ssh_server.profile(), FakePrompter())
+    assert await controller.connect()
+    app = TermdeckTUI(store=_store_with(tmp_path))
+    try:
+        async with app.run_test(size=(120, 40)) as pilot:
+            app.push_screen(files.FilesScreen(controller.session.sftp(), "test"))
+            await _until(pilot, lambda: len(app.screen.query(files.EntryItem)) == 2)
+            names = [item.entry.name for item in app.screen.query(files.EntryItem)]
+            assert names == ["sub", "notes.txt"]  # folders first
+            view = app.screen.query_one("#files-list", ListView)
+            view.index = 1
+            await pilot.press("enter")
+            await _until(pilot, lambda: (downloads / "notes.txt").exists())
+            assert (downloads / "notes.txt").read_text() == "hi"
+    finally:
+        await controller.close()

@@ -12,6 +12,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.content import Content
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.css.query import NoMatches
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button, Footer, Input, Label, ListItem, ListView, Select, Static, Switch, TabbedContent, TabPane, TextArea,
@@ -404,6 +405,7 @@ class PortPicker(ModalScreen[str | None]):
             await view.append(item)
         note.update(f"{len(ports)} port(s). Enter picks, R scans again." if ports else
                     "No serial port found. Plug the adapter in and press R.")
+        view.index = 0 if ports else None  # Enter picks at once
         view.focus()
 
     @on(ListView.Selected, "#ports")
@@ -667,7 +669,10 @@ class TermdeckTUI(App, inherit_bindings=False):
         tabs = self.main.query("#tabs") if self.screen_stack else None
         if not tabs:  # the app is closing
             return None
-        pane = tabs.first(TabbedContent).active_pane
+        try:
+            pane = tabs.first(TabbedContent).active_pane
+        except NoMatches:  # the active pane is being removed (close on exit)
+            return None
         views = pane.query(TerminalView) if pane else []
         return views.first() if views else None
 

@@ -8,7 +8,7 @@ from termdeck.profiles import Forward
 from termdeck.session import open_session
 from termdeck.ssh import SSHConnection, known_hosts_path, remember_host_key
 
-from .conftest import FakePrompter, free_port, read_until
+from .conftest import FakePrompter, read_until
 
 
 async def test_shell_asks_host_key_then_password_and_echoes(ssh_server):
@@ -94,13 +94,13 @@ async def test_local_forward(ssh_server):
 
     target = await asyncio.start_server(echo, "127.0.0.1", 0)
     target_port = target.sockets[0].getsockname()[1]
-    listen_port = free_port()
     remember_host_key("127.0.0.1", ssh_server.port, ssh_server.key)
     profile = ssh_server.profile()
-    profile.ssh.forwards = [Forward("local", listen_port, "127.0.0.1", "127.0.0.1", target_port)]
+    profile.ssh.forwards = [Forward("local", 0, "127.0.0.1", "127.0.0.1", target_port)]  # 0: a free port, no race
     conn = await SSHConnection.connect(profile, FakePrompter())
     try:
         assert await conn.start_forwards() == []
+        listen_port = conn.forward_status[0].port
         reader, writer = await asyncio.open_connection("127.0.0.1", listen_port)
         writer.write(b"through the tunnel")
         assert await asyncio.wait_for(reader.read(100), 5) == b"through the tunnel"
@@ -427,3 +427,54 @@ async def test_signal_name_from_the_server_is_cleaned_in_the_end_reason():
     shell = SSHShell(connection, process, [])
     assert await shell.read() == b""
     assert shell.end_reason == "Remote program killed by signal ]0;evilKILL"
+
+
+async def _echo_server():
+    async def echo(reader, writer):
+        writer.write(await reader.read(100))
+        await writer.drain()
+        writer.close()
+
+    server = await asyncio.start_server(echo, "127.0.0.1", 0)
+    return server, server.sockets[0].getsockname()[1]
+
+
+async def test_remote_forward_carries_data_back_to_this_side(ssh_server):
+    target, target_port = await _echo_server()
+    remember_host_key("127.0.0.1", ssh_server.port, ssh_server.key)
+    profile = ssh_server.profile()
+    profile.ssh.forwards = [Forward("remote", 0, "127.0.0.1", "127.0.0.1", target_port)]
+    conn = await SSHConnection.connect(profile, FakePrompter())
+    try:
+        assert await conn.start_forwards() == []
+        status = conn.forward_status[0]
+        assert status.active and status.port  # the server picked a port
+        reader, writer = await asyncio.open_connection("127.0.0.1", status.port)
+        writer.write(b"back home")
+        assert await asyncio.wait_for(reader.read(100), 5) == b"back home"
+        writer.close()
+    finally:
+        conn.close()
+        target.close()
+
+
+async def test_socks_forward_reaches_the_host_asked_for(ssh_server):
+    target, target_port = await _echo_server()
+    remember_host_key("127.0.0.1", ssh_server.port, ssh_server.key)
+    profile = ssh_server.profile()
+    profile.ssh.forwards = [Forward("dynamic", 0, "127.0.0.1", "", 0)]
+    conn = await SSHConnection.connect(profile, FakePrompter())
+    try:
+        assert await conn.start_forwards() == []
+        reader, writer = await asyncio.open_connection("127.0.0.1", conn.forward_status[0].port)
+        writer.write(b"\x05\x01\x00")  # SOCKS 5, no authentication
+        assert await asyncio.wait_for(reader.readexactly(2), 5) == b"\x05\x00"
+        writer.write(b"\x05\x01\x00\x01" + bytes([127, 0, 0, 1]) + target_port.to_bytes(2, "big"))
+        reply = await asyncio.wait_for(reader.readexactly(10), 5)
+        assert reply[1] == 0  # succeeded
+        writer.write(b"via socks")
+        assert await asyncio.wait_for(reader.read(100), 5) == b"via socks"
+        writer.close()
+    finally:
+        conn.close()
+        target.close()

@@ -344,3 +344,78 @@ async def test_quick_connect_tab_uses_the_default_themes_background(page):
     await page.press("#quick-input", "Enter")
     await page.wait_for_selector(".tab")
     assert await page.evaluate("getComputedStyle(document.querySelector('.term')).backgroundColor") == "rgb(15, 18, 24)"
+
+
+async def _with_loop_profiles(page, *names):
+    from termdeck.profiles import Profile, SerialSettings
+
+    for name in names:
+        page.store.save(Profile(name, "serial", serial=SerialSettings(device="loop://")))
+    await page.evaluate("loadProfiles()")
+    await page.wait_for_selector(f".profile:has-text('{names[-1]}')")
+
+
+async def test_profile_list_works_from_the_keyboard(page):
+    await _with_loop_profiles(page, "alpha", "beta")
+    await page.focus(".profile[tabindex='0']")
+    assert await page.evaluate("document.activeElement.profile.name") == "alpha"
+    await page.keyboard.press("ArrowDown")
+    assert await page.evaluate("document.activeElement.profile.name") == "beta"
+    await page.keyboard.press("F2")
+    await page.wait_for_selector("#editor[open]")
+    assert await page.text_content("#editor-title") == "Edit beta"
+    await page.click("#editor-cancel")
+    await page.wait_for_selector("#editor[open]", state="detached")
+    await page.focus(".profile[tabindex='0']")
+    await page.keyboard.press("Delete")  # the page's own dialog, not confirm()
+    await page.wait_for_selector("#prompt[open]")
+    assert await page.text_content("#prompt-title") == "Delete profile"
+    await page.click("#prompt-cancel")
+    await page.focus(".profile[tabindex='0']")
+    await page.keyboard.press("Enter")
+    await page.wait_for_selector(".tab .dot.connected")
+    assert await page.text_content(".tab .label") == "beta"
+
+
+async def test_switches_are_reached_with_tab(page):
+    await page.click("#new-profile")
+    await page.wait_for_selector("#editor[open]")
+    for _ in range(40):
+        await page.keyboard.press("Tab")
+        if await page.evaluate("document.activeElement.type") == "checkbox":
+            break
+    assert await page.evaluate("document.activeElement.type") == "checkbox"
+
+
+async def test_sidebar_toggle_hides_and_shows_the_profiles(page):
+    assert await page.is_visible("#sidebar")
+    await page.click("#sidebar-toggle")
+    assert not await page.is_visible("#sidebar")
+    assert await page.get_attribute("#sidebar-toggle", "aria-expanded") == "false"
+    await page.click("#sidebar-toggle")
+    assert await page.is_visible("#sidebar")
+
+
+async def test_a_refused_save_marks_and_focuses_the_field(page):
+    await page.click("#new-profile")
+    await page.wait_for_selector("#editor[open]")
+    await page.fill('#editor-body input[id^="f-name-"]', "nohost")
+    await page.click("#editor-save")
+    await page.wait_for_selector(".field.invalid")
+    assert await page.get_attribute(".field.invalid", "data-field") == "ssh.host"
+    assert await page.evaluate("document.activeElement.closest('.field').dataset.field") == "ssh.host"
+
+
+async def test_closing_a_connected_tab_asks_first(page):
+    await _with_loop_profiles(page, "board")
+    await page.dblclick(".profile:has-text('board')")
+    await page.wait_for_selector(".tab .dot.connected")
+    await page.click(".tab .close")
+    await page.wait_for_selector("#prompt[open]")
+    assert await page.text_content("#prompt-title") == "Close session?"
+    await page.click("#prompt-cancel")
+    assert await page.query_selector(".tab")
+    await page.click(".tab .close")
+    await page.wait_for_selector("#prompt[open]")
+    await page.click("#prompt-ok")
+    await page.wait_for_selector(".tab", state="detached")

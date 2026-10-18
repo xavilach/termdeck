@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 from termdeck.profiles import Forward, Profile, ProfileStore, SerialSettings, SSHSettings, parse_forward
@@ -374,3 +376,41 @@ def test_from_dict_raises_option_error_too():
 
 def test_a_serial_profile_is_not_blamed_for_unused_ssh_options():
     _serial().validate()  # the empty ssh host of a serial profile is not an error
+
+
+def test_windows_file_helpers_do_nothing_elsewhere(tmp_path):
+    from termdeck.config import create_owner_only, owner_only_acl
+
+    if sys.platform == "win32":
+        pytest.skip("Windows has access lists")
+    owner_only_acl(tmp_path)  # no error, nothing to do
+    assert create_owner_only(tmp_path / "log.txt") is False and not (tmp_path / "log.txt").exists()
+
+
+def test_open_private_creates_files_outside_our_folders_private_from_the_start(tmp_path, monkeypatch):
+    """P1-390: outside termdeck's folders a new file is created already restricted (Windows), not after."""
+    from termdeck import config
+
+    calls = []
+    monkeypatch.setattr(config, "create_owner_only", lambda path: calls.append(path) or False)
+    with config.open_private(tmp_path / "logs" / "a.log", "ab", own_dir=False) as f:
+        f.write(b"x")
+    with config.open_private(tmp_path / "own" / "b.json", own_dir=True) as f:
+        f.write("{}")
+    assert calls == [tmp_path / "logs" / "a.log"]  # our own folders are private already
+
+
+@pytest.mark.parametrize("bytesize, parity, stopbits, flow", [(7, "E", 2, "rtscts"), (8, "N", 1.5, "xonxoff"),
+                                                               (5, "M", 1, "none")])
+async def test_serial_line_settings_reach_the_port(patch_port, bytesize, parity, stopbits, flow):
+    created = patch_port()
+    profile = Profile("line", "serial", serial=SerialSettings(device="loop://", baudrate=9600, bytesize=bytesize,
+                                                             parity=parity, stopbits=stopbits, flow=flow))
+    session = await open_session(profile, FakePrompter())
+    try:
+        (port, kwargs), = created
+        assert (kwargs["baudrate"], kwargs["bytesize"], kwargs["parity"], kwargs["stopbits"]) == \
+            (9600, bytesize, parity, stopbits)
+        assert kwargs["rtscts"] is (flow == "rtscts") and kwargs["xonxoff"] is (flow == "xonxoff")
+    finally:
+        await session.close()

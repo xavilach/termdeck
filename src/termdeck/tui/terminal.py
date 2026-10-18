@@ -408,7 +408,7 @@ class TerminalView(Widget, can_focus=True):
         self.last_find = text
         lines, history = self._lines(), len(self._vt.history.top)
         start = len(lines) - 1
-        if self._found and self._found[0] == text:
+        if self._found and self._found[0].lower() == text.lower():
             start = self._found[1] - 1
         wanted = text.lower()
         for line in range(min(start, len(lines) - 1), -1, -1):

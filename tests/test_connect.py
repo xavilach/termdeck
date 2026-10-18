@@ -11,7 +11,7 @@ from termdeck import console
 from termdeck.profiles import Profile, SerialSettings, describe_options
 from termdeck.session import open_session
 
-from .conftest import PASSWORD, USER, FakePrompter, free_port, read_until
+from .conftest import PASSWORD, USER, FakePrompter, read_until
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="pipes of the POSIX test setup")
 
@@ -382,7 +382,7 @@ async def test_answerback_is_not_sent_in_raw_sessions(ssh_server, raw, expected)
 
 
 async def test_notices_go_to_stderr_in_pipe_mode(ssh_server, password_file):
-    code, out, err = await run_cli(ssh_server, "-L", f"0.0.0.0:{free_port()}:127.0.0.1:9", "--password-file",
+    code, out, err = await run_cli(ssh_server, "-L", "0.0.0.0:0:127.0.0.1:9", "--password-file",
                                    str(password_file), None, "x")
     assert code == 0 and b"ran x" in out
     assert b"[termdeck]" not in out and b"accepts connections from other machines" not in out

@@ -106,6 +106,7 @@ class FilesScreen(ModalScreen[None]):
         view = self.query_one("#files-list", ListView)
         await view.clear()
         await view.extend(EntryItem(e) for e in entries)
+        view.index = 0 if entries else None
         self._status(f"{len(entries)} items. Enter: open or download to {download_dir()}  U: upload  Del: delete")
         view.focus()
 

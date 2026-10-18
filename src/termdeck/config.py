@@ -55,18 +55,52 @@ def owner_only_acl(path: Path) -> None:
     except ImportError:
         return
     try:
-        token = win32security.OpenProcessToken(win32api.GetCurrentProcess(), win32security.TOKEN_QUERY)
-        user = win32security.GetTokenInformation(token, win32security.TokenUser)[0]
-        dacl = win32security.ACL()
-        dacl.AddAccessAllowedAceEx(win32security.ACL_REVISION,
-                                   win32security.OBJECT_INHERIT_ACE | win32security.CONTAINER_INHERIT_ACE,
-                                   ntsecuritycon.FILE_ALL_ACCESS, user)
         win32security.SetNamedSecurityInfo(
             str(path), win32security.SE_FILE_OBJECT,
             win32security.DACL_SECURITY_INFORMATION | win32security.PROTECTED_DACL_SECURITY_INFORMATION,
-            None, None, dacl, None)
+            None, None, _owner_only_dacl(win32api, win32security, ntsecuritycon), None)
     except pywintypes.error:
         pass  # FAT/exFAT and some network shares have no access lists: nothing more can be done there
+
+
+def _owner_only_dacl(win32api, win32security, ntsecuritycon):
+    """An access list allowing only the current user (inherited by files created in a folder)."""
+    token = win32security.OpenProcessToken(win32api.GetCurrentProcess(), win32security.TOKEN_QUERY)
+    user = win32security.GetTokenInformation(token, win32security.TokenUser)[0]
+    dacl = win32security.ACL()
+    dacl.AddAccessAllowedAceEx(win32security.ACL_REVISION,
+                               win32security.OBJECT_INHERIT_ACE | win32security.CONTAINER_INHERIT_ACE,
+                               ntsecuritycon.FILE_ALL_ACCESS, user)
+    return dacl
+
+
+def create_owner_only(path: Path) -> bool:
+    """Windows: create the empty file `path` with an owner-only access list from the start, so nobody
+    can open it in between (restricting it afterwards would leave their handle working). False when
+    it already exists, elsewhere, or without pywin32 (the caller then creates it the usual way)."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import ntsecuritycon
+        import pywintypes
+        import win32api
+        import win32con
+        import win32file
+        import win32security
+    except ImportError:
+        return False
+    try:
+        descriptor = win32security.SECURITY_DESCRIPTOR()
+        descriptor.SetSecurityDescriptorDacl(True, _owner_only_dacl(win32api, win32security, ntsecuritycon), False)
+        descriptor.SetSecurityDescriptorControl(win32security.SE_DACL_PROTECTED, win32security.SE_DACL_PROTECTED)
+        attributes = win32security.SECURITY_ATTRIBUTES()
+        attributes.SECURITY_DESCRIPTOR = descriptor
+        handle = win32file.CreateFile(str(path), win32con.GENERIC_WRITE, 0, attributes, win32con.CREATE_NEW,
+                                      win32con.FILE_ATTRIBUTE_NORMAL, None)
+        handle.Close()
+        return True
+    except pywintypes.error:
+        return False  # exists already, or no access lists here
 
 
 _PRIVATE_DIRS: set[Path] = set()  # folders already made private by this process (Windows: an ACL write each)
@@ -100,6 +134,7 @@ def open_private(path: Path, mode: str = "w", *, own_dir: bool = True):
     flags = os.O_WRONLY | (os.O_APPEND if "a" in mode else 0 if truncate else os.O_TRUNC) | getattr(os, "O_BINARY", 0)
     if not own_dir:
         flags |= getattr(os, "O_NOFOLLOW", 0)
+    restricted = not own_dir and create_owner_only(path)  # Windows: born private, not made private after
     try:
         fd, created = os.open(path, flags | os.O_CREAT | os.O_EXCL, 0o600), True
     except FileExistsError:
@@ -112,7 +147,7 @@ def open_private(path: Path, mode: str = "w", *, own_dir: bool = True):
                     raise PermissionError(f"refusing to write to {path}: not a plain file of yours")
             if own_dir or created:
                 os.fchmod(fd, 0o600)
-        elif created and not own_dir:  # Windows: a new file outside our folders would inherit the folder's list
+        elif created and not own_dir and not restricted:  # Windows without CreateFile above (fallback)
             owner_only_acl(path)
         if truncate:
             os.ftruncate(fd, 0)

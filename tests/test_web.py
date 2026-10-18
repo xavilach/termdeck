@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 
 import pytest
@@ -862,3 +863,32 @@ async def test_open_in_browser_escapes_the_url_inside_the_script(tmp_path, monke
         assert 'a\\");alert(1);(\\"' in page.read_text(encoding="utf-8")  # a string literal, not code
     finally:
         page.unlink()
+
+
+async def test_open_in_browser_keeps_the_token_off_the_command_line(monkeypatch):
+    """P1-50: the browser gets a private file that forwards to the link, never the link itself."""
+    import stat
+    import webbrowser
+
+    from termdeck.web import server
+
+    opened = []
+    monkeypatch.setattr(webbrowser, "open", opened.append)
+    url = "http://127.0.0.1:1234/#token=SECRET"
+    page = server.open_in_browser(url, keep=0.05)
+    assert opened == [page.as_uri()] and "SECRET" not in opened[0]
+    assert json.dumps(url) in page.read_text()
+    if os.name == "posix":
+        assert stat.S_IMODE(page.stat().st_mode) == 0o600
+    await asyncio.sleep(0.2)
+    assert not page.exists()  # removed once the browser had time to read it
+
+
+async def test_serial_ports_are_listed_for_the_device_picker(client, monkeypatch):
+    from termdeck.web import server
+
+    ports = [{"device": "COM7", "description": "USB Serial", "usb_id": "0403:6001 serial=A1"}]
+    monkeypatch.setattr(server, "available_ports", lambda: ports)
+    await login(client)
+    r = await client.get("/api/serial-ports")
+    assert r.status == 200 and await r.json() == ports
