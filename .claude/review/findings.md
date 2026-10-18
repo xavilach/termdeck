@@ -17,9 +17,9 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-02 | issue | Critical | ui | index.html:80, app.js:816 | Enter in any profile editor field submits as Cancel and discards the edits. | Same pattern: Enter saves, Cancel is a plain button. | S | fixed (b782d71) |
 | P1-03 | issue | High | sec, ui | app.js:395, 513-527 | Changed-host-key dialog focuses "Trust new key"; one stray Enter trusts an attacker's key. Message omits host:port. `activate()` steals focus from typing. | Focus Cancel on danger dialogs, delay enabling the danger button, show host:port. | S | fixed (b782d71) |
 | P1-04 | issue | High | ui | ssh.py:184, session.py:33 | Host key prompt shows only the SHA256 fingerprint: no key type, no previous key, no file. | Pass algorithm and old fingerprint through the Prompter; show them in every UI. | M | fixed (218591c) |
-| P1-05 | issue | High | ui, feat | app.js:581,600,854; tui/app.py:483-510; gui.py | Live sessions close without confirmation (tab close, Ctrl+Shift+W, TUI w/q/Ctrl+Q, window close). PuTTY WarnOnClose. | Confirm when a connected session would close, in every UI; `confirm_close=True` in the GUI. | M | open |
-| P1-06 | issue | Medium | ui | app.js:337, tui/app.py:258 | Esc/Cancel discards profile edits without asking. | Compare with a snapshot; ask "Discard changes?". | S | open |
-| P1-07 | issue | Medium | ui | app.js:638, tui/app.py:491 | Break is sent on one click and "Break sent" shows even on failure. | Report errors; TUI break needs a second key. | S | open |
+| P1-05 | issue | High | ui, feat | app.js:581,600,854; tui/app.py:483-510; gui.py | Live sessions close without confirmation (tab close, Ctrl+Shift+W, TUI w/q/Ctrl+Q, window close). PuTTY WarnOnClose. | Confirm when a connected session would close, in every UI; `confirm_close=True` in the GUI. | M | fixed (8792025) |
+| P1-06 | issue | Medium | ui | app.js:337, tui/app.py:258 | Esc/Cancel discards profile edits without asking. | Compare with a snapshot; ask "Discard changes?". | S | open (web fixed in 8792025; TUI always asks: P1-380) |
+| P1-07 | issue | Medium | ui | app.js:638, tui/app.py:491 | Break is sent on one click and "Break sent" shows even on failure. | Report errors; TUI break needs a second key. | S | fixed (8792025) |
 | P1-08 | issue | Medium | sec, ui | ssh.py:76, app.js:512, session.py:20 | Server-supplied kbd-int prompts look like local ones (phishing a passphrase), bidi chars not stripped, prompt dialog steals focus from other tabs. | Prefix server prompts with (user@host), show name/instructions, strip bidi/format chars in `printable`. | S | fixed (218591c) |
 
 ### Profiles and store (core)
@@ -51,14 +51,14 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-31 | issue | High | arch, ui | ssh.py:261, serialport.py:187, session.py:89, server.py:335 | The reason a session ended is lost; unplug and disconnect show "Session ended". | `Session.end_reason`, shown by every UI via `describe_error`. | M | fixed (218591c) |
 | P1-32 | issue | High | arch | ssh.py:86,31; session.py:91; tui/app.py:251 | Blocking calls on the event loop (key decryption 0.7 s, log flush per chunk, known_hosts I/O, list_ports). | `asyncio.to_thread`; buffered log flush. | S | fixed (a33c0b9, 218591c: key decryption, known_hosts, USB scan in threads; buffered log) |
 | P1-33 | issue | High | conv, arch, feat | server.py:347-457, cli.py:207, ssh.py:225 | SFTP logic duplicated in CLI and web, two SFTP entry points, cached client races and is never closed; web reaches `session.inner.connection`. | Core `sftp.py` service exposed as `Session.sftp()`, locked creation. | L | fixed (7b105ed) |
-| P1-34 | issue | High | ui, arch | tui/app.py:272, app.js:560, server.py:253 | States are only connecting/connected/closed; failed vs ended indistinguishable; capabilities guessed from profile kind; reconnect differs per UI. | Core `SessionController` with states, capabilities, reconnect (re-reads profile). | M | open |
-| P1-35 | issue | High | ui | ssh.py:190, server.py:318 | Port-forward results are only text in the terminal; no UI shows active forwards. | Core forward status list; shown in status bars. | M | open |
+| P1-34 | issue | High | ui, arch | tui/app.py:272, app.js:560, server.py:253 | States are only connecting/connected/closed; failed vs ended indistinguishable; capabilities guessed from profile kind; reconnect differs per UI. | Core `SessionController` with states, capabilities, reconnect (re-reads profile). | M | fixed (8792025) |
+| P1-35 | issue | High | ui | ssh.py:190, server.py:318 | Port-forward results are only text in the terminal; no UI shows active forwards. | Core forward status list; shown in status bars. | M | fixed (8792025) |
 | P1-36 | issue | Medium | arch | session.py:153-190 | Hidden import cycle; `describe_error` imports asyncssh for serial errors; adding a transport edits session.py. | Transport registry. | M | fixed (218591c) |
 | P1-37 | issue | Medium | arch | cli.py:344, server.py:169 | No core error types: bugs reported as user errors (400 / exit 2). | `errors.py` with `TermdeckError` subclasses. | M | fixed (218591c) |
 | P1-38 | issue | Medium | arch, feat, sec | session.py:26, ssh.py:68, server.py:123 | Prompter has no notices; SSH banner and kbd-int instructions dropped; web answers not type-checked. | `Prompter.notify`, banner, type checks. | M | fixed (218591c) |
 | P1-39 | issue | Medium | arch | serialport.py:186, tui/terminal.py:162 | Serial reads hold default-executor workers; TUI writes unordered via `ensure_future`. | Per-session reader thread and single-worker writer; TUI write queue. | M | fixed (218591c) |
-| P1-40 | issue | Medium | conv, arch | profiles.py:20, tui/app.py:149, app.js:250, cli.py:63 | Option schema isn't the single source: `forwards`, wide fields, device picker, section titles hard-coded in UIs; stopbits typed from default. | Widget metadata (`device`, `forwards`, `wide`), section titles from the core. | M | open |
-| P1-41 | issue | Medium | conv, arch, ui | app.js:404,607; tui/terminal.py:17 | JS copies of `parse_target` (drifted), `summary`, themes; TUI theme copy. | Server parses quick targets; themes in a core module served by `/api/options`. | M | open |
+| P1-40 | issue | Medium | conv, arch | profiles.py:20, tui/app.py:149, app.js:250, cli.py:63 | Option schema isn't the single source: `forwards`, wide fields, device picker, section titles hard-coded in UIs; stopbits typed from default. | Widget metadata (`device`, `forwards`, `wide`), section titles from the core. | M | fixed (8792025) |
+| P1-41 | issue | Medium | conv, arch, ui | app.js:404,607; tui/terminal.py:17 | JS copies of `parse_target` (drifted), `summary`, themes; TUI theme copy. | Server parses quick targets; themes in a core module served by `/api/options`. | M | fixed (8792025) |
 | P1-42 | issue | Medium | arch | cli.py:20 | `getpass` on the default executor: Ctrl+C at a prompt may hang shutdown. | Daemon thread resolving a future. | S | fixed (218591c) |
 | P1-43 | issue | Low | arch | session.py:131 | Non-UTF-8 input decoded per chunk: split multibyte chars corrupted. | Incremental decoder for input. | S | fixed (218591c) |
 | P1-44 | issue | Low | arch, conv | tui/terminal.py:162, console.py:198, server.py:309,335 | Cancelled tasks never awaited; fire-and-forget tasks unreferenced. | Keep references, gather after cancel. | S | fixed (218591c) |
@@ -72,7 +72,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
-| P1-50 | issue | Medium | sec | web/server.py:505 | The start token is in the browser's command line (/proc readable by other local users). | Open a private redirect file instead of the token URL. | M | open |
+| P1-50 | issue | Medium | sec | web/server.py:505 | The start token is in the browser's command line (/proc readable by other local users). | Open a private redirect file instead of the token URL. | M | fixed (8792025) |
 | P1-51 | issue | Low | sec | ssh.py:19-40 | After accepting a changed key, the old key stays trusted (other entries, OpenSSH file); CA matches show as "unknown". | Record old key as `@revoked`; treat CA matches as changed. | M | fixed (218591c: the @revoked line applies to every known_hosts file asyncssh reads) |
 | P1-52 | issue | Low | sec | app.js:743 | A failed download navigates the app away. | Download through an `<a download>`. | S | fixed (b782d71) |
 | P1-53 | issue | Low | sec | tui/terminal.py:190, app.js | Pasted text containing `ESC[201~` breaks out of bracketed paste. | Strip ESC from pastes. | S | fixed (6886570) |
@@ -109,10 +109,10 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
-| P1-80 | issue | High | ui, feat | tui/app.py:181, app.js:258 | No port picker in the TUI; web list fetched once; recorded USB identity never shown. | Picker from `available_ports()` with rescan, in both UIs; show the recorded adapter. | M | open |
+| P1-80 | issue | High | ui, feat | tui/app.py:181, app.js:258 | No port picker in the TUI; web list fetched once; recorded USB identity never shown. | Picker from `available_ports()` with rescan, in both UIs; show the recorded adapter. | M | fixed (8792025) |
 | P1-81 | issue | Medium | feat | profiles.py:136 | DSR/DTR flow control missing. | Add `dsrdtr` choice. | S | fixed (218591c) |
 | P1-82 | issue | Low | feat | serialport.py:157 | No write timeout: a held-off flow-controlled port blocks a thread forever. | `write_timeout`, reported in the terminal. | S | needs Windows (fixed in 218591c: hold a port off with RTS/CTS and type; 'write' notice after 5 s, no frozen UI) |
-| P1-83 | issue | Medium | win | serialport.py:116-148 | DTR/RTS on Windows: drivers assert on open, drop on close; comment promises too much. | Document; fix the comment and option help. | S | open |
+| P1-83 | issue | Medium | win | serialport.py:116-148 | DTR/RTS on Windows: drivers assert on open, drop on close; comment promises too much. | Document; fix the comment and option help. | S | needs Windows (comment and option help fixed in an earlier batch: check DTR/RTS on open and close with FTDI, CH340, Prolific) |
 | P1-84 | issue | Low | win | serialport.py | Windows-generated serial numbers (contain `&`) depend on the USB socket. | Treat them as absent. | S | needs Windows (fixed in 218591c: adapter without serial number, moved between USB sockets, still followed) |
 | P1-85 | issue | Low | win | serialport.py | "Access denied" for a port in use is reported raw. | Map to "port in use by another program". | S | needs Windows (fixed in 218591c: open a port held by PuTTY -> 'in use'; COM99 -> 'no such port'; unplug mid-session -> 'device stopped responding') |
 | P1-86 | improvement | High | ui | serialport.py | Reopen automatically when an unplugged adapter returns. | Option "Reopen when the device returns". | M | proposed |
@@ -145,7 +145,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 |---|---|---|---|---|---|---|---|---|
 | P1-110 | issue | High | ui | server.py:421, app.js:764 | Uploads silently overwrite, no progress, no cancel. | Conflict check (409) and Replace/Skip; XHR progress and abort. | M | fixed (7b105ed) |
 | P1-111 | issue | Medium | feat | cli.py:320 | CLI sftp has only ls/get/put; no mkdir/rm/rmdir/mv/chmod, no interactive mode. | Commands on the core service; interactive shell. | M | fixed (7b105ed) |
-| P1-112 | issue | Medium | feat | tui | TUI has no SFTP. | File panel or transfer dialog. | M | open |
+| P1-112 | issue | Medium | feat | tui | TUI has no SFTP. | File panel or transfer dialog. | M | fixed (8792025) |
 | P1-113 | issue | Medium | ui | cli.py:215 | `sftp get` overwrites local files silently, no progress. | `--force`; progress on stderr. | S | fixed (7b105ed) |
 | P1-114 | improvement | Low | ui | index.html:46 | SFTP panel: fixed width, mouse only, no multi-select or breadcrumb. | Splitter, keyboard, multi-select. | M | proposed |
 
@@ -155,21 +155,21 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 |---|---|---|---|---|---|---|---|---|
 | P1-120 | issue | High | win, arch, ui | gui.py:62 | pywebview blocks downloads (`ALLOW_DOWNLOADS` false): SFTP download does nothing in the desktop app. | Enable it. | S | needs Windows (fixed in 7b105ed: termdeck gui: SFTP download opens Save As; a machine without WebView2 prints the install message; closing with a live session asks, without one closes) |
 | P1-121 | issue | High | win | gui.py:62 | Without WebView2, pywebview falls back to IE: broken blank window. | Force edgechromium; clear error. | S | needs Windows (fixed in 7b105ed: termdeck gui: SFTP download opens Save As; a machine without WebView2 prints the install message; closing with a live session asks, without one closes) |
-| P1-122 | issue | High | ui | app.js:125 | Profile list not keyboard reachable; double click only. | Listbox with roving tabindex, Enter connects, F2 edit, Del delete. | M | open |
-| P1-123 | issue | High | ui | app.css:275 | Switch checkboxes `display:none`: Tab skips every boolean option. | Visually hidden but focusable, focus ring. | S | open |
-| P1-124 | issue | High | ui | app.css:291, gui.py:63 | Below 720 px the sidebar disappears with no way back. | Collapsible sidebar toggle. | S | open |
-| P1-125 | issue | Medium | ui | app.js:502 | Renamed profile: open tabs reconnect with the old name and fail. | Update open tabs after save. | S | open |
+| P1-122 | issue | High | ui | app.js:125 | Profile list not keyboard reachable; double click only. | Listbox with roving tabindex, Enter connects, F2 edit, Del delete. | M | fixed (8792025) |
+| P1-123 | issue | High | ui | app.css:275 | Switch checkboxes `display:none`: Tab skips every boolean option. | Visually hidden but focusable, focus ring. | S | fixed (8792025) |
+| P1-124 | issue | High | ui | app.css:291, gui.py:63 | Below 720 px the sidebar disappears with no way back. | Collapsible sidebar toggle. | S | fixed (8792025) |
+| P1-125 | issue | Medium | ui | app.js:502 | Renamed profile: open tabs reconnect with the old name and fail. | Update open tabs after save. | S | fixed (8792025) |
 | P1-126 | issue | Medium | ui | app.js:850 | Ctrl+Shift+N/W are browser shortcuts in `termdeck web`. | Use Alt+Shift in the browser. | S | open |
-| P1-127 | issue | Medium | ui | app.css:111-141 | Contrast failures (warn 2.1:1, ok 2.3:1, input borders 1.4:1). | New tokens. | S | open |
-| P1-128 | issue | Medium | ui | app.css, index.html:60 | Looks like a generic AI web page (hero, cards, blur, pulse, pill). | Desktop-tool visual system; recent-sessions list. | M | open |
-| P1-129 | issue | Medium | ui | app.js:366 | Editor errors are one line at the bottom; the field isn't marked. | Core `OptionError(section, key)`; mark and focus the field. | M | open |
-| P1-130 | issue | Low | ui | app.css:179, app.js:133 | "COM" badge overflows and is used for /dev and URLs. | 32 px column, "SER". | S | open |
-| P1-131 | issue | Low | ui | index.html:15,37,53 | Full-width ＋ and emoji render as boxes or in colour. | Inline SVG icons. | S | open |
+| P1-127 | issue | Medium | ui | app.css:111-141 | Contrast failures (warn 2.1:1, ok 2.3:1, input borders 1.4:1). | New tokens. | S | fixed (8792025) |
+| P1-128 | issue | Medium | ui | app.css, index.html:60 | Looks like a generic AI web page (hero, cards, blur, pulse, pill). | Desktop-tool visual system; recent-sessions list. | M | fixed (8792025) |
+| P1-129 | issue | Medium | ui | app.js:366 | Editor errors are one line at the bottom; the field isn't marked. | Core `OptionError(section, key)`; mark and focus the field. | M | fixed (8792025) |
+| P1-130 | issue | Low | ui | app.css:179, app.js:133 | "COM" badge overflows and is used for /dev and URLs. | 32 px column, "SER". | S | fixed (8792025) |
+| P1-131 | issue | Low | ui | index.html:15,37,53 | Full-width ＋ and emoji render as boxes or in colour. | Inline SVG icons. | S | fixed (8792025) |
 | P1-132 | issue | Low | ui | app.js:246 | Boolean fields squeezed into half a column. | Full width. | S | fixed (e8b2e74) |
 | P1-133 | issue | Low | ui | index.html:79, tui/app.py:39 | macOS button order; Windows expects OK then Cancel on the right. | Right-aligned primary first. | S | fixed (b782d71) |
 | P1-134 | issue | Low | conv, ui | app.js:555 | Reconnect-on-Enter listener leaks, can reconnect twice. | Dispose in `openSocket`. | S | fixed (b782d71) |
-| P1-135 | issue | Low | ui | app.js:185, tui/app.py:320 | Native `confirm()` for delete; "Copy" vs "Duplicate"; "Folder" vs `--group`. | One dialog, one term. | S | open |
-| P1-136 | issue | Low | ui | gui.py:63 | Fixed dark window background; window geometry not saved. | Theme background; save geometry. | S | open |
+| P1-135 | issue | Low | ui | app.js:185, tui/app.py:320 | Native `confirm()` for delete; "Copy" vs "Duplicate"; "Folder" vs `--group`. | One dialog, one term. | S | fixed (8792025) |
+| P1-136 | issue | Low | ui | gui.py:63 | Fixed dark window background; window geometry not saved. | Theme background; save geometry. | S | fixed (8792025) |
 | P1-137 | issue | Medium | win | gui.py:69 | WebView2 cache in roaming %APPDATA%. | `data_dir()` → %LOCALAPPDATA%. | S | fixed (a33c0b9) |
 | P1-138 | issue | Low | conv | app.js:289 | Dead expression. | `f[key] ?? ""`. | S | fixed (b782d71) |
 | P1-139 | issue | Medium | win | gui.py, pyproject | "Open another window" uses `window.open` which does nothing in pywebview. | Hide it in the desktop app. | S | needs Windows (fixed in 7b105ed: the desktop window shows no 'Open another window') |
@@ -182,12 +182,12 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-141 | issue | High | arch | tui/terminal.py:133,225 | pyte at ~0.46 MB/s on the loop, a Style per cell: big output freezes everything. | Feed in slices, cache styles. | M | fixed (6886570) |
 | P1-142 | issue | High | ui | tui/app.py:357 | `termdeck tui nosuch` crashes with a traceback and exits 0. | Notify and continue. | S | fixed (b782d71) |
 | P1-143 | issue | Medium | ui | tui/terminal.py:151 | Output scrolls back to the bottom: scrollback unreadable while a device streams. | Scroll on key only; indicator. | S | fixed (6886570) |
-| P1-144 | issue | Medium | ui | tui/app.py:300 | Editor clipped at 80x24 (Save cut off). | Responsive width/height. | S | open |
-| P1-145 | issue | Medium | ui | tui/terminal.py | No text selection/copy in the TUI terminal. | Selection + OSC 52 copy. | M | open |
-| P1-146 | issue | Medium | ui | tui/app.py:284 | Fixed 34-column sidebar. | Toggle. | M | open |
-| P1-147 | issue | Low | ui | tui/app.py:316 | Footer shows "Back to terminal" while in the terminal. | "Menus". | S | open |
-| P1-148 | issue | Low | ui | tui/app.py:339 | Quick-connect placeholder truncated. | Shorter. | S | open |
-| P1-149 | issue | Low | feat | tui | No scrollback search, no tunnel-only session in the TUI. | Search; covered by P1-66 for no-shell. | M | open |
+| P1-144 | issue | Medium | ui | tui/app.py:300 | Editor clipped at 80x24 (Save cut off). | Responsive width/height. | S | fixed (8792025) |
+| P1-145 | issue | Medium | ui | tui/terminal.py | No text selection/copy in the TUI terminal. | Selection + OSC 52 copy. | M | fixed (8792025) |
+| P1-146 | issue | Medium | ui | tui/app.py:284 | Fixed 34-column sidebar. | Toggle. | M | fixed (8792025) |
+| P1-147 | issue | Low | ui | tui/app.py:316 | Footer shows "Back to terminal" while in the terminal. | "Menus". | S | fixed (8792025) |
+| P1-148 | issue | Low | ui | tui/app.py:339 | Quick-connect placeholder truncated. | Shorter. | S | fixed (8792025) |
+| P1-149 | issue | Low | feat | tui | No scrollback search, no tunnel-only session in the TUI. | Search; covered by P1-66 for no-shell. | M | fixed (8792025) |
 
 ### CLI and console
 
@@ -211,7 +211,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
-| P1-170 | issue | Medium | win, sec | config.py:21-36 | chmod is a no-op on Windows: files outside the profile keep inherited ACLs. | Owner-only ACL on Windows. | M | open |
+| P1-170 | issue | Medium | win, sec | config.py:21-36 | chmod is a no-op on Windows: files outside the profile keep inherited ACLs. | Owner-only ACL on Windows. | M | needs Windows (fixed in 8792025: TERMDECK_HOME on NTFS outside the profile, a log in a shared folder, FAT/USB drive) |
 | P1-171 | improvement | Low | win | ssh.py:84 | Paths: quotes from "Copy as path", `%VAR%` not expanded. | Strip quotes, expandvars. | S | needs Windows (fixed in a33c0b9: log with {name}=con/nul/COM1; key and log paths pasted with quotes or %USERPROFILE%) |
 | P1-172 | improvement | Low | win | ssh.py:35 | known_hosts written with CRLF on Windows. | `newline="\n"`. | S | fixed (a33c0b9) |
 | P1-173 | improvement | Low | win | ssh.py:158 | No message when the Windows agent pipe is missing. | Document; notice. | S | proposed |
@@ -222,8 +222,8 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
-| P1-180 | issue | Medium | conv, feat, arch | tests | Untested: ciphers/kex/agent/X11/timeout options, serial line settings, remote and SOCKS forwards, `tunnel`, web upload/op, `ports`, unplug, disconnect reason, reconnect, corrupt store. | Add tests. | M | open |
-| P1-181 | issue | Medium | feat, arch | tests | 875 lines of JS untested (the Critical dialog bugs went unseen). | Playwright smoke test of editor, prompts, connect. | M | open |
+| P1-180 | issue | Medium | conv, feat, arch | tests | Untested: ciphers/kex/agent/X11/timeout options, serial line settings, remote and SOCKS forwards, `tunnel`, web upload/op, `ports`, unplug, disconnect reason, reconnect, corrupt store. | Add tests. | M | open (part done in 8792025; see P1-392) |
+| P1-181 | issue | Medium | feat, arch | tests | 875 lines of JS untested (the Critical dialog bugs went unseen). | Playwright smoke test of editor, prompts, connect. | M | open (keyboard, discard and editor flows covered in 8792025; see P1-392) |
 | P1-182 | issue | Low | arch | conftest.py:105, test_tui.py | `free_port()` race; fixed `pilot.pause(0.5)` sleeps. | Port 0 and `get_port()`; wait helpers. | S | open |
 
 ### Improvements (proposed, not implemented)
@@ -400,3 +400,34 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-359 | issue | Low | feat | profiles.py | Display defaults differed from PuTTY without reason. | PuTTY defaults (scroll on key kept on, noted). | S | fixed (6886570) |
 | P1-360 | issue | Low | feat, conv | session.py | Filter tail never released at quiet or end. | Flush on a timer and at the end. | S | fixed (6886570) |
 | P1-361 | issue | Low | conv, ui | tui/terminal.py | Phantom pages with short history; style cache unbounded. | Fixed with the offset; cache cleared at 4096. | S | fixed (6886570) |
+| P1-362 | issue | Medium | sec | sftp.py get | Downloads copied remote mode bits (setuid, world-writable) to local files. | preserve=False, keep only the time. | S | fixed (8792025) |
+| P1-363 | issue | Medium | win, sec | config.py owner_only_acl | pywin32 errors escaped as non-OSError; DACL rewritten on every call. | Swallowed (no ACL on FAT/shares); once per folder per process. | S | needs Windows (fixed in 8792025: save 100 profiles on NTFS and on a FAT USB drive) |
+| P1-364 | issue | Low | win | gui.py | Saved window size grew with display scaling; minimised size saved; WebView2 folder ACL rewritten. | Divide by scale, skip tiny sizes, plain mkdir for WebView2. | S | needs Windows (fixed in 8792025: 150% scaling, open/close three times) |
+| P1-365 | issue | Low | win | tui/files.py | Downloads ignored a redirected Downloads known folder. | SHGetKnownFolderPath. | S | needs Windows (fixed in 8792025: OneDrive-redirected Downloads) |
+| P1-366 | issue | Low | win | gui.py system_dark | Old Windows 10 without app theme defaulted to dark. | Light when the value is missing. | S | fixed (8792025) |
+| P1-367 | issue | Low | sec, conv | gui.py load_size | window.json with Infinity crashed every start. | Catch OverflowError. | S | fixed (8792025; the strict xfail in test_gui.py must go: P1-392) |
+| P1-368 | issue | Low | sec, win | web/server.py open_in_browser | Redirect file removed before a slow browser read it; snap browsers cannot read /tmp. | Kept 10 minutes; hint to open the printed link. | S | fixed (8792025) |
+| P1-369 | issue | Medium | conv | controller.py, app.js, tui | Capabilities.typing ignored: forwards-only sessions still took keys. | Web disableStdin, TUI ignores keys and pastes. | S | fixed (8792025) |
+| P1-370 | issue | Low | conv | web/server.py | Break sent while connecting got no reply; unused import. | Answered before the session check. | S | fixed (8792025) |
+| P1-371 | issue | Major | arch | controller.py close | close() lets a concurrent read() record a clean end: the tab can close itself (close on exit) and be removed twice. | Set ENDED/closed_locally before awaiting; closes_tab false for local closes; test with a reader task. | S | open |
+| P1-372 | issue | Major | arch | controller.py connect | close() during connect() is undone; a second connect() leaks the first session; cancel leaves CONNECTING. | Epoch counter, close the old session, FAILED on cancel. | S | open |
+| P1-373 | issue | Minor | arch | web/server.py terminal | Session registered after the connected message: an open SFTP panel can refresh before it exists. | Register before sending. | S | open |
+| P1-374 | issue | Major | arch | web/server.py, controller.py | Web sends hand-built state snapshots (no connecting, no local Disconnected); TUI uses on_change; toolbar logic duplicated. | controller.snapshot(); server sends it from on_change through one outbox. | M | open |
+| P1-375 | issue | Major | arch | app.js | Browser keeps its own copy of a saved profile's terminal options; edits made elsewhere apply server-side only on reconnect. | Send the profile in the connected message; the page uses it. | S | open |
+| P1-376 | issue | Minor | arch | ssh.py, tui/app.py | Forward errors are raw str(exc); TUI detects failures by the word "failed". | describe_error; a failed count in the core. | S | open |
+| P1-377 | issue | Minor | arch | console.py, cli.py | connect: a failing break ends the session silently; end message written in two places. | Core end_message() and break helper. | S | open |
+| P1-378 | issue | Minor | arch | controller.py | typing/sftp capabilities read from the profile or by building an SFTP object. | Session.interactive and Session.has_sftp attributes. | S | open |
+| P1-379 | issue | Cosmetic | arch | tui/app.py, app.js | STATUS_TEXT copied in both UIs; TUI prompt titles keep the old name after a rename. | In the snapshot; update TUIPrompter on rename. | S | open |
+| P1-380 | issue | Major | ui | tui/app.py ProfileEditor | TUI editor always asks "Discard changes?" (numbers come back as text after mount). | Snapshot after mount, or compare normalised values. | S | open |
+| P1-381 | issue | Major | ui | tui/app.py leave_terminal | With the sidebar hidden, Ctrl+] focuses the invisible profile list. | Show the sidebar first, or focus nothing. | S | open |
+| P1-382 | issue | Major | ui | tui/app.py update_toolbar | At 80x24 the forward status is cut off after the summary. | State, forwards, keys, then the summary truncated. | S | open |
+| P1-383 | issue | Minor | ui | tui/app.py check_action | Footer full of actions that do not apply (Break, Reconnect, Files with no session): Find, Files, Sidebar never visible. | Hide inapplicable actions. | S | open |
+| P1-384 | issue | Minor | ui, win | tui/terminal.py | "Copied" shown though conhost ignores OSC 52. | Windows clipboard API on win32, or honest wording. | S | open |
+| P1-385 | issue | Minor | ui | app.css, app.js | Narrow-window sidebar overlay covers its toggle and does not close on an outside click. | Outside click closes; toggle above the overlay. | S | open |
+| P1-386 | issue | Minor | ui | tui/app.py | TUI Discard/Close/Quit dialogs default to the red button; web defaults to Cancel. | Cancel by default in the TUI too. | S | open |
+| P1-387 | issue | Minor | ui, win | gui.py save_size | Maximised state not kept; maximised size saved as the normal size. | Track maximized/restored events; save the state. | S | open |
+| P1-388 | issue | Minor | ui | index.html, app.css | Web quick-connect placeholder cut off; light SSH badge 4.3:1. | Short placeholder with title; darker badge. | S | open |
+| P1-389 | issue | Minor | ui | app.js, tui/app.py | "＋ Add forward" full-width glyph left; TUI find not prefilled for the next match. | icon("plus"); InputDialog value. | S | open |
+| P1-390 | issue | Low | sec, win | config.py open_private | Windows: a new log is created with the folder's ACL and restricted after: another user can open it in between. | Create it with the security descriptor (win32file.CreateFile). | M | open |
+| P1-391 | issue | Low | win | app.js shortcut | Alt+Shift switches keyboard layout on Windows with two layouts. | Test; if it clashes, pick another chord or make it configurable. | S | needs Windows (Alt+Shift+N/W/B in Edge and Chrome with two layouts installed) |
+| P1-392 | issue | Medium | test-writer | tests | 8 failing tests after 8792025 (TUI discard check, rename of open tabs, quit and break prompts, sidebar toggle; gui overflow strict xfail); no tests yet for PortPicker, FilesScreen, find, selection, owner_only_acl, open_in_browser. | Fix the code bugs above, then finish the tests. | M | open |
