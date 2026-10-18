@@ -101,6 +101,10 @@ class Session(ABC):
     @abstractmethod
     async def write(self, data: bytes) -> None: ...
 
+    async def write_eof(self) -> bool:
+        """Tell the remote side input has ended. False if it cannot know (a serial port)."""
+        return False
+
     def resize(self, cols: int, rows: int) -> None:
         """Report the new terminal size. Ignored by sessions without one."""
 
@@ -136,11 +140,14 @@ class TerminalSession(Session):
     """Applies a profile's terminal settings on top of a raw session.
 
     UIs always exchange UTF-8 with it; the remote side gets the profile's
-    character set, key mapping, local echo, answerback and logging.
+    character set, key mapping, local echo, answerback and logging. A `raw`
+    session (scripted use, data in pipes) passes bytes unchanged and only logs;
+    its notices go wherever `on_notice` sends them.
     """
 
-    def __init__(self, inner: Session, settings: TerminalSettings, log: Path | None = None):
+    def __init__(self, inner: Session, settings: TerminalSettings, log: Path | None = None, raw: bool = False):
         self.inner = inner
+        self._raw = raw
         self.title = inner.title
         self.can_break = inner.can_break
         self._settings = settings
@@ -153,17 +160,34 @@ class TerminalSession(Session):
         self._room = asyncio.Semaphore(OUTPUT_BACKLOG)
         self._pump: asyncio.Task | None = None
         self._failure: str | None = None
-        self._editor = LineEditor() if settings.line_editing else None
+        self._editor = LineEditor() if settings.line_editing and not raw else None
         self._tail = ""  # end of the output, to spot password prompts
         # The log's folder belongs to the user: create it if needed, never change its permissions.
         self._log = open_private(log, "ab", own_dir=False) if log else None
         self._flush_timer: asyncio.TimerHandle | None = None
         self._held = b""  # a CR at the end of a chunk, until we know whether LF follows
-        inner.on_notice(self._local)
+        if not raw:
+            inner.on_notice(self._local)
+
+    def on_notice(self, show) -> None:
+        self.inner.on_notice(show)
 
     @property
     def end_reason(self) -> str | None:
         return self.inner.end_reason or self._failure
+
+    @property
+    def exit_status(self) -> int | None:
+        """The remote program's exit status, when the transport has one (SSH)."""
+        return getattr(self.inner, "exit_status", None)
+
+    async def read_stderr(self) -> bytes:
+        """The remote error output when it is kept apart (SSH without a terminal), else b""."""
+        read = getattr(self.inner, "read_stderr", None)
+        return await read() if read else b""
+
+    async def write_eof(self) -> bool:
+        return await self.inner.write_eof()
 
     def _local(self, data: bytes) -> None:
         """Show bytes that did not come from the remote side (echo, notices)."""
@@ -201,6 +225,10 @@ class TerminalSession(Session):
                         self._stop_logging(exc)
                     if self._log and self._flush_timer is None:
                         self._flush_timer = asyncio.get_running_loop().call_later(1, self._flush_log)
+                if self._raw:
+                    await self._room.acquire()
+                    self._queue.put_nowait((data, True))
+                    continue
                 if ENQ in data and self._settings.answerback:
                     await self.inner.write(self._settings.answerback.encode(self._settings.encoding, "replace"))
                 data = self._received(data)
@@ -262,6 +290,9 @@ class TerminalSession(Session):
         return self._input_decoder.decode(data).encode(self._settings.encoding, "replace")
 
     async def write(self, data: bytes) -> None:
+        if self._raw:
+            await self.inner.write(data)
+            return
         if self._editor:
             echo, data = self._editor.feed(data)
             if echo:
@@ -293,7 +324,7 @@ class TerminalSession(Session):
 
 
 # Each transport module (TRANSPORTS, in profiles.py) provides
-# `async open_session(profile, prompter, cols, rows) -> Session`,
+# `async open_session(profile, prompter, cols, rows, scripted) -> Session`,
 # `describe_error(exc) -> str | None` and `ERRORS`, the exception types that mean
 # "the connection failed" rather than "termdeck has a bug". Imported on first
 # use: the serial tools never load asyncssh.
@@ -331,20 +362,23 @@ def _describe_error(exc: BaseException) -> str:
     return str(exc) or type(exc).__name__
 
 
-async def open_raw_session(profile: Profile, prompter: Prompter, cols: int, rows: int) -> Session:
+async def open_raw_session(profile: Profile, prompter: Prompter, cols: int, rows: int,
+                           scripted: bool = False) -> Session:
+    """The transport's session. `scripted`: data in pipes (remote stderr kept apart, see SSHShell)."""
     if profile.kind not in TRANSPORTS:
         raise ProfileError(f"unknown profile type {profile.kind!r}")
     transport = importlib.import_module(TRANSPORTS[profile.kind])
-    return await transport.open_session(profile, prompter, cols, rows)
+    return await transport.open_session(profile, prompter, cols, rows, scripted)
 
 
-async def open_session(profile: Profile, prompter: Prompter, cols: int = 80, rows: int = 24) -> Session:
-    """Connect to `profile` and return an interactive session with its terminal settings applied."""
+async def open_session(profile: Profile, prompter: Prompter, cols: int = 80, rows: int = 24,
+                       raw: bool = False) -> Session:
+    """Connect to `profile` and return a session with its terminal settings applied (`raw`: logging only)."""
     profile.validate()
-    raw = await open_raw_session(profile, prompter, cols, rows)
+    inner = await open_raw_session(profile, prompter, cols, rows, scripted=raw)
     try:
         log = log_path(profile.terminal.log_file, profile) if profile.terminal.log_file else None
-        return TerminalSession(raw, profile.terminal, log)
+        return TerminalSession(inner, profile.terminal, log, raw=raw)
     except BaseException:
-        await raw.close()
+        await inner.close()
         raise

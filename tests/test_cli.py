@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import sys
@@ -317,6 +318,7 @@ async def test_console_prompter_reads_in_a_daemon_thread(monkeypatch):
         return "hunter2"
 
     monkeypatch.setattr(cli.getpass, "getpass", fake_getpass)
+    monkeypatch.setattr(cli, "_open_terminal", lambda: io.StringIO(""))
     assert await cli.ConsolePrompter().ask("Password: ") == "hunter2"
     [(prompt, thread)] = seen
     assert prompt == "Password: "
@@ -328,7 +330,7 @@ async def test_console_prompter_end_of_input_is_a_cancel(monkeypatch):
         raise EOFError
 
     monkeypatch.setattr(cli.getpass, "getpass", eof)
-    monkeypatch.setattr("builtins.input", lambda: (_ for _ in ()).throw(EOFError()))
+    monkeypatch.setattr(cli, "_open_terminal", lambda: io.StringIO(""))  # a terminal at end of input
     prompter = cli.ConsolePrompter()
     assert await prompter.ask("Password: ") is None
     assert await prompter.ask("login: ", secret=False) is None

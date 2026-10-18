@@ -5,13 +5,14 @@ import asyncio
 import getpass
 import json
 import os
-import shutil
 import sys
 import threading
 import traceback
 from pathlib import PurePosixPath
 
 from . import __version__
+from .config import open_private, user_path
+from .errors import ConnectError
 from .profiles import (
     Profile, ProfileFileError, ProfileStore, SerialSettings, SSHSettings, check_option, describe_options, option_fields,
     parse_forward, parse_target, resolve_target,
@@ -19,24 +20,49 @@ from .profiles import (
 from .session import HostKey, describe_error, is_expected, open_session
 
 
+def _open_terminal():
+    """The user's terminal, even when stdin is a pipe (like ssh); None when there is none (cron)."""
+    try:
+        return open("CONIN$" if sys.platform == "win32" else "/dev/tty", encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
 class ConsolePrompter:
-    """Asks on the controlling terminal. Prompts go to stderr, never stdout."""
+    """Asks on the controlling terminal. Prompts go to stderr, never stdout.
+
+    Answers never come from stdin when it is a pipe: that is the session's data, and
+    a "y" in it must not trust a host key. Without a terminal, questions fail.
+    """
 
     async def ask(self, prompt: str, secret: bool = True) -> str | None:
         loop = asyncio.get_running_loop()
         answer = loop.create_future()
 
         def read():
+            result = None
             try:
-                if secret:
-                    text = getpass.getpass(prompt, stream=sys.stderr)
-                else:
-                    print(prompt, end="", file=sys.stderr, flush=True)
-                    text = input()
+                terminal = _open_terminal()
+                if terminal is None:
+                    raise ConnectError(f"{prompt.strip()} needs an answer, and there is no terminal to ask on")
+                with terminal:
+                    if secret:  # getpass reads the terminal itself (/dev/tty, or the Windows console)
+                        result = getpass.getpass(prompt, stream=sys.stderr)
+                    else:
+                        print(prompt, end="", file=sys.stderr, flush=True)
+                        line = terminal.readline()
+                        result = line.rstrip("\r\n") if line else None
             except (EOFError, KeyboardInterrupt):
-                text = None
+                result = None
+            except ConnectError as exc:
+                result = exc
+
+            def deliver():
+                if not answer.done():
+                    (answer.set_exception if isinstance(result, Exception) else answer.set_result)(result)
+
             try:
-                loop.call_soon_threadsafe(lambda: answer.done() or answer.set_result(text))
+                loop.call_soon_threadsafe(deliver)
             except RuntimeError:
                 pass  # the program is exiting
 
@@ -256,20 +282,176 @@ def resolve_profile(target: str, store: ProfileStore) -> Profile:
     return resolve_target(target, profiles)
 
 
-async def cmd_connect(args, store: ProfileStore) -> int:
-    from .console import ESCAPE_HELP, interact
+class BatchPrompter(ConsolePrompter):
+    """--batch: never ask anything; a question means the connection fails (plink -batch)."""
 
+    async def ask(self, prompt: str, secret: bool = True) -> str | None:
+        raise ConnectError(f"{prompt.strip()} needs an answer, and --batch never asks")
+
+    async def confirm_host_key(self, key: HostKey) -> bool:
+        where = f"{key.host}:{key.port}"
+        if key.changed:  # loud in scripts' logs too: it may be an attack
+            print(f"termdeck: WARNING: the host key of {where} has CHANGED: {key.key_type} {key.fingerprint}",
+                  file=sys.stderr)
+            for old in key.old_fingerprints:
+                print(f"termdeck: was {old}", file=sys.stderr)
+        else:
+            print(f"termdeck: host key of {where} is not trusted ({key.key_type} {key.fingerprint})", file=sys.stderr)
+        print("termdeck: --batch never asks; connect once without it to check and trust the key", file=sys.stderr)
+        return False
+
+
+class PasswordFilePrompter:
+    """--password-file: the target's first password prompt is answered from a file, the rest asked as usual.
+
+    Only the target's: a jump host, a key passphrase or a server-written question never gets it.
+    """
+
+    def __init__(self, inner, path: str, host: str):
+        self._inner = inner
+        self._for = f"@{host} password: "  # the prompt of ssh._Client.password_auth_requested
+        self._kbdint = f"@{host}) "         # keyboard-interactive prompts are prefixed "(user@host) "
+        lines = _read_text(path, "password file").splitlines()
+        if not lines or not lines[0]:
+            raise ValueError(f"password file {path} is empty")
+        self._password: str | None = lines[0]
+
+    async def ask(self, prompt: str, secret: bool = True) -> str | None:
+        target = prompt.endswith(self._for) and not prompt.startswith("(")
+        # Like plink -pwfile: also a hidden keyboard-interactive question (PAM, network devices).
+        target = target or (prompt.startswith("(") and self._kbdint in prompt.split(" ", 1)[0] + " ")
+        if self._password is not None and secret and target:
+            password, self._password = self._password, None  # once: a wrong one must not loop
+            return password
+        return await self._inner.ask(prompt, secret)
+
+    async def confirm_host_key(self, key: HostKey) -> bool:
+        return await self._inner.confirm_host_key(key)
+
+    async def notify(self, text: str) -> None:
+        await self._inner.notify(text)
+
+
+def _read_text(path: str, what: str) -> str:
+    """A small text file given on the command line; UTF-8 with or without a BOM (Notepad, PowerShell 7)."""
+    try:
+        return user_path(path).read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raise ValueError(f"{what} {path} is not UTF-8 text (PowerShell 5 writes UTF-16: use "
+                         "Out-File -Encoding utf8)") from None
+    except OSError as exc:
+        raise ValueError(f"cannot read {what} {path}: {exc.strerror}") from None
+
+
+def _connect_profile(args, store: ProfileStore) -> Profile:
+    """The profile for `connect`, with the ssh-like flags applied over it."""
     profile = resolve_profile(args.target, store)
     apply_settings(profile, args.set or [])
-    size = shutil.get_terminal_size()
-    session = await open_session(profile, ConsolePrompter(), size.columns, size.lines)
+    command = " ".join(args.command)
+    if args.command_file:
+        command = _read_text(args.command_file, "command file")
+    if args.nc and (command or args.no_shell or args.subsystem or _forwards(args)):
+        raise ValueError("--nc replaces the shell: it cannot be combined with a command, -N, -s or -L/-R/-D")
+    ssh_only = [name for name, used in (("a command", command), ("-N", args.no_shell), ("-s", args.subsystem),
+                                         ("--nc", args.nc), ("-L/-R/-D", _forwards(args)),
+                                         ("-4/-6", args.family)) if used]
+    if profile.kind != "ssh":
+        if ssh_only:
+            raise ValueError(f"{', '.join(ssh_only)}: only for SSH connections")
+        return profile
+    s = profile.ssh
+    if command or args.subsystem or args.no_shell:  # what to run on the server: the flags replace the profile's
+        s.remote_command, s.subsystem, s.no_shell = command, args.subsystem or "", args.no_shell
+    if args.family:
+        s.address_family = args.family
+    s.forwards += _forwards(args)
+    if args.tty is not None:
+        s.pty = args.tty
+    elif command or args.subsystem or not sys.stdin.isatty():
+        s.pty = False  # like plink and ssh: a command, a subsystem or piped input gets no terminal unless -t
+    profile.validate()
+    return profile
+
+
+def _setup_logging(args) -> None:
+    """-v shows connection steps on stderr, -vv protocol details; --ssh-log writes them to a file."""
+    import logging
+
+    import asyncssh
+
+    if args.verbose:
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter("termdeck: %(name)s: %(message)s"))
+        handler.addFilter(_hide_env_values)
+        logging.getLogger().addHandler(handler)
+        logging.getLogger().setLevel(logging.DEBUG if args.verbose > 1 else logging.INFO)
+    if args.ssh_log:
+        handler = logging.StreamHandler(open_private(user_path(args.ssh_log), "a", own_dir=False))
+        handler.setFormatter(logging.Formatter("%(asctime)s %(name)s: %(message)s"))
+        handler.setLevel(logging.DEBUG)
+        handler.addFilter(_hide_env_values)
+        logging.getLogger("asyncssh").addHandler(handler)
+        logging.getLogger("asyncssh").setLevel(logging.DEBUG)
+    if args.verbose > 1 or args.ssh_log:
+        asyncssh.set_debug_level(2)  # packets and algorithms; level 3 (raw data) could show typed secrets
+
+
+def _hide_env_values(record) -> bool:
+    """asyncssh logs environment variables with their values ("[chan=0]   Env: %s=%s"), which may be tokens.
+    A handler filter: it must see records of every asyncssh child logger."""
+    if isinstance(record.msg, str) and "Env: %s=%s" in record.msg and record.args:
+        record.args = (*record.args[:-1], "(hidden)")
+    return True
+
+
+async def cmd_connect(args, store: ProfileStore) -> int:
+    """Like ssh/plink: interactive in a terminal, scripted with pipes. Returns the remote exit status."""
+    from .console import ESCAPE_HELP, interact, pipe, terminal_size
+
+    profile = _connect_profile(args, store)
+    if args.verbose or args.ssh_log:
+        _setup_logging(args)
+    prompter = BatchPrompter() if args.batch else ConsolePrompter()
+    if args.password_file:
+        prompter = PasswordFilePrompter(prompter, args.password_file, profile.ssh.host)
+    # A terminal session needs a remote terminal; a command without one runs like `ssh host cmd`:
+    # the local terminal stays as it is (its own echo and line editing) and data passes unchanged.
+    remote_tty = profile.kind != "ssh" or profile.ssh.pty
+    interactive = sys.stdin.isatty() and sys.stdout.isatty() and not args.nc and remote_tty
+    if interactive:
+        print(f"[termdeck] connecting to {profile.summary()}...", file=sys.stderr, flush=True)
+    size = terminal_size()
+    if args.nc:
+        from .ssh import SSHConnection
+
+        host, _, port = args.nc.rpartition(":")
+        if not host or not port.isdigit():
+            raise ValueError(f"--nc expects HOST:PORT, got {args.nc!r}")
+        conn = await SSHConnection.connect(profile, prompter)
+        try:
+            session = await conn.open_stream(host.strip("[]"), int(port))
+        except BaseException:
+            conn.close()
+            raise
+    else:
+        # Scripted data is passed as it is: no Enter/Backspace mapping, echo or answerback.
+        session = await open_session(profile, prompter, size.columns, size.lines, raw=not interactive)
+    if not interactive:  # termdeck's own messages must not mix with the data on stdout
+        session.on_notice(lambda data: (sys.stderr.buffer.write(data.strip() + b"\n"), sys.stderr.flush()))
     try:
-        await interact(session, f"[termdeck] connected to {profile.summary()}. {ESCAPE_HELP}")
+        if interactive:
+            await interact(session, f"[termdeck] connected to {profile.summary()}. {ESCAPE_HELP}")
+        else:
+            await pipe(session)
     finally:
         await session.close()
     reason = session.end_reason
-    print(f"\r\n[termdeck] Session ended{': ' + reason if reason else ''}", file=sys.stderr)
-    return 0
+    status = getattr(session, "exit_status", None)
+    killed = getattr(getattr(session, "inner", session), "exit_signal", None)
+    # A script learns a failing command from the exit status; only other endings are worth a line.
+    if interactive or (reason and (status is None or killed)):
+        print(f"\r\n[termdeck] Session ended{': ' + reason if reason else ''}", file=sys.stderr)
+    return status if status is not None else (1 if reason else 0)
 
 
 async def cmd_tunnel(args, store: ProfileStore) -> int:
@@ -346,10 +528,30 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("tui", help="interactive full-screen terminal UI (the default)")
     p.add_argument("name", nargs="?", help="profile name, user@host[:port], or DEVICE[@baud] to open at start")
     p.set_defaults(func=cmd_tui)
-    p = sub.add_parser("connect", help="session in this terminal, like ssh (Ctrl+] q quits)")
+    p = sub.add_parser("connect", help="session in this terminal, like ssh or plink (Ctrl+] q quits)",
+                       description="Interactive in a terminal; with pipes, stdin and stdout pass through and the "
+                                   "remote exit status is returned.")
     p.add_argument("target", help="profile name, user@host[:port], or DEVICE[@baud]")
+    p.add_argument("command", nargs="*", help="remote command (SSH); options go before it, like plink")
     p.add_argument("--set", action="append", metavar="SECTION.OPTION=VALUE", help="override an option, repeatable")
+    tty = p.add_mutually_exclusive_group()
+    tty.add_argument("-t", dest="tty", action="store_const", const=True, help="allocate a terminal even with pipes")
+    tty.add_argument("-T", dest="tty", action="store_const", const=False, help="never allocate a terminal")
+    p.add_argument("-N", dest="no_shell", action="store_true", help="no shell, port forwards only")
+    p.add_argument("-s", "--subsystem", metavar="NAME", help="start an SSH subsystem (e.g. sftp, netconf)")
+    p.add_argument("-m", dest="command_file", metavar="FILE", help="read the remote command from FILE")
+    p.add_argument("--nc", metavar="HOST:PORT", help="connect stdin/stdout to HOST:PORT through the server")
+    family = p.add_mutually_exclusive_group()
+    family.add_argument("-4", dest="family", action="store_const", const="ipv4", help="IPv4 only")
+    family.add_argument("-6", dest="family", action="store_const", const="ipv6", help="IPv6 only")
+    _add_forward_options(p)
+    p.add_argument("--batch", action="store_true", help="never ask anything (passwords, host keys): fail instead")
+    p.add_argument("--password-file", metavar="FILE", help="answer the password prompt from the first line of FILE")
+    p.add_argument("-v", "--verbose", action="count", default=0, help="show connection steps (-vv: protocol)")
+    p.add_argument("--ssh-log", metavar="FILE",
+                   help="append SSH protocol details to FILE (commands, not typed data or environment values)")
     p.set_defaults(func=cmd_connect)
+    parser.connect_parser = p
     p = sub.add_parser("gui", help="open the desktop window")
     p.set_defaults(func=cmd_gui)
     p = sub.add_parser("web", help="serve the UI in your browser")
@@ -426,13 +628,43 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _split_command(parser: argparse.ArgumentParser, argv: list[str]) -> tuple[list[str], list[str]]:
+    """Split `connect` arguments like plink: options anywhere up to the first plain word
+    after the target; that word and everything after it is the remote command."""
+    takes_value = {flag: action.nargs != 0 for action in parser._actions for flag in action.option_strings}
+    head, positionals, i = [], 0, 0
+    while i < len(argv):
+        word = argv[i]
+        if word == "--":
+            return head, argv[i + 1:]
+        if word.startswith("-") and len(word) > 1:
+            head.append(word)
+            if takes_value.get(word.split("=")[0]) and "=" not in word and i + 1 < len(argv):
+                head.append(argv[i + 1])
+                i += 1
+        elif positionals:
+            return head, argv[i:]
+        else:
+            head.append(word)
+            positionals += 1
+        i += 1
+    return head, []
+
+
 def main(argv: list[str] | None = None) -> int:
     if sys.platform == "win32":
         # Redirected output would otherwise use the ANSI code page and fail on accents.
         for stream in (sys.stdout, sys.stderr):
             if hasattr(stream, "reconfigure"):
                 stream.reconfigure(encoding="utf-8", errors="replace")
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["connect"]:
+        head, command = _split_command(parser.connect_parser, argv[1:])
+        args = parser.parse_args(["connect", *head])
+        args.command = command
+    else:
+        args = parser.parse_args(argv)
     store = ProfileStore()
     tty = _save_tty()
     try:

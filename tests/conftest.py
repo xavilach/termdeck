@@ -94,6 +94,23 @@ async def _shell(process: asyncssh.SSHServerProcess):
         # Not DISC_BY_APPLICATION: asyncssh treats that as a normal close and drops the reason.
         process.channel.get_connection().disconnect(asyncssh.DISC_SERVICE_NOT_AVAILABLE, "bye bye")
         return
+    if process.subsystem:
+        process.stdout.write(f"subsystem {process.subsystem}\r\n")
+        process.exit(0)
+        return
+    if process.command == "kill":  # the remote program dies of a signal
+        process.exit_with_signal("KILL")
+        return
+    if process.command == "enq":  # asks for the answerback, then reports the first thing it receives
+        process.stdout.write("\x05")
+        process.stdout.write(f"got {await process.stdin.read(1024)!r}\r\n")
+        process.exit(0)
+        return
+    if process.command == "err":  # one line on each stream
+        process.stdout.write("to-stdout\n")
+        process.stderr.write("to-stderr\n")
+        process.exit(0)
+        return
     if process.command:
         process.stdout.write(f"ran {process.command} FOO={process.env.get('FOO')}\r\n")
         process.exit(0)

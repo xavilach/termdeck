@@ -289,7 +289,7 @@ class SerialSession(Session):
         self._writer.shutdown(wait=False)
 
 
-async def open_session(profile: Profile, prompter, cols: int, rows: int) -> SerialSession:
+async def open_session(profile: Profile, prompter, cols: int, rows: int, scripted: bool = False) -> SerialSession:
     """The transport entry point. Serial ports have no size and ask nothing."""
     return await SerialSession.open(profile)
 

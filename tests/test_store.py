@@ -590,3 +590,14 @@ def test_com0com_style_device_keeps_its_prefix():
 
 def test_cp2110_device_is_accepted():
     serial_profile(device="cp2110://0").validate()
+
+
+@pytest.mark.parametrize("ssh", [
+    {"no_shell": True, "remote_command": "uptime"},
+    {"subsystem": "sftp", "remote_command": "uptime"},
+    {"no_shell": True, "subsystem": "sftp"},
+])
+def test_what_to_run_on_the_server_is_one_choice(ssh):
+    profile = Profile("p", "ssh", ssh=SSHSettings(host="h.example", **ssh))
+    with pytest.raises(ValueError, match="replace each other"):
+        profile.validate()

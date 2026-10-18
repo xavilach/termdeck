@@ -123,6 +123,12 @@ class SSHSettings:
                             min=0, max=86400)
     connect_timeout: int = option(15, "Connect timeout (s)", "0 waits as long as the system allows",
                                   advanced=True, min=0, max=3600)
+    pty: bool = option(True, "Allocate a terminal", "Off runs the command with plain pipes, like ssh -T", advanced=True)
+    no_shell: bool = option(False, "No shell", "Only open the port forwards, like ssh -N", advanced=True)
+    subsystem: str = option("", "Subsystem", "Start this SSH subsystem instead of a shell or command, like ssh -s",
+                            advanced=True)
+    address_family: str = option("any", "Address family", choices={"any": "Any", "ipv4": "IPv4", "ipv6": "IPv6"},
+                                 advanced=True)
     compression: bool = option(False, "Compression", "Worth it on slow links only", advanced=True)
     use_agent: bool = option(True, "Use SSH agent", advanced=True)
     agent_forwarding: bool = option(False, "Forward agent", "Lets the server use your agent; trust it first. "
@@ -259,6 +265,10 @@ class Profile:
             for fwd in s.forwards:
                 fwd.validate()
             parse_env(s.env)
+            chosen = [name for name, used in (("No shell", s.no_shell), ("Subsystem", s.subsystem),
+                                              ("Remote command", s.remote_command)) if used]
+            if len(chosen) > 1:
+                raise ProfileError(f"choose one of {', '.join(chosen)}: they replace each other")
             if s.agent_forwarding and not s.use_agent:
                 raise ProfileError("'Forward agent' needs 'Use SSH agent' (ssh.use_agent) turned on")
         else:

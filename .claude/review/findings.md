@@ -49,7 +49,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 |---|---|---|---|---|---|---|---|---|
 | P1-30 | issue | High | arch | session.py:77,99 | Unbounded output queue defeats flow control (124 MB queued in 0.5 s). | Bounded queue; local echo in a separate deque. | S | fixed (218591c) |
 | P1-31 | issue | High | arch, ui | ssh.py:261, serialport.py:187, session.py:89, server.py:335 | The reason a session ended is lost; unplug and disconnect show "Session ended". | `Session.end_reason`, shown by every UI via `describe_error`. | M | fixed (218591c) |
-| P1-32 | issue | High | arch | ssh.py:86,31; session.py:91; tui/app.py:251 | Blocking calls on the event loop (key decryption 0.7 s, log flush per chunk, known_hosts I/O, list_ports). | `asyncio.to_thread`; buffered log flush. | S | open |
+| P1-32 | issue | High | arch | ssh.py:86,31; session.py:91; tui/app.py:251 | Blocking calls on the event loop (key decryption 0.7 s, log flush per chunk, known_hosts I/O, list_ports). | `asyncio.to_thread`; buffered log flush. | S | fixed (a33c0b9, 218591c: key decryption, known_hosts, USB scan in threads; buffered log) |
 | P1-33 | issue | High | conv, arch, feat | server.py:347-457, cli.py:207, ssh.py:225 | SFTP logic duplicated in CLI and web, two SFTP entry points, cached client races and is never closed; web reaches `session.inner.connection`. | Core `sftp.py` service exposed as `Session.sftp()`, locked creation. | L | open |
 | P1-34 | issue | High | ui, arch | tui/app.py:272, app.js:560, server.py:253 | States are only connecting/connected/closed; failed vs ended indistinguishable; capabilities guessed from profile kind; reconnect differs per UI. | Core `SessionController` with states, capabilities, reconnect (re-reads profile). | M | open |
 | P1-35 | issue | High | ui | ssh.py:190, server.py:318 | Port-forward results are only text in the terminal; no UI shows active forwards. | Core forward status list; shown in status bars. | M | open |
@@ -65,7 +65,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-45 | issue | Low | sec | serialport.py:173, server.py:307 | Cancelling a serial open leaves the port open with no owner. | Close the port if the open is cancelled. | S | fixed (218591c) |
 | P1-46 | issue | Low | feat, arch | ssh.py:229 | Concurrent first SFTP requests open two clients. | Covered by P1-33 (lock). | S | open |
 | P1-47 | issue | Low | conv | server.py:495 | Uses private `site._server`. | `runner.addresses`. | S | open |
-| P1-48 | issue | Low | arch | tui/app.py:253 | TUI save catches only ValueError/TypeError; an OSError crashes the TUI. | Catch OSError. | S | open |
+| P1-48 | issue | Low | arch | tui/app.py:253 | TUI save catches only ValueError/TypeError; an OSError crashes the TUI. | Catch OSError. | S | fixed (a33c0b9: TUI save catches OSError) |
 | P1-49 | issue | Low | arch | pyproject.toml, cli.py:239 | Default command needs the `tui` extra; without it: "No module named 'textual'". | Make the TUI deps core dependencies. | S | fixed (a33c0b9) |
 
 ### SSH security and host keys
@@ -73,7 +73,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | ID | Type | Sev | Found by | Location | Problem | Fix | Size | Status |
 |---|---|---|---|---|---|---|---|---|
 | P1-50 | issue | Medium | sec | web/server.py:505 | The start token is in the browser's command line (/proc readable by other local users). | Open a private redirect file instead of the token URL. | M | open |
-| P1-51 | issue | Low | sec | ssh.py:19-40 | After accepting a changed key, the old key stays trusted (other entries, OpenSSH file); CA matches show as "unknown". | Record old key as `@revoked`; treat CA matches as changed. | M | open (partly fixed in 218591c: old key revoked, CA matches count as changed; ~/.ssh/known_hosts entries are not edited) |
+| P1-51 | issue | Low | sec | ssh.py:19-40 | After accepting a changed key, the old key stays trusted (other entries, OpenSSH file); CA matches show as "unknown". | Record old key as `@revoked`; treat CA matches as changed. | M | fixed (218591c: the @revoked line applies to every known_hosts file asyncssh reads) |
 | P1-52 | issue | Low | sec | app.js:743 | A failed download navigates the app away. | Download through an `<a download>`. | S | fixed (b782d71) |
 | P1-53 | issue | Low | sec | tui/terminal.py:190, app.js | Pasted text containing `ESC[201~` breaks out of bracketed paste. | Strip ESC from pastes. | S | open |
 | P1-54 | improvement | Low | sec | server.py:421 | Uploads have no size or part limit. | Part count limit, 413. | S | proposed |
@@ -282,7 +282,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-241 | issue | Medium | test-writer | server.py quick_target | Web quick connect failed (500) with a corrupt profiles.json. | Fall back to no profiles. | S | fixed (a33c0b9) |
 | P1-242 | issue | Low | win | serialport.py _parse_identity | A stored identity with a Windows instance-id serial no longer matched. | Treat "&" serials as none when parsing too. | S | fixed (218591c) |
 | P1-243 | issue | Low | win | serialport.py describe_error | Missing/stale port errors shown raw. | "no such port", "device stopped responding". | S | fixed (218591c) |
-| P1-244 | issue | Low | win | cli.py ConsolePrompter | A cancelled ask leaves a reading thread (Ctrl+C at a prompt). | Covered by P1-158 (cancellable console read). | S | open (fold into P1-158) |
+| P1-244 | issue | Low | win | cli.py ConsolePrompter | A cancelled ask leaves a reading thread (Ctrl+C at a prompt). | Covered by P1-158 (cancellable console read). | S | won't fix (only Ctrl+C cancels a prompt, and the program then exits; the daemon thread cannot outlive it) |
 | P1-245 | issue | Major | ui, arch | serialport.py _read_loop | Windows unplug ("ClearCommError ... Access is denied") reported as "port in use". | Read failures say "device stopped responding"; "in use" only for open errors. | S | fixed (218591c) |
 | P1-246 | issue | Minor | ui | session.py | Implicit CR + LF both on doubled line spacing; CR at chunk end. | Single regex pass, CR held across chunks. | S | fixed (218591c) |
 | P1-247 | issue | Minor | ui | tui/terminal.py, app.js | Notices "dimmed" with SGR 2, which pyte ignores. | Grey (SGR 90) in both. | S | fixed (218591c) |
@@ -309,3 +309,23 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-268 | issue | Medium | conv | README.md | Exit codes, "Session ended", forget-host undocumented. | Documented. | S | fixed (218591c) |
 | P1-269 | issue | Low | conv | session.py | A lone CR under implicit LF waited for more output. | Released after 50 ms. | S | fixed (218591c) |
 | P1-270 | issue | Low | conv | serialport.py | Serial output had no backlog bound. | Reader waits on a semaphore (256 chunks). | S | fixed (218591c) |
+| P1-271 | issue | Low | win | cli.py | --password-file / -m: UTF-16 (PowerShell 5) crashed, BOM kept, empty file IndexError. | utf-8-sig, clear errors. | S | open |
+| P1-272 | issue | Low | win | console.py pipe | Scripted output to a Windows console: no VT processing, split UTF-8 shown as U+FFFD. | _ConsoleOutput. | S | open |
+| P1-273 | issue | Low | win | console.py | watch_size died on OSError. | Keep the last size. | S | open |
+| P1-274 | issue | High | sec | cli.py ConsolePrompter | In scripted mode host-key and login questions were answered from piped stdin ("y" trusted a changed key) and ate the data. | Ask only on /dev/tty or CONIN$; no terminal = fail. | S | open |
+| P1-275 | issue | Medium | sec | cli.py PasswordFilePrompter | --password-file answered the jump host and any prompt containing "password". | Target's password prompt only (and its kbd-int one). | S | open |
+| P1-276 | issue | Medium | sec | session.py, cli.py | Pipe mode applied terminal settings (answerback injection, echo of piped secrets, notices on stdout). | Raw TerminalSession, notices to stderr. | S | open |
+| P1-277 | issue | Low | sec | cli.py BatchPrompter | --batch did not flag a changed key. | WARNING with old fingerprint. | S | open |
+| P1-278 | issue | Low | sec | cli.py logging | --ssh-log/-vv logged environment values. | Filter hides them; help says commands are logged. | S | open |
+| P1-279 | issue | Low | sec | ssh.py SSHForwards | -N with stdin from /dev/null closed after 0.5 s. | write_eof ignored. | S | open |
+| P1-280 | issue | High | feat | cli.py | Options after the target became the remote command (regression of --set). | Split like plink at the first plain word. | S | open |
+| P1-281 | issue | High | feat | console.py, ssh.py | Piped input unbounded (400 MB in memory for a slow remote). | Bounded stdin reader; drain after writes. | S | open |
+| P1-282 | issue | Medium | feat | ssh.py | Without a PTY, stderr was lost outside pipe mode (TUI, web, interactive). | Separate only for scripts; merged otherwise. | S | open |
+| P1-283 | issue | Medium | feat | cli.py | A command, -m or -s got a PTY when stdin was a terminal. | No PTY unless -t, like plink. | S | open |
+| P1-284 | issue | Medium | feat | cli.py | --password-file ignored keyboard-interactive password prompts. | Answer the target's hidden kbd-int prompt once. | S | open |
+| P1-285 | issue | Low | feat | ssh.py | Remote signal gave exit 255. | 128 + signal number. | S | open |
+| P1-286 | issue | Low | feat | cli.py | Scripts got "[termdeck] Session ended" on stderr for a plain non-zero exit. | Quiet unless lost or killed. | S | open |
+| P1-287 | issue | Low | conv | profiles.py, cli.py | no_shell/subsystem/command and --nc with -N/-L/command silently overrode each other. | Rejected. | S | open |
+| P1-288 | issue | Low | conv | cli.py | In a terminal, a command without a PTY ran in raw interactive mode (no echo, key mapping). | Runs like `ssh host cmd`: terminal untouched, data passed unchanged. | S | open |
+| P1-289 | issue | Low | test-writer | cli.py | The environment-value log filter never matched (channel prefix) and sat on the parent logger. | Match "Env: %s=%s" anywhere; filter on the handlers. | S | open |
+| P1-290 | issue | Low | test-writer | cli.py PasswordFilePrompter | A jump host with the same user@host as the target (another port) would get the file's password. | Include the port in the prompt label. | S | open |

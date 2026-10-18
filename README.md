@@ -40,13 +40,16 @@ termdeck set web ssh.keepalive=30 terminal.theme=dracula   # any option: section
 termdeck list
 termdeck options                     # every option name for set/--set
 termdeck connect web                 # or a quick target: bob@host:2222, COM3@9600
+termdeck connect web uptime          # run a command; its exit status is ours (like plink)
+tar c dir | termdeck connect web "tar x"   # with pipes: stdin/stdout pass through, no terminal
+termdeck connect --batch -N -L 8080:db:5432 web   # never prompt; forwards only
 termdeck tunnel web                  # forwards only, no shell
 termdeck sftp web get /var/log/syslog
 termdeck ports                       # serial ports with their USB identity
 termdeck forget-host host.example     # forget a host's key after a server was reinstalled
 ```
 
-Exit codes: 0 success, 1 connection or file error, 2 invalid input or unknown profile, 70 internal error (with a traceback to report), 130 interrupted. `connect` ends with `Session ended[: reason]` on stderr.
+Exit codes: 0 success, 1 connection or file error, 2 invalid input or unknown profile, 70 internal error (with a traceback to report), 130 interrupted. `connect` returns the remote program's exit status (128 + n when it was killed by signal n), interactive or not, and in a terminal ends with `Session ended[: reason]` on stderr.
 
 `termdeck show NAME` prints a profile as JSON; `termdeck options` lists every option with its values and default.
 

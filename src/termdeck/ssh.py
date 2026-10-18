@@ -1,6 +1,8 @@
 """SSH connections: interactive shell, port forwards and SFTP (asyncssh)."""
 
 import asyncio
+import signal as signal_module
+import socket
 from dataclasses import replace
 from pathlib import Path
 
@@ -208,6 +210,7 @@ class SSHConnection:
             "keepalive_interval": s.keepalive,
             "compression_algs": ["zlib@openssh.com", "zlib", "none"] if s.compression else ["none"],
             "agent_forwarding": s.agent_forwarding,
+            "family": {"ipv4": socket.AF_INET, "ipv6": socket.AF_INET6}.get(s.address_family, socket.AF_UNSPEC),
         }
         if jump:
             options["tunnel"] = jump.conn
@@ -270,18 +273,31 @@ class SSHConnection:
                 errors.append(f"forward {fwd} failed: {exc}")
         return errors
 
-    async def open_shell(self, cols: int, rows: int, notices: list[str] = ()) -> "SSHShell":
+    async def open_shell(self, cols: int, rows: int, notices: list[str] = (), separate_stderr: bool = False) -> Session:
+        """The shell, command or subsystem; with no_shell, a session that only keeps the forwards open.
+
+        `separate_stderr` keeps the remote error output apart (read_stderr) when there is no
+        terminal, for scripts; otherwise it is merged into the output, as a terminal shows it.
+        """
         s = self.profile.ssh
+        if s.no_shell:
+            return SSHForwards(self, notices)
         process = await self.conn.create_process(
-            s.remote_command or None,
-            term_type=self.profile.terminal.term_type,
-            term_size=(cols, rows),
+            None if s.subsystem else (s.remote_command or None),
+            subsystem=s.subsystem or None,
+            term_type=self.profile.terminal.term_type if s.pty else None,
+            term_size=(cols, rows) if s.pty else None,
             env=parse_env(s.env),
             x11_forwarding=s.x11_forwarding,
-            stderr=asyncssh.STDOUT,
+            stderr=asyncssh.PIPE if separate_stderr and not s.pty else asyncssh.STDOUT,
             encoding=None,
         )
-        return SSHShell(self, process, notices)
+        return SSHShell(self, process, notices, separate_stderr=separate_stderr and not s.pty)
+
+    async def open_stream(self, host: str, port: int) -> "SSHStream":
+        """A TCP connection opened from the server to host:port (like ssh -W, plink -nc)."""
+        reader, writer = await self.conn.open_connection(host, port)
+        return SSHStream(self, reader, writer, f"{host}:{port}")
 
     def sftp(self):
         """Return an async context manager yielding an asyncssh SFTPClient."""
@@ -307,11 +323,14 @@ class SSHConnection:
 class SSHShell(Session):
     """Interactive shell. Closing it closes the whole connection, forwards included."""
 
-    def __init__(self, conn: SSHConnection, process: asyncssh.SSHClientProcess, notices):
+    def __init__(self, conn: SSHConnection, process: asyncssh.SSHClientProcess, notices,
+                 separate_stderr: bool = False):
         self.connection = conn
         self._process = process
+        self._separate_stderr = separate_stderr
         self.title = conn.profile.name
         self.exit_status: int | None = None
+        self.exit_signal: str | None = None
         for text in notices:
             self.notice(text)
 
@@ -332,6 +351,10 @@ class SSHShell(Session):
         except (asyncio.TimeoutError, asyncssh.Error, OSError):
             pass
         self.exit_status = self._process.exit_status
+        self.exit_signal = self._process.exit_signal[0] if self._process.exit_signal else None
+        if self.exit_signal:  # like plink and shells: 128 + the signal number
+            number = getattr(signal_module.Signals, f"SIG{self.exit_signal}", None)
+            self.exit_status = 128 + (number.value if number else 0)
         lost = self.connection.client.lost if self.connection.client else None
         if self.exit_status is None and not self._process.exit_signal:
             # No exit status: the connection went away. asyncssh keeps the server's reason
@@ -342,24 +365,98 @@ class SSHShell(Session):
         elif self.exit_status not in (None, 0):
             self.end_reason = f"Remote program exited with status {self.exit_status}"
 
+    async def read_stderr(self) -> bytes:
+        if not self._separate_stderr:
+            return b""
+        try:
+            return await self._process.stderr.read(65536)
+        except (asyncssh.Error, OSError):
+            return b""
+
     async def write(self, data: bytes) -> None:
         if not self._process.stdin.is_closing():
             self._process.stdin.write(data)
+            await self._process.stdin.drain()  # wait while the server is not taking data (piped input)
+
+    async def write_eof(self) -> bool:
+        if not self._process.stdin.is_closing():
+            self._process.stdin.write_eof()
+        return True
 
     def resize(self, cols: int, rows: int) -> None:
-        self._process.change_terminal_size(cols, rows)
+        if self.connection.profile.ssh.pty:  # no terminal, no size
+            self._process.change_terminal_size(cols, rows)
 
     async def close(self) -> None:
         self.connection.close()
         await self.connection.wait_closed()
 
 
-async def open_session(profile: Profile, prompter: Prompter, cols: int, rows: int) -> SSHShell:
+class SSHForwards(Session):
+    """A connection kept open for its port forwards only (no shell, like ssh -N)."""
+
+    def __init__(self, conn: SSHConnection, notices):
+        self.connection = conn
+        self.title = conn.profile.name
+        forwards = ", ".join(str(f) for f in conn.profile.ssh.forwards) or "none"
+        self.notice(f"connected without a shell; port forwards: {forwards}")
+        for text in notices:
+            self.notice(text)
+
+    async def read(self) -> bytes:
+        await self.connection.conn.wait_closed()
+        if lost := self.connection.client and self.connection.client.lost:
+            self.end_reason = _describe(lost)
+        return b""
+
+    async def write(self, data: bytes) -> None:
+        pass  # nothing to type into
+
+    async def write_eof(self) -> bool:
+        return True  # input ending (stdin from /dev/null) must not close the forwards
+
+    async def close(self) -> None:
+        self.connection.close()
+        await self.connection.wait_closed()
+
+
+class SSHStream(Session):
+    """Raw bytes to and from a host:port reached through the server."""
+
+    def __init__(self, conn: SSHConnection, reader, writer, title: str):
+        self.connection = conn
+        self._reader, self._writer = reader, writer
+        self.title = title
+
+    async def read(self) -> bytes:
+        try:
+            return await self._reader.read(65536)
+        except (asyncssh.Error, OSError) as exc:
+            self.end_reason = _describe(exc)
+            return b""
+
+    async def write(self, data: bytes) -> None:
+        if not self._writer.is_closing():
+            self._writer.write(data)
+            await self._writer.drain()
+
+    async def write_eof(self) -> bool:
+        if not self._writer.is_closing():
+            self._writer.write_eof()
+        return True
+
+    async def close(self) -> None:
+        self.connection.close()
+        await self.connection.wait_closed()
+
+
+async def open_session(profile: Profile, prompter: Prompter, cols: int, rows: int,
+                       scripted: bool = False) -> Session:
     """Connect, open the port forwards and start the shell (the transport entry point)."""
     conn = await SSHConnection.connect(profile, prompter)
     try:
         notices = await conn.start_forwards()
-        return await conn.open_shell(cols, rows, notices)
+        return await conn.open_shell(cols, rows, notices, separate_stderr=scripted)
     except BaseException:
         conn.close()
         raise

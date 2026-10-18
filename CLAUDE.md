@@ -4,8 +4,8 @@ SSH + serial terminal. Python ≥3.11, `uv` (`uv sync --all-extras`, `uv run pyt
 
 ## Layout
 
-- Core (no UI code): `profiles.py` (options and validation), `session.py` (Session, Prompter, terminal settings), `ssh.py`, `serialport.py`, `lineedit.py`, `console.py`, `config.py`.
-- UIs: `cli.py`, `tui/`, `web/` (server + static), `gui.py` (pywebview around the web UI).
+- Core (no UI code): `profiles.py` (options and validation), `session.py` (Session, Prompter, terminal settings, transports), `errors.py`, `ssh.py`, `serialport.py`, `lineedit.py`, `config.py`.
+- UIs: `cli.py` with `console.py` (the `connect` terminal), `tui/`, `web/` (server + static), `gui.py` (pywebview around the web UI).
 - `tools/screenshots.py`: TUI and web screenshots with sample profiles, for interface reviews (web needs `uv run playwright install chromium`).
 
 ## Rules
