@@ -269,11 +269,11 @@ def test_connect_with_corrupt_file_still_resolves_quick_targets(monkeypatch, cap
 
     async def fake_open_session(profile, prompter, *a, **k):
         opened.append(profile)
-        raise RuntimeError("stop here")
+        raise ConnectionRefusedError("stop here")
 
     monkeypatch.setattr(cli, "open_session", fake_open_session)
     code, out, err = run(capsys, "connect", "bob@host.example:2200")
-    assert code == 1 and "stop here" in err
+    assert code == 1 and "Connection refused" in err
     (profile,) = opened
     assert (profile.kind, profile.ssh.username, profile.ssh.host, profile.ssh.port) == \
         ("ssh", "bob", "host.example", 2200)
@@ -305,3 +305,49 @@ def test_options_table_is_readable(capsys):
     second = {len(line) - len(line[len(line.split()[0]):].lstrip()) for line in lines}
     third = {line.index("default ") for line in lines}
     assert len(second) == 1 and len(third) == 1
+
+
+async def test_console_prompter_reads_in_a_daemon_thread(monkeypatch):
+    import threading
+
+    seen = []
+
+    def fake_getpass(prompt, stream=None):
+        seen.append((prompt, threading.current_thread()))
+        return "hunter2"
+
+    monkeypatch.setattr(cli.getpass, "getpass", fake_getpass)
+    assert await cli.ConsolePrompter().ask("Password: ") == "hunter2"
+    [(prompt, thread)] = seen
+    assert prompt == "Password: "
+    assert thread.daemon and thread is not threading.main_thread()  # exit must not wait for a pending prompt
+
+
+async def test_console_prompter_end_of_input_is_a_cancel(monkeypatch):
+    def eof(prompt, stream=None):
+        raise EOFError
+
+    monkeypatch.setattr(cli.getpass, "getpass", eof)
+    monkeypatch.setattr("builtins.input", lambda: (_ for _ in ()).throw(EOFError()))
+    prompter = cli.ConsolePrompter()
+    assert await prompter.ask("Password: ") is None
+    assert await prompter.ask("login: ", secret=False) is None
+
+
+def test_unexpected_exception_exits_70_with_a_traceback(monkeypatch, capsys):
+    def boom(args, store):
+        raise RuntimeError("bug in a command")
+
+    monkeypatch.setattr(cli, "cmd_list", boom)
+    code, out, err = run(capsys, "list")
+    assert code == 70
+    assert "Traceback" in err and "RuntimeError: bug in a command" in err and "Internal error" in err
+
+
+def test_expected_exception_exits_1_without_a_traceback(monkeypatch, capsys):
+    def refused(args, store):
+        raise ConnectionRefusedError(111, "Connection refused")
+
+    monkeypatch.setattr(cli, "cmd_list", refused)
+    code, out, err = run(capsys, "list")
+    assert code == 1 and "Connection refused" in err and "Traceback" not in err

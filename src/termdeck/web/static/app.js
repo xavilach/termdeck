@@ -527,15 +527,23 @@ function openSocket(tab) {
     const m = JSON.parse(event.data);
     if (m.type === "prompt") {
       activate(tab);
-      const value = await prompt({ title: tab.profile.name, body: el("p", {}, m.text), input: { secret: m.secret } });
+      const note = tab.note ? el("p", { class: "warning note" }, tab.note) : null;
+      tab.note = null;
+      const value = await prompt({ title: tab.profile.name, body: [note, el("p", {}, m.text)], input: { secret: m.secret } });
       send(tab, { type: "answer", id: m.id, value });
+    } else if (m.type === "notice") {
+      // Server banner, login instructions: dimmed, so it reads as a message, not output.
+      tab.term.write(`\r\n\x1b[90m${m.text.replace(/\n/g, "\r\n")}\x1b[0m\r\n`);
+      tab.note = m.text;  // also shown in the next question, which would hide the terminal
     } else if (m.type === "hostkey") {
       activate(tab);
       const body = [
         m.changed
           ? el("p", { class: "warning" }, `WARNING: the host key of ${m.host}:${m.port} has changed. This can mean someone is intercepting the connection, or that the server was reinstalled.`)
           : el("p", {}, `The server ${m.host}:${m.port} is not known yet. Check its key fingerprint before trusting it.`),
-        el("div", { class: "fingerprint" }, m.fingerprint),
+        el("div", { class: "fingerprint" }, `${m.key_type} ${m.fingerprint}`),
+        ...m.old_fingerprints.map((f) => el("div", { class: "fingerprint muted" }, `Was: ${f}`)),
+        el("p", { class: "muted" }, `Trusted keys are saved in ${m.known_hosts}`),
       ];
       const trusted = await prompt({
         title: m.changed ? "Host key changed" : "Unknown host", body,

@@ -280,3 +280,32 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-239 | issue | Low | conv | server.py save/delete | OSError and ProfileFileError gave bare 500s. | JSON errors. | S | fixed (a33c0b9) |
 | P1-240 | issue | Low | conv | config.py | open_private("w", own_dir=False) truncated before checks; atomic_write left temp files on failure; log flush errors silent. | Append-only outside own dirs; unlink temp; stop logging with a notice. | S | fixed (a33c0b9) |
 | P1-241 | issue | Medium | test-writer | server.py quick_target | Web quick connect failed (500) with a corrupt profiles.json. | Fall back to no profiles. | S | fixed (a33c0b9) |
+| P1-242 | issue | Low | win | serialport.py _parse_identity | A stored identity with a Windows instance-id serial no longer matched. | Treat "&" serials as none when parsing too. | S | open |
+| P1-243 | issue | Low | win | serialport.py describe_error | Missing/stale port errors shown raw. | "no such port", "device stopped responding". | S | open |
+| P1-244 | issue | Low | win | cli.py ConsolePrompter | A cancelled ask leaves a reading thread (Ctrl+C at a prompt). | Covered by P1-158 (cancellable console read). | S | open |
+| P1-245 | issue | Major | ui, arch | serialport.py _read_loop | Windows unplug ("ClearCommError ... Access is denied") reported as "port in use". | Read failures say "device stopped responding"; "in use" only for open errors. | S | open |
+| P1-246 | issue | Minor | ui | session.py | Implicit CR + LF both on doubled line spacing; CR at chunk end. | Single regex pass, CR held across chunks. | S | open |
+| P1-247 | issue | Minor | ui | tui/terminal.py, app.js | Notices "dimmed" with SGR 2, which pyte ignores. | Grey (SGR 90) in both. | S | open |
+| P1-248 | issue | Minor | ui | tui/app.py, app.js | Login instructions and "passwords do not match" hidden behind the next dialog. | The last notice is shown in the next prompt. | S | open |
+| P1-249 | issue | Minor | ui | tui/app.py | Unknown-host dialog red like a changed key. | `cancel_default` separate from `danger`. | S | open |
+| P1-250 | issue | Minor | ui | serialport.py | Write-timeout notice wrong for flow none, repeated per key, logged as device output. | Wording by flow, once per stall, typing dropped while stalled, `Session.notice` channel not logged. | S | open |
+| P1-251 | issue | Cosmetic | ui | cli.py | CLI wording differed from TUI/web (Was:, Session ended); old keys without type. | Same words; "type fingerprint". | S | open |
+| P1-252 | issue | Critical | arch, test-writer | session.py close | close() hung while the output backlog was full (the UI stopped reading). | Cancel the pump first. | S | open |
+| P1-253 | issue | Major | arch | cli.py, server.py, session.py | Error types not used by the UIs: bugs reported as user errors. | `is_expected`, transports export ERRORS; CLI exit 70 + traceback for bugs; web no longer maps AttributeError to 400; pump logs bugs. | M | open |
+| P1-254 | issue | Major | arch, sec | ssh.py remember_host_key | @revoked lines were never removed: a host whose old key came back was locked out with a misleading message; keys of other types revoked too. | Re-trusting removes the revocation; only same-type keys revoked; message names `termdeck forget-host`; new command. | S | open |
+| P1-255 | issue | Minor | arch | cli.py | Ctrl+C at a getpass prompt left echo off (daemon thread). | Save and restore the tty in main. | S | open |
+| P1-256 | issue | Minor | arch | session.py, profiles.py | Transport table separate from KINDS; unknown type a plain ValueError. | TRANSPORTS next to KINDS; ProfileError. | S | open |
+| P1-257 | issue | Minor | arch | tui/terminal.py | A failed write silently stopped all further typing. | Report and keep the writer running. | S | open |
+| P1-258 | issue | Low | arch | profiles.py get | Invalid profile raised "not found". | ProfileError. | S | open |
+| P1-259 | issue | Low | arch | server.py notify | notify on a closed socket left an unretrieved task exception. | Ignore. | S | open |
+| P1-260 | issue | Medium | sec | serialport.py | DSR/DTR does nothing on POSIX and skipped the DTR setting. | Windows only; elsewhere DTR applies and a notice says so. | S | open |
+| P1-261 | issue | Low | sec | ssh.py | Typed password kept for the whole connection. | Cleared on auth_completed / connection_lost. | S | open |
+| P1-262 | issue | Low | sec | ssh.py | Remote signal name not cleaned. | printable. | S | open |
+| P1-263 | issue | Low | sec | tui/app.py | TUI host-key dialog could be accepted by Tab, Enter typed in another tab. | OK armed after 1.5 s. | S | open |
+| P1-264 | issue | Low | sec | profiles.py answerback | Answerback with CR could run a command on any ENQ. | Reject control characters. | S | open |
+| P1-265 | issue | Low | sec | session.py printable | Missed some invisible characters (U+2060.., soft hyphen, tags). | Strip Unicode categories Cc, Cf, Zl, Zp (keep \n, \t). | S | open |
+| P1-266 | issue | Low | test-writer | ssh.py | Server disconnect reason lost; duplicate old fingerprints. | connection_lost recorded; "Connection closed by the server"; dedupe. | S | open |
+| P1-267 | issue | Medium | conv | serialport.py describe_error | POSIX open errors kept the "[Errno n]" prefix; permission denied unmapped; "Errno 2" matched 20/22. | Regex for the port; Errno n] markers. | S | open |
+| P1-268 | issue | Medium | conv | README.md | Exit codes, "Session ended", forget-host undocumented. | Documented. | S | open |
+| P1-269 | issue | Low | conv | session.py | A lone CR under implicit LF waited for more output. | Released after 50 ms. | S | open |
+| P1-270 | issue | Low | conv | serialport.py | Serial output had no backlog bound. | Reader waits on a semaphore (256 chunks). | S | open |

@@ -4,41 +4,62 @@ import argparse
 import asyncio
 import getpass
 import json
+import os
 import shutil
 import sys
+import threading
+import traceback
 from pathlib import PurePosixPath
 
 from . import __version__
 from .profiles import (
     Profile, ProfileFileError, ProfileStore, SerialSettings, SSHSettings, check_option, describe_options, option_fields,
-    parse_forward, resolve_target,
+    parse_forward, parse_target, resolve_target,
 )
-from .session import describe_error, open_session
+from .session import HostKey, describe_error, is_expected, open_session
 
 
 class ConsolePrompter:
     """Asks on the controlling terminal. Prompts go to stderr, never stdout."""
 
     async def ask(self, prompt: str, secret: bool = True) -> str | None:
+        loop = asyncio.get_running_loop()
+        answer = loop.create_future()
+
         def read():
             try:
                 if secret:
-                    return getpass.getpass(prompt, stream=sys.stderr)
-                print(prompt, end="", file=sys.stderr, flush=True)
-                return input()
-            except EOFError:
-                return None
+                    text = getpass.getpass(prompt, stream=sys.stderr)
+                else:
+                    print(prompt, end="", file=sys.stderr, flush=True)
+                    text = input()
+            except (EOFError, KeyboardInterrupt):
+                text = None
+            try:
+                loop.call_soon_threadsafe(lambda: answer.done() or answer.set_result(text))
+            except RuntimeError:
+                pass  # the program is exiting
 
-        return await asyncio.to_thread(read)
+        # A daemon thread, not the executor: after Ctrl+C at a prompt, asyncio.run
+        # must not wait for this read to finish before the program can exit.
+        threading.Thread(target=read, name="termdeck-prompt", daemon=True).start()
+        return await answer
 
-    async def confirm_host_key(self, host: str, port: int, fingerprint: str, changed: bool) -> bool:
-        if changed:
-            print(f"WARNING: the host key for {host}:{port} has CHANGED.", file=sys.stderr)
+    async def confirm_host_key(self, key: HostKey) -> bool:
+        where = f"{key.host}:{key.port}"
+        if key.changed:
+            print(f"WARNING: the host key of {where} has CHANGED. Someone may be intercepting the connection,"
+                  " or the server was reinstalled.", file=sys.stderr)
         else:
-            print(f"The host {host}:{port} is not known yet.", file=sys.stderr)
-        print(f"Key fingerprint: {fingerprint}", file=sys.stderr)
-        answer = await self.ask("Trust this key and continue? [y/N] ", secret=False)
+            print(f"{where} is not known yet. Check its fingerprint:", file=sys.stderr)
+        print(f"Now:  {key.key_type} {key.fingerprint}", file=sys.stderr)
+        for old in key.old_fingerprints:
+            print(f"Was:  {old}", file=sys.stderr)
+        answer = await self.ask(f"Trust this key (saved in {key.known_hosts}) and continue? [y/N] ", secret=False)
         return (answer or "").strip().lower() in ("y", "yes")
+
+    async def notify(self, text: str) -> None:
+        print(text, file=sys.stderr)
 
 
 def _coerce(field, text: str):
@@ -192,6 +213,18 @@ def cmd_rm(args, store: ProfileStore) -> int:
     return 0
 
 
+def cmd_forget_host(args, store: ProfileStore) -> int:
+    from .ssh import forget_host
+
+    target = parse_target(args.host if ":" in args.host or "." in args.host else f"{args.host}:22")
+    if target is None or target.kind != "ssh":
+        raise ValueError(f"expected HOST or HOST:PORT, got {args.host!r}")
+    removed = forget_host(target.ssh.host, target.ssh.port)
+    where = f"{target.ssh.host}:{target.ssh.port}"
+    print(f"forgot {removed} key line(s) for {where}" if removed else f"no keys saved for {where}", file=sys.stderr)
+    return 0
+
+
 def cmd_ports(args, store: ProfileStore) -> int:
     from .serialport import available_ports
 
@@ -234,7 +267,8 @@ async def cmd_connect(args, store: ProfileStore) -> int:
         await interact(session, f"[termdeck] connected to {profile.summary()}. {ESCAPE_HELP}")
     finally:
         await session.close()
-    print("\r\n[termdeck] session closed", file=sys.stderr)
+    reason = session.end_reason
+    print(f"\r\n[termdeck] Session ended{': ' + reason if reason else ''}", file=sys.stderr)
     return 0
 
 
@@ -369,6 +403,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_rm)
     p = sub.add_parser("ports", help="list serial ports")
     p.set_defaults(func=cmd_ports)
+    p = sub.add_parser("forget-host", help="forget the trusted key of a host (after a server was reinstalled)")
+    p.add_argument("host", metavar="HOST[:PORT]")
+    p.set_defaults(func=cmd_forget_host)
     p = sub.add_parser("options", help="list every option for --set and termdeck set")
     p.set_defaults(func=cmd_options)
 
@@ -397,22 +434,42 @@ def main(argv: list[str] | None = None) -> int:
                 stream.reconfigure(encoding="utf-8", errors="replace")
     args = build_parser().parse_args(argv)
     store = ProfileStore()
+    tty = _save_tty()
     try:
         result = args.func(args, store)
         if asyncio.iscoroutine(result):
             result = asyncio.run(result)
         return result
     except KeyboardInterrupt:
+        _restore_tty(tty)  # Ctrl+C at a password prompt would leave echo off
         return 130
-    except KeyError as exc:
+    except KeyError as exc:  # a profile or option that does not exist
         print(f"termdeck: {exc.args[0]}", file=sys.stderr)
         return 2
-    except ValueError as exc:
+    except ValueError as exc:  # an invalid value given by the user
         print(f"termdeck: {exc}", file=sys.stderr)
         return 2
     except Exception as exc:
         print(f"termdeck: {describe_error(exc)}", file=sys.stderr)
+        if not is_expected(exc):  # a bug: give what is needed to report it
+            traceback.print_exc()
+            return 70
         return 1
+
+
+def _save_tty():
+    if os.name != "posix" or not sys.stdin.isatty():
+        return None
+    import termios
+
+    return termios.tcgetattr(sys.stdin.fileno())
+
+
+def _restore_tty(saved) -> None:
+    if saved is not None:
+        import termios
+
+        termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, saved)
 
 
 if __name__ == "__main__":

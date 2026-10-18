@@ -109,6 +109,9 @@ class TerminalView(Widget, can_focus=True):
         self._vt = _Screen(80, 24, profile.terminal.scrollback, self._send_nowait)
         self._vt_stream = pyte.ByteStream(self._vt)
         self._conn_task: asyncio.Task | None = None
+        # Keys and terminal replies go out through one queue, in the order they were made.
+        self._writes: asyncio.Queue[bytes] = asyncio.Queue()
+        self._writer: asyncio.Task | None = None
 
     # ---- connection ----
 
@@ -128,14 +131,33 @@ class TerminalView(Widget, can_focus=True):
             self._set_status("closed")
             return
         self._set_status("connected")
+        self._writes = asyncio.Queue()  # nothing typed for an earlier connection goes to this one
+        self._writer = asyncio.create_task(self._write_loop(self.session))
+        reason = None
         try:
             while data := await self.session.read():
                 self._feed(data)
+            reason = self.session.end_reason
         finally:
+            self._writer.cancel()
+            await asyncio.gather(self._writer, return_exceptions=True)
             await self.session.close()
             self.session = None
-            self._feed(b"\r\n\x1b[33mSession ended. Press Enter to reconnect.\x1b[0m\r\n")
+            ended = f"Session ended: {reason}" if reason else "Session ended"
+            self._feed(f"\r\n\x1b[33m{ended}. Press Enter to reconnect.\x1b[0m\r\n".encode())
             self._set_status("closed")
+
+    async def _write_loop(self, session: Session) -> None:
+        while True:
+            data = await self._writes.get()
+            try:
+                await session.write(data)
+            except Exception as exc:  # report it and keep typing possible; the output side ends the session
+                self.show_notice(f"[termdeck] input not sent: {describe_error(exc)}")
+
+    def show_notice(self, text: str) -> None:
+        """A message from the connection (server banner, login instructions), in grey (pyte has no faint)."""
+        self._feed(b"\r\n\x1b[90m" + text.replace("\n", "\r\n").encode() + b"\x1b[0m\r\n")
 
     async def disconnect(self) -> None:
         if self.session:
@@ -154,12 +176,11 @@ class TerminalView(Widget, can_focus=True):
         self.refresh()
 
     async def send(self, data: bytes) -> None:
-        if self.session:
-            await self.session.write(data)
+        self._send_nowait(data)
 
     def _send_nowait(self, data: bytes) -> None:
         if self.session:
-            asyncio.ensure_future(self.session.write(data))
+            self._writes.put_nowait(data)
 
     async def send_break(self) -> None:
         if self.session and self.session.can_break:

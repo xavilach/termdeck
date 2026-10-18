@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from .config import atomic_write, config_dir, file_lock
+from .errors import ProfileError, ProfileNotFound
 
 ForwardKind = Literal["local", "remote", "dynamic"]
 
@@ -48,16 +49,16 @@ class Forward:
 
     def validate(self) -> None:
         if self.kind not in ("local", "remote", "dynamic"):
-            raise ValueError(f"invalid forward type {self.kind!r}")
+            raise ProfileError(f"invalid forward type {self.kind!r}")
         if not _is_int(self.listen_port) or not 0 <= self.listen_port < 65536:
-            raise ValueError(f"invalid forward listen port {self.listen_port!r}")
+            raise ProfileError(f"invalid forward listen port {self.listen_port!r}")
         check_host(self.listen_host, "forward listen host")
         if self.kind != "dynamic":
             if not self.dest_host:
-                raise ValueError(f"forward {self} needs a destination host")
+                raise ProfileError(f"forward {self} needs a destination host")
             check_host(self.dest_host, "forward destination host")
             if not _is_int(self.dest_port) or not 0 < self.dest_port < 65536:
-                raise ValueError(f"invalid forward destination port {self.dest_port!r}")
+                raise ProfileError(f"invalid forward destination port {self.dest_port!r}")
 
     @property
     def public(self) -> bool:
@@ -84,7 +85,7 @@ def _is_int(value) -> bool:
 
 def check_host(host: str, what: str) -> None:
     if not host or _BAD_HOST_CHARS.search(host):
-        raise ValueError(f"invalid {what} {host!r}")
+        raise ProfileError(f"invalid {what} {host!r}")
 
 
 _FORWARD_RE = re.compile(
@@ -98,7 +99,7 @@ def parse_forward(kind: ForwardKind, spec: str) -> Forward:
     m = _FORWARD_RE.match(spec.strip())
     if not m or (kind == "dynamic") != (m["host"] is None):
         expected = "[bind:]port" if kind == "dynamic" else "[bind:]port:host:hostport"
-        raise ValueError(f"invalid {kind} forward {spec!r}, expected {expected}")
+        raise ProfileError(f"invalid {kind} forward {spec!r}, expected {expected}")
     fwd = Forward(kind, int(m["port"]), (m["bind"] or "localhost").strip("[]"))
     if m["host"]:
         fwd.dest_host = m["host"].strip("[]")
@@ -150,7 +151,8 @@ class SerialSettings:
     bytesize: int = option(8, "Data bits", choices={5: "5", 6: "6", 7: "7", 8: "8"})
     parity: str = option("N", "Parity", choices={"N": "None", "E": "Even", "O": "Odd", "M": "Mark", "S": "Space"})
     stopbits: float = option(1, "Stop bits", choices={1: "1", 1.5: "1.5", 2: "2"})
-    flow: str = option("none", "Flow control", choices={"none": "None", "rtscts": "RTS/CTS", "xonxoff": "XON/XOFF"})
+    flow: str = option("none", "Flow control", "DSR/DTR works on Windows only",
+                       choices={"none": "None", "rtscts": "RTS/CTS", "dsrdtr": "DSR/DTR", "xonxoff": "XON/XOFF"})
     dtr: bool = option(True, "Assert DTR", "Some boards reset when DTR changes. The system or the driver may "
                        "still raise DTR briefly while opening the port, and on Windows many drivers drop it "
                        "on close", advanced=True)
@@ -163,6 +165,12 @@ class TerminalSettings:
     encoding: str = option("utf-8", "Character set", advanced=True)
     enter_sends: str = option("cr", "Enter sends", choices={"cr": "CR", "crlf": "CR LF", "lf": "LF"}, advanced=True)
     backspace_sends: str = option("del", "Backspace sends", choices={"del": "DEL (^?)", "bs": "BS (^H)"}, advanced=True)
+    implicit_cr: bool = option(False, "Implicit CR in every LF",
+                               "For devices that end lines with LF only (output shifts right line after line)")
+    implicit_lf: bool = option(False, "Implicit LF in every CR",
+                               "For devices that end lines with CR only (each line overwrites the last)")
+    answerback: str = option("", "Answerback", "Sent when the remote side asks with ENQ (Ctrl+E); empty sends nothing",
+                             advanced=True)
     local_echo: bool = option(False, "Local echo", "Show typed characters yourself, for devices that do not echo", advanced=True)
     line_editing: bool = option(False, "Local line editing",
                                 "Edit lines here (arrows, history) and send them on Enter; for devices without a line editor. Turn the device echo off")
@@ -174,6 +182,8 @@ class TerminalSettings:
 
 
 KINDS = {"ssh": "SSH", "serial": "Serial"}
+# The module implementing each kind (see session.py for what it provides).
+TRANSPORTS = {"ssh": "termdeck.ssh", "serial": "termdeck.serialport"}
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
 
@@ -183,7 +193,7 @@ def parse_jump(text: str) -> tuple[str, str, int]:
     if hostport.startswith("["):
         host, closed, rest = hostport[1:].partition("]")
         if not closed or (rest and not rest.startswith(":")):
-            raise ValueError(f"invalid jump host {text!r}")
+            raise ProfileError(f"invalid jump host {text!r}")
         port = rest[1:] if rest else "22"
     elif hostport.count(":") > 1:  # a bare IPv6 address; a port needs [addr]:port
         host, port = hostport, "22"
@@ -192,7 +202,7 @@ def parse_jump(text: str) -> tuple[str, str, int]:
     else:
         host, port = hostport, "22"
     if not port.isdigit() or not 0 < int(port) < 65536:
-        raise ValueError(f"invalid jump host port in {text!r}")
+        raise ProfileError(f"invalid jump host port in {text!r}")
     check_host(host, "jump host")
     return user, host, int(port)
 
@@ -204,7 +214,7 @@ def parse_env(text: str) -> dict[str, str]:
         if line.strip():
             name, sep, value = line.partition("=")
             if not sep or not name.strip():
-                raise ValueError(f"invalid environment line {line!r}, expected NAME=value")
+                raise ProfileError(f"invalid environment line {line!r}, expected NAME=value")
             env[name.strip()] = value
     return env
 
@@ -230,11 +240,11 @@ class Profile:
     def validate(self) -> None:
         """Check every option, and bring values to their canonical form (device names)."""
         if not self.name.strip():
-            raise ValueError("profile name is empty")
+            raise ProfileError("profile name is empty")
         if _CONTROL_CHARS.search(self.name) or _CONTROL_CHARS.search(self.group):
-            raise ValueError("profile name and folder cannot contain control characters")
+            raise ProfileError("profile name and folder cannot contain control characters")
         if self.kind not in KINDS:
-            raise ValueError(f"unknown profile type {self.kind!r}")
+            raise ProfileError(f"unknown profile type {self.kind!r}")
         for section in (self, self.ssh, self.serial, self.terminal):
             for f in fields(section):
                 if "label" in f.metadata:
@@ -242,7 +252,7 @@ class Profile:
         if self.kind == "ssh":
             s = self.ssh
             if not s.host:
-                raise ValueError("ssh profile needs a host")
+                raise ProfileError("ssh profile needs a host")
             check_host(s.host, "host")
             if s.jump_host:
                 parse_jump(s.jump_host)
@@ -250,20 +260,23 @@ class Profile:
                 fwd.validate()
             parse_env(s.env)
             if s.agent_forwarding and not s.use_agent:
-                raise ValueError("'Forward agent' needs 'Use SSH agent' (ssh.use_agent) turned on")
+                raise ProfileError("'Forward agent' needs 'Use SSH agent' (ssh.use_agent) turned on")
         else:
             self.serial.device = normalize_device(self.serial.device)
             device = self.serial.device
             if not device:
-                raise ValueError("serial profile needs a device")
+                raise ProfileError("serial profile needs a device")
             scheme, sep, _ = device.partition("://")
             if sep and scheme.lower() not in SERIAL_URL_SCHEMES:
-                raise ValueError(f"unsupported device URL {scheme}://, use one of: "
+                raise ProfileError(f"unsupported device URL {scheme}://, use one of: "
                                  + ", ".join(f"{s}://" for s in SERIAL_URL_SCHEMES))
+        if _CONTROL_CHARS.search(self.terminal.answerback):
+            raise ProfileError("answerback cannot contain control characters: an ENQ in the output "
+                               "would make it type a command")
         try:
             "".encode(self.terminal.encoding)
         except LookupError:
-            raise ValueError(f"unknown character set {self.terminal.encoding!r}") from None
+            raise ProfileError(f"unknown character set {self.terminal.encoding!r}") from None
 
     def summary(self) -> str:
         if self.kind == "ssh":
@@ -289,17 +302,17 @@ class Profile:
         `validate=False` only checks the structure, to repair a profile that fails validation.
         """
         if not isinstance(data, dict):
-            raise ValueError("profile must be an object")
+            raise ProfileError("profile must be an object")
         for key in ("name", "kind", "group"):
             if not isinstance(data.get(key, ""), str):
-                raise ValueError(f"profile {key} must be text")
+                raise ProfileError(f"profile {key} must be text")
         sections = {k: data.get(k, {}) for k in ("ssh", "serial", "terminal")}
         if not all(isinstance(v, dict) for v in sections.values()):
-            raise ValueError("profile sections must be objects")
+            raise ProfileError("profile sections must be objects")
         ssh = _known(SSHSettings, sections["ssh"])
         forwards = ssh.get("forwards", [])
         if not isinstance(forwards, list) or not all(isinstance(f, dict) for f in forwards):
-            raise ValueError("forwards must be a list of objects")
+            raise ProfileError("forwards must be a list of objects")
         ssh["forwards"] = [Forward(**_known(Forward, f)) for f in forwards]
         for fwd in ssh["forwards"]:
             fwd.listen_host = fwd.listen_host or "localhost"  # empty would mean every interface
@@ -322,7 +335,7 @@ def check_option(f, value) -> None:
     choices = meta["choices"]
     if choices:
         if value not in choices:
-            raise ValueError(f"invalid {label} {value!r}, expected one of: {', '.join(map(str, choices))}")
+            raise ProfileError(f"invalid {label} {value!r}, expected one of: {', '.join(map(str, choices))}")
         return
     expected = f.type if isinstance(f.type, type) else list
     if expected is float:
@@ -333,13 +346,13 @@ def check_option(f, value) -> None:
         ok = isinstance(value, expected)
     if not ok:
         kind = {int: "a whole number", float: "a number", bool: "true or false", str: "text"}.get(expected, expected.__name__)
-        raise ValueError(f"{label} must be {kind}, got {value!r}")
+        raise ProfileError(f"{label} must be {kind}, got {value!r}")
     if expected in (int, float):
         low, high = meta["min"], meta["max"]
         if low is None and value < 0:
-            raise ValueError(f"{label} cannot be negative")
+            raise ProfileError(f"{label} cannot be negative")
         if (low is not None and value < low) or (high is not None and value > high):
-            raise ValueError(f"{label} must be between {low} and {high}, got {value}")
+            raise ProfileError(f"{label} must be between {low} and {high}, got {value}")
 
 
 def _known(cls, data: dict) -> dict:
@@ -431,13 +444,13 @@ def resolve_target(text: str, profiles: dict[str, "Profile"]) -> "Profile":
         return profiles[text]
     if profile := parse_target(text):
         return profile
-    raise KeyError(unknown_target(text, profiles))
+    raise ProfileNotFound(unknown_target(text, profiles))
 
 
 FORMAT_VERSION = 1
 
 
-class ProfileFileError(ValueError):
+class ProfileFileError(ProfileError):
     """profiles.json cannot be read. Nothing is written until the user fixes it."""
 
 
@@ -482,7 +495,7 @@ class ProfileStore:
             try:
                 profile = Profile.from_dict(raw)
                 if profile.name in profiles:
-                    raise ValueError(f"entry {number} repeats the name of an earlier profile")
+                    raise ProfileError(f"entry {number} repeats the name of an earlier profile")
             except (ValueError, TypeError) as exc:
                 skipped.append((name, str(exc), raw))
                 continue
@@ -499,9 +512,9 @@ class ProfileStore:
             return profiles[name]
         for bad, error in self.invalid:
             if bad == name:
-                raise KeyError(f"profile {name!r} is invalid: {error} (in {self.path}); "
+                raise ProfileError(f"profile {name!r} is invalid: {error} (in {self.path}); "
                                f"fix it with termdeck set, or remove it with termdeck rm")
-        raise KeyError(f"no profile named {name!r}")
+        raise ProfileNotFound(f"no profile named {name!r}")
 
     def get_raw(self, name: str) -> Profile:
         """A profile even if it fails validation (unchecked), so the user can repair it."""
@@ -511,7 +524,7 @@ class ProfileStore:
         for bad, _, raw in skipped:
             if bad == name and isinstance(raw, dict):
                 return Profile.from_dict(raw, validate=False)
-        raise KeyError(f"no profile named {name!r}")
+        raise ProfileNotFound(f"no profile named {name!r}")
 
     def add(self, profile: Profile) -> None:
         """Save a new profile. Raises ValueError if the name is taken."""
@@ -519,7 +532,7 @@ class ProfileStore:
         with file_lock(self.path):
             profiles, skipped = self._read()
             if profile.name in profiles or _named(skipped, profile.name):
-                raise ValueError(f"a profile named {profile.name!r} already exists")
+                raise ProfileError(f"a profile named {profile.name!r} already exists")
             _record_identity(profile, None)
             profiles[profile.name] = profile
             self._write(profiles, skipped)
@@ -536,10 +549,10 @@ class ProfileStore:
             previous = profiles.pop(name, None)
             if previous is None:
                 if not _named(skipped, name):
-                    raise KeyError(f"no profile named {name!r}: it was deleted or renamed meanwhile")
+                    raise ProfileNotFound(f"no profile named {name!r}: it was deleted or renamed meanwhile")
                 skipped = [entry for entry in skipped if entry[0] != name]
             if profile.name != name and (profile.name in profiles or _named(skipped, profile.name)):
-                raise ValueError(f"a profile named {profile.name!r} already exists")
+                raise ProfileError(f"a profile named {profile.name!r} already exists")
             _record_identity(profile, previous)
             profiles[profile.name] = profile
             self._write(profiles, skipped)
@@ -559,7 +572,7 @@ class ProfileStore:
             profiles, skipped = self._read()
             found = profiles.pop(name, None) is not None or _named(skipped, name)
             if not found:
-                raise KeyError(f"no profile named {name!r}")
+                raise ProfileNotFound(f"no profile named {name!r}")
             self._write(profiles, [entry for entry in skipped if entry[0] != name])
 
     def _write(self, profiles: dict[str, Profile], skipped: list) -> None:

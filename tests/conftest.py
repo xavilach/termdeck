@@ -25,25 +25,56 @@ class FakePrompter:
         self.trust = trust
         self.asked: list[str] = []
         self.host_keys: list[tuple] = []
+        self.keys: list = []
+        self.notices: list[str] = []
 
     async def ask(self, prompt, secret=True):
         self.asked.append(prompt)
         return self.answers.pop(0) if self.answers else None
 
-    async def confirm_host_key(self, host, port, fingerprint, changed):
-        self.host_keys.append((host, port, fingerprint, changed))
+    async def confirm_host_key(self, key):
+        self.host_keys.append((key.host, key.port, key.fingerprint, key.changed))
+        self.keys.append(key)
         return self.trust
+
+    async def notify(self, text):
+        self.notices.append(text)
 
 
 class _Server(asyncssh.SSHServer):
+    """Behaviour is chosen per test through the owning SSHServer (banner, kbdint, expired)."""
+
+    def __init__(self, owner):
+        self.owner = owner
+
+    def connection_made(self, conn):
+        self.conn = conn
+
     def begin_auth(self, username):
+        if self.owner.banner:
+            self.conn.send_auth_banner(self.owner.banner)
         return True
 
     def password_auth_supported(self):
-        return True
+        return not self.owner.kbdint
 
     def validate_password(self, username, password):
+        if self.owner.expired:
+            raise asyncssh.PasswordChangeRequired("Your password has expired")
         return username == USER and password == PASSWORD
+
+    def change_password(self, username, old_password, new_password):
+        self.owner.changes.append((old_password, new_password))
+        return True
+
+    def kbdint_auth_supported(self):
+        return self.owner.kbdint
+
+    def get_kbdint_challenge(self, username, lang, submethods):
+        return "MFA", "Enter the code from your phone", "", [("Code: ", False)]
+
+    def validate_kbdint_response(self, username, responses):
+        return responses == [PASSWORD]
 
     def connection_requested(self, dest_host, dest_port, orig_host, orig_port):
         return True
@@ -53,6 +84,16 @@ class _Server(asyncssh.SSHServer):
 
 
 async def _shell(process: asyncssh.SSHServerProcess):
+    if process.command == "exit3":
+        process.exit(3)
+        return
+    if process.command == "abort":  # the connection drops without a word
+        process.channel.get_connection().abort()
+        return
+    if process.command == "disconnect":  # the server says goodbye with a reason
+        # Not DISC_BY_APPLICATION: asyncssh treats that as a normal close and drops the reason.
+        process.channel.get_connection().disconnect(asyncssh.DISC_SERVICE_NOT_AVAILABLE, "bye bye")
+        return
     if process.command:
         process.stdout.write(f"ran {process.command} FOO={process.env.get('FOO')}\r\n")
         process.exit(0)
@@ -75,13 +116,17 @@ class SSHServer:
     def __init__(self, root):
         self.root = root
         self.key = asyncssh.generate_private_key("ssh-ed25519")
+        self.banner = ""        # sent before authentication
+        self.kbdint = False     # offer keyboard-interactive (one prompt) instead of passwords
+        self.expired = False    # passwords are accepted only through a password change
+        self.changes: list[tuple[str, str]] = []  # (old, new) password changes received
 
-    async def start(self):
+    async def start(self, port=0):
         root = str(self.root)
         self.listener = await asyncssh.listen(
             "127.0.0.1",
-            0,
-            server_factory=_Server,
+            port,
+            server_factory=lambda: _Server(self),
             server_host_keys=[self.key],
             process_factory=_shell,
             sftp_factory=lambda chan: asyncssh.SFTPServer(chan, chroot=root),
@@ -100,6 +145,30 @@ async def ssh_server(tmp_path):
     server = await SSHServer(root).start()
     yield server
     server.listener.close()
+
+
+@pytest.fixture
+def patch_port(monkeypatch):
+    """patch_port(**attrs): every serial port opened from now on gets `attrs` set on it (a failing
+    read, a blocking open...). The functions get the port's original method as first argument.
+    Returns the list of ports created and the keyword arguments they were created with."""
+    import serial
+
+    original = serial.serial_for_url
+    created: list[tuple] = []
+
+    def install(**attrs):
+        def factory(url, *args, **kwargs):
+            port = original(url, *args, **kwargs)
+            for name, fn in attrs.items():
+                setattr(port, name, (lambda fn, real: lambda *a, **k: fn(real, *a, **k))(fn, getattr(port, name)))
+            created.append((port, kwargs))
+            return port
+
+        monkeypatch.setattr(serial, "serial_for_url", factory)
+        return created
+
+    return install
 
 
 def free_port() -> int:

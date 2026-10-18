@@ -16,6 +16,7 @@ from textual.widgets import (
 )
 
 from ..profiles import Profile, ProfileStore, describe_options, parse_forward, resolve_target
+from ..session import HostKey
 from .terminal import TerminalView
 
 FORWARD_FLAGS = {"L": "local", "R": "remote", "D": "dynamic"}
@@ -26,13 +27,15 @@ FORWARD_FLAGS = {"L": "local", "R": "remote", "D": "dynamic"}
 class InputDialog(ModalScreen[str | None]):
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
 
-    def __init__(self, title: str, prompt: str, secret: bool = False):
+    def __init__(self, title: str, prompt: str, secret: bool = False, note: str = ""):
         super().__init__()
-        self._title, self._prompt, self._secret = title, prompt, secret
+        self._title, self._prompt, self._secret, self._note = title, prompt, secret, note
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
             yield Label(self._title, classes="dialog-title", markup=False)
+            if self._note:  # what the server said just before (MFA choices, "passwords do not match")
+                yield Static(self._note, classes="note", markup=False)
             yield Label(self._prompt, markup=False)
             yield Input(password=self._secret, id="answer")
             with Horizontal(classes="buttons"):
@@ -52,9 +55,10 @@ class InputDialog(ModalScreen[str | None]):
 class ConfirmDialog(ModalScreen[bool]):
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
 
-    def __init__(self, title: str, body: str, ok: str = "OK", danger: bool = False):
+    def __init__(self, title: str, body: str, ok: str = "OK", danger: bool = False, cancel_default: bool | None = None):
         super().__init__()
         self._title, self._body, self._ok, self._danger = title, body, ok, danger
+        self._cancel_default = danger if cancel_default is None else cancel_default
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
@@ -65,7 +69,12 @@ class ConfirmDialog(ModalScreen[bool]):
                 yield Button(self._ok, variant="error" if self._danger else "primary", id="ok")
 
     def on_mount(self) -> None:
-        self.query_one("#cancel" if self._danger else "#ok").focus()
+        self.query_one("#cancel" if self._cancel_default else "#ok").focus()
+        if self._cancel_default:
+            # Like the web UI: a key typed into another tab (Tab, Enter) cannot accept at once.
+            ok = self.query_one("#ok", Button)
+            ok.disabled = True
+            self.set_timer(1.5, lambda: setattr(ok, "disabled", False))
 
     @on(Button.Pressed, "#ok")
     def accept(self) -> None:
@@ -80,6 +89,8 @@ class TUIPrompter:
     def __init__(self, app: App, title: str):
         self._app = app
         self._title = title
+        self.show = None  # set to the terminal's notice writer once it exists
+        self._note = ""   # the last notice, repeated in the next question
 
     async def _show(self, screen):
         future = asyncio.get_running_loop().create_future()
@@ -87,17 +98,29 @@ class TUIPrompter:
         return await future
 
     async def ask(self, prompt: str, secret: bool = True) -> str | None:
-        return await self._show(InputDialog(self._title, prompt, secret))
+        note, self._note = self._note, ""
+        return await self._show(InputDialog(self._title, prompt, secret, note))
 
-    async def confirm_host_key(self, host: str, port: int, fingerprint: str, changed: bool) -> bool:
-        if changed:
+    async def confirm_host_key(self, key: HostKey) -> bool:
+        where = f"{key.host}:{key.port}"
+        shown = f"{key.key_type} {key.fingerprint}"
+        if key.changed:
             title, ok = "Host key CHANGED", "Trust new key"
-            body = ("WARNING: the host key has changed. Someone may be intercepting the connection, "
-                    f"or the server was reinstalled.\n\n{host}:{port}\n{fingerprint}")
+            was = "".join(f"\nWas:  {old}" for old in key.old_fingerprints)
+            body = (f"WARNING: the host key of {where} has changed. Someone may be intercepting the connection, "
+                    f"or the server was reinstalled.\n\nNow:  {shown}{was}")
         else:
             title, ok = "Unknown host", "Trust and connect"
-            body = f"{host}:{port} is not known yet. Check its fingerprint:\n\n{fingerprint}"
-        return await self._show(ConfirmDialog(title, body, ok, danger=changed))
+            body = f"{where} is not known yet. Check its fingerprint:\n\n{shown}"
+        body += f"\n\nTrusted keys are saved in {key.known_hosts}"
+        # Cancel is the default for both (the dialog can open while the user is typing);
+        # only a changed key gets the red button.
+        return await self._show(ConfirmDialog(title, body, ok, danger=key.changed, cancel_default=True))
+
+    async def notify(self, text: str) -> None:
+        self._note = text
+        if self.show:
+            self.show(text)
 
 
 # ---------- profile editor ----------
@@ -328,6 +351,7 @@ class TermdeckTUI(App, inherit_bindings=False):
     .field Input, .field Select { margin: 0; }
     .field TextArea { height: 5; }
     .help { color: $text-muted; }
+    .note { color: $warning; margin-top: 1; }
     #error { height: auto; }
     ProfileEditor .advanced { display: none; }
     ProfileEditor.show-advanced .advanced { display: block; }
@@ -477,7 +501,9 @@ class TermdeckTUI(App, inherit_bindings=False):
     def open_tab(self, profile: Profile) -> None:
         self._tab_ids += 1
         pane_id = f"tab-{self._tab_ids}"
-        view = TerminalView(profile, TUIPrompter(self, profile.name), id=f"term-{self._tab_ids}")
+        prompter = TUIPrompter(self, profile.name)
+        view = TerminalView(profile, prompter, id=f"term-{self._tab_ids}")
+        prompter.show = view.show_notice
         tabs = self.query_one("#tabs", TabbedContent)
         tabs.add_pane(TabPane(tab_title("connecting", profile.name), view, id=pane_id))
         tabs.active = pane_id

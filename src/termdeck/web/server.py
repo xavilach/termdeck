@@ -31,7 +31,7 @@ from ..profiles import (
     resolve_target,
 )
 from ..serialport import available_ports
-from ..session import Session, describe_error, open_session
+from ..session import HostKey, Session, describe_error, open_session
 
 STATIC = Path(__file__).parent / "static"
 AUTH_HEADER = "X-Termdeck-Auth"
@@ -133,13 +133,18 @@ class WebPrompter:
                 future.set_result(None)
 
     async def ask(self, prompt: str, secret: bool = True) -> str | None:
-        return await self._request({"type": "prompt", "text": prompt, "secret": secret})
+        answer = await self._request({"type": "prompt", "text": prompt, "secret": secret})
+        return answer if isinstance(answer, str) else None  # anything else from the page is a cancel
 
-    async def confirm_host_key(self, host: str, port: int, fingerprint: str, changed: bool) -> bool:
-        answer = await self._request(
-            {"type": "hostkey", "host": host, "port": port, "fingerprint": fingerprint, "changed": changed}
-        )
+    async def confirm_host_key(self, key: HostKey) -> bool:
+        answer = await self._request({"type": "hostkey", **asdict(key)})
         return answer is True
+
+    async def notify(self, text: str) -> None:
+        try:
+            await self._ws.send_json({"type": "notice", "text": text})
+        except (ConnectionResetError, RuntimeError):
+            pass  # the page went away; the connection attempt is being cancelled anyway
 
 
 def _is_public(path: str) -> bool:
@@ -169,7 +174,7 @@ async def security(request: web.Request, handler):
         return await handler(request)
     except web.HTTPException:
         raise
-    except (KeyError, ValueError, TypeError, AttributeError) as exc:
+    except (KeyError, ValueError, TypeError) as exc:
         # Malformed requests (missing or wrongly typed fields) are the client's fault.
         message = f"missing {exc.args[0]}" if isinstance(exc, KeyError) else str(exc)
         return _json_error(400, message)
@@ -341,6 +346,7 @@ async def terminal(request: web.Request) -> web.WebSocketResponse:
         await asyncio.wait({reader, connect}, return_when=asyncio.FIRST_COMPLETED)
         if not connect.done():  # browser went away while connecting
             connect.cancel()
+            await asyncio.gather(connect, return_exceptions=True)
             return ws
         try:
             session = connect.result()
@@ -365,10 +371,13 @@ async def terminal(request: web.Request) -> web.WebSocketResponse:
         output = asyncio.create_task(pump())
         await asyncio.wait({reader, output}, return_when=asyncio.FIRST_COMPLETED)
         if output.done() and not ws.closed:
-            await ws.send_json({"type": "closed", "message": "Session ended"})
+            reason = session.end_reason
+            await ws.send_json({"type": "closed", "message": f"Session ended: {reason}" if reason else "Session ended"})
         output.cancel()
+        await asyncio.gather(output, return_exceptions=True)
     finally:
         reader.cancel()
+        await asyncio.gather(reader, return_exceptions=True)
         sessions.pop(sid, None)
         if session:
             await session.close()

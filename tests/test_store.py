@@ -115,7 +115,7 @@ def test_warnings_describe_invalid_entries(tmp_path):
 
 def test_get_invalid_profile_says_so(tmp_path):
     store = write_file(tmp_path / "p.json", [GOOD, BAD])
-    with pytest.raises(KeyError, match="is invalid"):
+    with pytest.raises(ValueError, match="is invalid"):  # it exists, but its values are wrong
         store.get("bad")
     with pytest.raises(KeyError, match="no profile named"):
         store.get("nothing")

@@ -27,7 +27,7 @@ The core, CLI and TUI need `asyncssh`, `bcrypt`, `pyserial`, `textual` and `pyte
 - **Follow the device**: a serial profile remembers its USB adapter (VID:PID, serial number, USB socket) and finds it again when its port name changes. It never guesses between adapters it cannot tell apart, and refuses to connect if the old port name now belongs to a different adapter.
 - **Local line editing**: for devices without a line editor. Edit the line here (arrows, Home/End, Ctrl+U/K/W, history with Up/Down) and send it on Enter. After a prompt such as `Password:` the line is not echoed and not kept in history.
 - **Terminal**: character set, Enter and Backspace mapping, local echo, scrollback, session log file (`{name}`, `{host}`, `{date}` in the path), font size, themes.
-- **Host keys**: unknown keys are always confirmed, changed keys are flagged. Kept in termdeck's own `known_hosts`; `~/.ssh/known_hosts` is also read.
+- **Host keys**: unknown keys are always confirmed (key type and fingerprint shown), changed keys are flagged with the old fingerprint. Kept in termdeck's own `known_hosts`; `~/.ssh/known_hosts` is also read. A replaced key is marked `@revoked`; `termdeck forget-host` clears a host's entries.
 
 Settings forms show only the options of the selected connection type. Less common options are behind the **Advanced** switch.
 
@@ -43,7 +43,10 @@ termdeck connect web                 # or a quick target: bob@host:2222, COM3@96
 termdeck tunnel web                  # forwards only, no shell
 termdeck sftp web get /var/log/syslog
 termdeck ports                       # serial ports with their USB identity
+termdeck forget-host host.example     # forget a host's key after a server was reinstalled
 ```
+
+Exit codes: 0 success, 1 connection or file error, 2 invalid input or unknown profile, 70 internal error (with a traceback to report), 130 interrupted. `connect` ends with `Session ended[: reason]` on stderr.
 
 `termdeck show NAME` prints a profile as JSON; `termdeck options` lists every option with its values and default.
 

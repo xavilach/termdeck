@@ -198,6 +198,7 @@ async def interact(session: Session, banner: str = "") -> None:
             await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for task in tasks:
                 task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
         finally:
             console.stop(loop)
             out.write(RESET_MODES)

@@ -2,18 +2,29 @@
 
 import asyncio
 import codecs
+import importlib
+import logging
 import re
+import sys
+import unicodedata
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
 from .config import open_private, user_path
+from .errors import ProfileError, TermdeckError
 from .lineedit import LineEditor
-from .profiles import Profile, TerminalSettings
+from .profiles import TRANSPORTS, Profile, TerminalSettings
+
+log = logging.getLogger(__name__)
 
 
-_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+# Control characters, and the Unicode format and separator characters that reorder,
+# hide or break text (bidi overrides, zero-width, tags): remote text must not move
+# the cursor or disguise itself. Newline and tab are kept.
+_HIDDEN = ("Cc", "Cf", "Zl", "Zp")
 # Output ending like this means the device waits for a secret (line editing hides it).
 _SECRET_PROMPT = re.compile(r"(pass(word|phrase)?|pin|passwort|mot de passe)[^\n]{0,20}[:>]\s*$", re.I)
 
@@ -39,8 +50,21 @@ def log_path(template: str, profile: Profile, now: datetime | None = None) -> Pa
 
 
 def printable(text: str) -> str:
-    """Drop control characters, so remote text cannot move the cursor or fake output."""
-    return _CONTROL.sub("", text)
+    """Drop control and invisible characters, so remote text cannot move the cursor or fake output."""
+    return "".join(c for c in text if c in "\n\t" or unicodedata.category(c) not in _HIDDEN)
+
+
+@dataclass
+class HostKey:
+    """A server key that is not trusted yet, as shown to the user."""
+
+    host: str
+    port: int
+    key_type: str                  # ssh-ed25519, ecdsa-sha2-nistp256...
+    fingerprint: str               # SHA256:...
+    changed: bool = False          # a different key was trusted for this host
+    old_fingerprints: list[str] = field(default_factory=list)
+    known_hosts: str = ""          # where the key will be saved
 
 
 class Prompter(Protocol):
@@ -49,8 +73,17 @@ class Prompter(Protocol):
     async def ask(self, prompt: str, secret: bool = True) -> str | None:
         """Return the answer, or None if the user cancels. `secret` hides the input."""
 
-    async def confirm_host_key(self, host: str, port: int, fingerprint: str, changed: bool) -> bool:
-        """Return True to trust and remember the key. `changed` means a different key was known."""
+    async def confirm_host_key(self, key: HostKey) -> bool:
+        """Return True to trust and remember the key."""
+
+    async def notify(self, text: str) -> None:
+        """Show a message from the connection (server banner, login instructions). Optional."""
+
+
+async def notify(prompter: Prompter, text: str) -> None:
+    """Pass a message to the prompter, if it shows messages."""
+    if text.strip() and (show := getattr(prompter, "notify", None)):
+        await show(text)
 
 
 class Session(ABC):
@@ -58,6 +91,8 @@ class Session(ABC):
 
     title: str = ""
     can_break: bool = False
+    # Why the session ended, for the UI, once read() has returned b"". None: closed normally.
+    end_reason: str | None = None
 
     @abstractmethod
     async def read(self) -> bytes:
@@ -76,15 +111,32 @@ class Session(ABC):
     @abstractmethod
     async def close(self) -> None: ...
 
+    def on_notice(self, show) -> None:
+        """Send this session's own messages (not remote output, never logged) to `show`."""
+        self._show = show
+        for data in getattr(self, "_early_notices", []):
+            show(data)
+        self._early_notices = []
+
+    def notice(self, text: str) -> None:
+        """A message from termdeck about this session, shown in the terminal."""
+        data = f"\r\n[termdeck] {text}\r\n".encode()
+        if show := getattr(self, "_show", None):
+            show(data)
+        else:
+            self._early_notices = [*getattr(self, "_early_notices", []), data]
+
 
 ENTER = {"cr": b"\r", "crlf": b"\r\n", "lf": b"\n"}
+OUTPUT_BACKLOG = 64  # chunks read ahead of the UI; beyond that the remote side waits
+ENQ = b"\x05"
 
 
 class TerminalSession(Session):
     """Applies a profile's terminal settings on top of a raw session.
 
     UIs always exchange UTF-8 with it; the remote side gets the profile's
-    character set, key mapping, local echo and logging.
+    character set, key mapping, local echo, answerback and logging.
     """
 
     def __init__(self, inner: Session, settings: TerminalSettings, log: Path | None = None):
@@ -94,13 +146,49 @@ class TerminalSession(Session):
         self._settings = settings
         self._utf8 = settings.encoding.replace("_", "-").lower() in ("utf-8", "utf8")
         self._decoder = codecs.getincrementaldecoder(settings.encoding)("replace")
-        self._queue: asyncio.Queue[bytes] = asyncio.Queue()
+        self._input_decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        # Output is bounded (so a flood waits at the remote side, by flow control);
+        # local echo and notices are not, so typing never blocks.
+        self._queue: asyncio.Queue[tuple[bytes, bool]] = asyncio.Queue()
+        self._room = asyncio.Semaphore(OUTPUT_BACKLOG)
         self._pump: asyncio.Task | None = None
+        self._failure: str | None = None
         self._editor = LineEditor() if settings.line_editing else None
         self._tail = ""  # end of the output, to spot password prompts
         # The log's folder belongs to the user: create it if needed, never change its permissions.
         self._log = open_private(log, "ab", own_dir=False) if log else None
         self._flush_timer: asyncio.TimerHandle | None = None
+        self._held = b""  # a CR at the end of a chunk, until we know whether LF follows
+        inner.on_notice(self._local)
+
+    @property
+    def end_reason(self) -> str | None:
+        return self.inner.end_reason or self._failure
+
+    def _local(self, data: bytes) -> None:
+        """Show bytes that did not come from the remote side (echo, notices)."""
+        self._queue.put_nowait((data, False))
+
+    def _received(self, data: bytes) -> bytes:
+        """Output as the UI must show it: UTF-8, with the implicit CR/LF settings applied."""
+        s = self._settings
+        if not self._utf8:
+            data = self._decoder.decode(data).encode("utf-8")
+        if s.implicit_cr or s.implicit_lf:
+            data, self._held = self._held + data, b""
+            if s.implicit_lf and data.endswith(b"\r"):
+                data, self._held = data[:-1], b"\r"
+                # A lone CR (a prompt, a progress line) shows soon even if nothing follows.
+                asyncio.get_running_loop().call_later(0.05, self._release_cr)
+            # One pass, like PuTTY: each CR or LF becomes one new line, never two.
+            pattern = {(True, True): rb"\r\n|\r|\n", (True, False): rb"\r?\n", (False, True): rb"\r\n?"}
+            data = re.sub(pattern[s.implicit_cr, s.implicit_lf], b"\r\n", data)
+        return data
+
+    def _release_cr(self) -> None:
+        if self._held:
+            self._held = b""
+            self._local(b"\r\n")
 
     async def _run_pump(self) -> None:
         try:
@@ -113,16 +201,24 @@ class TerminalSession(Session):
                         self._stop_logging(exc)
                     if self._log and self._flush_timer is None:
                         self._flush_timer = asyncio.get_running_loop().call_later(1, self._flush_log)
-                if not self._utf8:
-                    data = self._decoder.decode(data).encode("utf-8")
+                if ENQ in data and self._settings.answerback:
+                    await self.inner.write(self._settings.answerback.encode(self._settings.encoding, "replace"))
+                data = self._received(data)
                 if self._editor:
                     self._tail = (self._tail + data.decode("utf-8", "replace"))[-200:]
                     self._editor.secret = bool(_SECRET_PROMPT.search(self._tail))
                 if data:
-                    self._queue.put_nowait(data)
+                    await self._room.acquire()
+                    self._queue.put_nowait((data, True))
+        except Exception as exc:  # end the session and say why; a bug also goes to the log
+            if not is_expected(exc):
+                log.exception("session output failed")
+            self._failure = describe_error(exc)
         finally:
+            if self._held:
+                self._local(b"\r\n")  # the held CR, with its implicit LF
             self._flush_log()  # the session ended: its last output is on disk now
-            self._queue.put_nowait(b"")
+            self._queue.put_nowait((b"", False))
 
     def _flush_log(self) -> None:
         self._flush_timer = None
@@ -139,14 +235,16 @@ class TerminalSession(Session):
         except OSError:
             pass
         self._log = None
-        self._queue.put_nowait(f"\r\n[termdeck] logging stopped: {describe_error(exc)}\r\n".encode())
+        self._local(f"\r\n[termdeck] logging stopped: {describe_error(exc)}\r\n".encode())
 
     async def read(self) -> bytes:
         if self._pump is None:
             self._pump = asyncio.create_task(self._run_pump())
-        data = await self._queue.get()
+        data, counted = await self._queue.get()
+        if counted:
+            self._room.release()
         if not data:
-            self._queue.put_nowait(b"")  # keep reporting the end to later reads
+            self._queue.put_nowait((b"", False))  # keep reporting the end to later reads
         return data
 
     def _translate(self, data: bytes) -> bytes:
@@ -157,19 +255,22 @@ class TerminalSession(Session):
             data = data.replace(b"\x7f", b"\x08")
         return data
 
+    def _encode(self, data: bytes) -> bytes:
+        """UTF-8 from the UI to the profile's character set (multibyte keys may span writes)."""
+        if self._utf8:
+            return data
+        return self._input_decoder.decode(data).encode(self._settings.encoding, "replace")
+
     async def write(self, data: bytes) -> None:
         if self._editor:
             echo, data = self._editor.feed(data)
             if echo:
-                self._queue.put_nowait(echo)
+                self._local(echo)
             if not data:
                 return
         elif self._settings.local_echo:
-            self._queue.put_nowait(data.replace(b"\r", b"\r\n").replace(b"\x7f", b"\x08 \x08"))
-        data = self._translate(data)
-        if not self._utf8:
-            data = data.decode("utf-8", "replace").encode(self._settings.encoding, "replace")
-        await self.inner.write(data)
+            self._local(data.replace(b"\r", b"\r\n").replace(b"\x7f", b"\x08 \x08"))
+        await self.inner.write(self._encode(self._translate(data)))
 
     def resize(self, cols: int, rows: int) -> None:
         self.inner.resize(cols, rows)
@@ -178,6 +279,8 @@ class TerminalSession(Session):
         await self.inner.send_break()
 
     async def close(self) -> None:
+        if self._pump:
+            self._pump.cancel()  # it may be waiting for room the UI will never make
         await self.inner.close()
         if self._pump:
             await asyncio.gather(self._pump, return_exceptions=True)
@@ -189,48 +292,50 @@ class TerminalSession(Session):
             self._log = None
 
 
+# Each transport module (TRANSPORTS, in profiles.py) provides
+# `async open_session(profile, prompter, cols, rows) -> Session`,
+# `describe_error(exc) -> str | None` and `ERRORS`, the exception types that mean
+# "the connection failed" rather than "termdeck has a bug". Imported on first
+# use: the serial tools never load asyncssh.
+
+
+def _loaded_transports():
+    return [module for name in TRANSPORTS.values() if (module := sys.modules.get(name))]
+
+
+def is_expected(exc: BaseException) -> bool:
+    """True for failures of the network, device, files or input; False for bugs."""
+    expected = (TermdeckError, OSError, TimeoutError, asyncio.TimeoutError, UnicodeError)
+    return isinstance(exc, expected) or any(isinstance(exc, m.ERRORS) for m in _loaded_transports())
+
+
 def describe_error(exc: BaseException) -> str:
     """One-line message for a failed connection, suitable for any UI."""
     return printable(_describe_error(exc))
 
 
 def _describe_error(exc: BaseException) -> str:
-    import asyncssh
-    import serial
-
-    if isinstance(exc, asyncssh.HostKeyNotVerifiable):
-        return "Host key not trusted, connection aborted"
-    if isinstance(exc, asyncssh.PermissionDenied):
-        return "Authentication failed"
-    if isinstance(exc, asyncssh.DisconnectError):
-        return f"Disconnected: {exc.reason}"
+    for module in _loaded_transports():
+        if text := module.describe_error(exc):
+            return text
+    if isinstance(exc, TermdeckError):
+        return str(exc)
     if isinstance(exc, (asyncio.TimeoutError, TimeoutError)):
         return "Connection timed out"
     if isinstance(exc, ConnectionRefusedError):
         return "Connection refused"
-    if isinstance(exc, serial.SerialException):
-        return f"Serial port error: {exc}"
     if isinstance(exc, OSError) and exc.strerror:
-        return exc.strerror
+        return f"{exc.strerror}: {exc.filename}" if exc.filename else exc.strerror
+    if not is_expected(exc):
+        return f"Internal error ({type(exc).__name__}: {exc}); please report it"
     return str(exc) or type(exc).__name__
 
 
 async def open_raw_session(profile: Profile, prompter: Prompter, cols: int, rows: int) -> Session:
-    if profile.kind == "ssh":
-        from .ssh import SSHConnection
-
-        conn = await SSHConnection.connect(profile, prompter)
-        try:
-            notices = await conn.start_forwards()
-            return await conn.open_shell(cols, rows, notices)
-        except BaseException:
-            conn.close()
-            raise
-    if profile.kind == "serial":
-        from .serialport import SerialSession
-
-        return await SerialSession.open(profile)
-    raise ValueError(f"unknown profile type {profile.kind!r}")
+    if profile.kind not in TRANSPORTS:
+        raise ProfileError(f"unknown profile type {profile.kind!r}")
+    transport = importlib.import_module(TRANSPORTS[profile.kind])
+    return await transport.open_session(profile, prompter, cols, rows)
 
 
 async def open_session(profile: Profile, prompter: Prompter, cols: int = 80, rows: int = 24) -> Session:

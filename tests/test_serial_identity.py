@@ -113,3 +113,31 @@ def test_identity_is_hidden_from_forms():
 
     keys = [o["key"] for o in describe_options()["serial"]]
     assert "follow_device" in keys and "usb_id" not in keys
+
+
+@pytest.mark.parametrize("number", ["5&2A3B1C&0&1", "7&1&0&2"])
+def test_windows_instance_ids_are_not_serial_numbers(number):
+    anonymous = port("COM3", serial_number=number, location="1-1.2")
+    assert serialport.serial_number(anonymous) is None
+    assert port_identity(anonymous) == "0403:6001 location=1-1.2"
+
+
+def test_real_serial_numbers_are_kept_and_empty_ones_are_none():
+    assert serialport.serial_number(port("COM3", serial_number="A1")) == "A1"
+    assert serialport.serial_number(port("COM3", serial_number="")) is None
+    assert serialport.serial_number(port("COM3", serial_number=None)) is None
+
+
+def test_adapter_with_a_windows_instance_id_is_found_again_on_another_socket():
+    # Recorded without a serial number: the instance id (which changes with the socket) must not count.
+    recorded = port_identity(port("COM3", serial_number="5&AAA&0&1", location="1-1"))
+    moved = port("COM8", serial_number="5&BBB&0&2", location="1-2")
+    assert find_device(recorded, [moved], "COM3") == "COM8"
+
+
+def test_identity_stored_with_a_windows_instance_id_matches_the_model_on_another_port():
+    stored = "0403:6001 serial=5&2B3C&0&2"
+    other_port = port("COM9", serial_number="5&99FF&0&1", location="3-2")
+    assert find_device(stored, [other_port, CH340], "COM3") == "COM9"
+    # A real serial number on the same model is a different adapter.
+    assert find_device(stored, [FTDI_A], "COM3") is None

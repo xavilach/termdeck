@@ -329,3 +329,145 @@ async def test_quick_target_works_with_corrupt_profiles_file(client, tmp_path):
     r = await client.post("/api/target", json={"text": "bob@host.example"})
     assert r.status == 200
     assert (await r.json())["ssh"]["host"] == "host.example"
+
+
+class FakeSocket:
+    """Stands in for the WebSocket: records what the prompter sends to the page."""
+
+    def __init__(self):
+        self.sent = []
+        self.arrived = asyncio.Event()
+
+    async def send_json(self, message):
+        self.sent.append(message)
+        self.arrived.set()
+
+
+async def _asked(prompter, socket, call):
+    """Start `call`, wait for the question to reach the page and return (task, question id)."""
+    task = asyncio.create_task(call)
+    await asyncio.wait_for(socket.arrived.wait(), 2)
+    socket.arrived.clear()
+    return task, socket.sent[-1]["id"]
+
+
+@pytest.mark.parametrize("answer, expected", [("hunter2", "hunter2"), ("", ""), (None, None),
+                                              (5, None), (True, None), (["a"], None), ({"x": 1}, None)])
+async def test_web_prompter_only_accepts_text_answers(answer, expected):
+    from termdeck.web.server import WebPrompter
+
+    socket = FakeSocket()
+    prompter = WebPrompter(socket)
+    task, qid = await _asked(prompter, socket, prompter.ask("Password: "))
+    assert socket.sent[-1] == {"type": "prompt", "text": "Password: ", "secret": True, "id": qid}
+    prompter.answer(qid, answer)
+    assert await asyncio.wait_for(task, 2) == expected
+
+
+@pytest.mark.parametrize("answer, expected", [(True, True), (False, False), (None, False), ("true", False),
+                                              ("yes", False), (1, False), ([True], False)])
+async def test_web_prompter_trusts_a_host_key_only_for_true(answer, expected):
+    from termdeck.session import HostKey
+    from termdeck.web.server import WebPrompter
+
+    socket = FakeSocket()
+    prompter = WebPrompter(socket)
+    key = HostKey("h", 22, "ssh-ed25519", "SHA256:abc", changed=True, old_fingerprints=["ssh-ed25519 SHA256:old"],
+                  known_hosts="/kh")
+    task, qid = await _asked(prompter, socket, prompter.confirm_host_key(key))
+    message = socket.sent[-1]
+    assert (message["type"], message["key_type"], message["fingerprint"], message["changed"]) == \
+        ("hostkey", "ssh-ed25519", "SHA256:abc", True)
+    assert message["old_fingerprints"] == ["ssh-ed25519 SHA256:old"] and message["known_hosts"] == "/kh"
+    prompter.answer(qid, answer)
+    assert await asyncio.wait_for(task, 2) is expected
+
+
+async def test_web_prompter_cancelled_connection_answers_no():
+    from termdeck.web.server import WebPrompter
+
+    socket = FakeSocket()
+    prompter = WebPrompter(socket)
+    task, _ = await _asked(prompter, socket, prompter.ask("x"))
+    prompter.cancel_all()
+    assert await asyncio.wait_for(task, 2) is None
+    prompter.answer("not-an-id", "late")  # ignored
+
+
+async def test_server_banner_is_sent_as_a_notice(client, ssh_server):
+    await login(client)
+    remember_host_key("127.0.0.1", ssh_server.port, ssh_server.key)
+    ssh_server.banner = "Authorized users only\n"
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "profile": ssh_server.profile().to_dict()})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] in ("notice", "prompt"))
+    assert m == {"type": "notice", "text": "Authorized users only"}
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "prompt")
+    await ws.send_json({"type": "answer", "id": m["id"], "value": "secret"})
+    await _receive_until(ws, lambda m, _: m and m["type"] == "connected")
+    await ws.close()
+
+
+async def test_hostkey_message_carries_the_key_details(client, ssh_server):
+    await login(client)
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "profile": ssh_server.profile().to_dict()})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "hostkey")
+    assert m["key_type"] == "ssh-ed25519" and m["fingerprint"].startswith("SHA256:")
+    assert m["old_fingerprints"] == [] and m["known_hosts"].endswith("known_hosts")
+    await ws.send_json({"type": "answer", "id": m["id"], "value": "true"})  # not a real yes
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "error")
+    assert m["message"] == "Host key not trusted, connection aborted"
+
+
+async def test_closed_message_says_why_for_a_remote_exit_status(client, ssh_server):
+    await login(client)
+    remember_host_key("127.0.0.1", ssh_server.port, ssh_server.key)
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "profile": ssh_server.profile(remote_command="exit3").to_dict()})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "prompt")
+    await ws.send_json({"type": "answer", "id": m["id"], "value": "secret"})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "closed")
+    assert m["message"].startswith("Session ended: ") and "status 3" in m["message"]
+
+
+async def test_closed_message_says_why_when_the_serial_port_disappears(client, patch_port):
+    import threading
+
+    import serial
+
+    gone = threading.Event()
+
+    def read(real, size=1):
+        if gone.wait(0.02):
+            raise serial.SerialException("port is gone")
+        return real(size)
+
+    patch_port(read=read)
+    await login(client)
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "profile": {"name": "loop", "kind": "serial", "serial": {"device": "loop://"}}})
+    await _receive_until(ws, lambda m, _: m and m["type"] == "connected")
+    gone.set()
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "closed")
+    assert m["message"].startswith("Session ended: loop: ")
+
+
+async def test_closed_message_without_reason_for_a_normal_exit(client, ssh_server):
+    await login(client)
+    remember_host_key("127.0.0.1", ssh_server.port, ssh_server.key)
+    ws = await client.ws_connect("/api/terminal")
+    await ws.send_json({"type": "open", "profile": ssh_server.profile(remote_command="uptime").to_dict()})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "prompt")
+    await ws.send_json({"type": "answer", "id": m["id"], "value": "secret"})
+    m, _ = await _receive_until(ws, lambda m, _: m and m["type"] == "closed")
+    assert m["message"] == "Session ended"
+
+
+async def test_a_bug_in_a_handler_is_a_500_not_a_400(client, monkeypatch):
+    def broken(self):
+        raise AttributeError("'NoneType' object has no attribute 'x'")
+
+    monkeypatch.setattr(ProfileStore, "load", broken)
+    await login(client)
+    assert (await client.get("/api/profiles")).status == 500

@@ -252,3 +252,121 @@ async def test_skipped_entry_warning_is_not_repeated_after_a_reload(tmp_path):
         await pilot.pause()
         assert [m for m, s in seen if "bad" in m and s == "warning"] != []
         assert len([m for m, s in seen if "bad" in m and s == "warning"]) == 1
+
+
+def _screen_text(view):
+    """The screen with rows joined, so a message wrapped over two rows is still found."""
+    return "".join(line.rstrip() + " " for line in view._vt.display)
+
+
+async def _wait_for_screen(pilot, view, text, timeout=5.0):
+    async def poll():
+        while text not in _screen_text(view):
+            await pilot.pause(0.02)
+
+    await asyncio.wait_for(poll(), timeout)
+
+
+async def test_many_quick_key_presses_arrive_in_order(tmp_path):
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.open_tab(app.store.get("loop"))
+        await pilot.pause(0.5)
+        view = app.query_one(TerminalView)
+        assert view.status == "connected"
+        text = "abcdefghijklmnopqrstuvwxyz0123456789ZYXWVUTSRQPONMLKJIHGFEDCBA"
+        await pilot.press(*text)
+        await _wait_for_screen(pilot, view, text)
+
+
+async def test_ended_session_says_why(tmp_path, patch_port):
+    import threading
+
+    import serial
+
+    gone = threading.Event()
+
+    def read(real, size=1):
+        if gone.wait(0.02):
+            raise serial.SerialException("cable pulled")  # reported in the user's words
+        return real(size)
+
+    patch_port(read=read)
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.open_tab(app.store.get("loop"))
+        await pilot.pause(0.5)
+        view = app.query_one(TerminalView)
+        assert view.status == "connected"
+        gone.set()
+        await _wait_for_screen(pilot, view, "Session ended: ")
+        screen = _screen_text(view)
+        assert "Session ended: loop: " in screen and "Enter to reconnect" in screen
+        assert view.status == "closed"
+
+
+async def test_normal_end_has_no_reason(tmp_path):
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.open_tab(app.store.get("loop"))
+        await pilot.pause(0.5)
+        view = app.query_one(TerminalView)
+        await view.session.close()
+        await _wait_for_screen(pilot, view, "Session ended")
+        assert "Session ended:" not in _screen_text(view)
+
+
+async def _host_key_dialog(app, pilot, changed):
+    from termdeck.session import HostKey
+    from termdeck.tui.app import ConfirmDialog, TUIPrompter
+
+    key = HostKey("example.com", 22, "ssh-ed25519", "SHA256:abc", changed=changed,
+                  old_fingerprints=["ssh-ed25519 SHA256:old"] if changed else [], known_hosts="/tmp/kh")
+    answer = asyncio.create_task(TUIPrompter(app, "srv").confirm_host_key(key))
+    await pilot.pause()
+    assert isinstance(app.screen, ConfirmDialog)
+    return answer
+
+
+@pytest.mark.parametrize("changed, variant", [(False, "primary"), (True, "error")])
+async def test_host_key_dialog_starts_on_cancel_and_enables_ok_later(tmp_path, changed, variant):
+    from textual.widgets import Button
+
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        answer = await _host_key_dialog(app, pilot, changed)
+        cancel, ok = app.screen.query_one("#cancel", Button), app.screen.query_one("#ok", Button)
+        assert cancel.has_focus and ok.disabled
+        assert ok.variant == variant
+
+        async def enabled():
+            while ok.disabled:
+                await pilot.pause(0.05)
+
+        await asyncio.wait_for(enabled(), 5)
+        assert cancel.has_focus  # focus did not move to the button that accepts
+        await pilot.press("escape")
+        assert await asyncio.wait_for(answer, 5) is False
+
+
+async def test_failed_write_is_reported_and_later_keys_still_go_out(tmp_path):
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.open_tab(app.store.get("loop"))
+        await pilot.pause(0.5)
+        view = app.query_one(TerminalView)
+        assert view.status == "connected"
+        real, calls = view.session.write, []
+
+        async def flaky(data):
+            calls.append(data)
+            if len(calls) == 1:
+                raise OSError("pipe closed")
+            await real(data)
+
+        view.session.write = flaky
+        await pilot.press("a")
+        await _wait_for_screen(pilot, view, "input not sent")
+        await pilot.press("b", "c")
+        await _wait_for_screen(pilot, view, "bc")
+        assert calls == [b"a", b"b", b"c"] and view.status == "connected"
