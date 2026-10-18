@@ -15,9 +15,13 @@ dependencies = [
     "pyserial>=3.5",
     "pyte>=0.8.2",
     "textual>=8.2.8",
+    "pywin32>=306; sys_platform == 'win32'",  # SSPI for GSSAPI/Kerberos login on Windows
 ]
 
 [project.optional-dependencies]
+gssapi = [  # Kerberos single sign-on on Linux and macOS (Windows uses SSPI through pywin32)
+    "gssapi>=1.8; sys_platform != 'win32'",
+]
 web = [
     "aiohttp>=3.14.5",
 ]

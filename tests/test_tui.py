@@ -370,3 +370,40 @@ async def test_failed_write_is_reported_and_later_keys_still_go_out(tmp_path):
         await pilot.press("b", "c")
         await _wait_for_screen(pilot, view, "bc")
         assert calls == [b"a", b"b", b"c"] and view.status == "connected"
+
+
+async def test_editor_hides_the_proxy_host_until_a_proxy_is_chosen(tmp_path):
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.press("n")
+        await pilot.pause()
+        editor = app.screen
+        editor.query_one("#advanced", Switch).value = True
+        await pilot.pause()
+        field = editor.query_one("#field-ssh--proxy_host")
+        assert field.has_class("unused")
+        editor.query_one("#ssh--proxy_type", Select).value = "socks5"
+        await pilot.pause()
+        assert not field.has_class("unused")
+        editor.query_one("#ssh--proxy_type", Select).value = "command"  # its own field, not the host
+        await pilot.pause()
+        assert field.has_class("unused")
+        assert not editor.query_one("#field-ssh--proxy_command").has_class("unused")
+
+
+async def test_editor_shows_the_jump_command_only_with_a_jump_host(tmp_path):
+    app = TermdeckTUI(store=_store(tmp_path))
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.press("n")
+        await pilot.pause()
+        editor = app.screen
+        editor.query_one("#advanced", Switch).value = True
+        await pilot.pause()
+        field = editor.query_one("#field-ssh--jump_command")
+        assert field.has_class("unused")
+        editor.query_one("#ssh--jump_host", Input).value = "bastion.example"
+        await pilot.pause()
+        assert not field.has_class("unused")
+        editor.query_one("#ssh--jump_host", Input).value = ""
+        await pilot.pause()
+        assert field.has_class("unused")

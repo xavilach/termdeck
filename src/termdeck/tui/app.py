@@ -198,7 +198,11 @@ class ProfileEditor(ModalScreen[Profile | None]):
             return
         all_advanced = all(o["advanced"] for o in options)
         yield Label(title, classes="section advanced" if all_advanced else "section")
+        group = ""
         for o in options:
+            if o["group"] and o["group"] != group:  # related advanced options under a subheading
+                group = o["group"]
+                yield Label(group, classes="subsection advanced" if o["advanced"] else "subsection")
             classes = ["field"]
             if o["advanced"]:
                 classes.append("advanced")
@@ -206,7 +210,7 @@ class ProfileEditor(ModalScreen[Profile | None]):
                 classes.append(f"for-{o['kinds'][0]}")
             wid = f"{section}--{o['key']}"
             value = values[o["key"]]
-            with Vertical(classes=" ".join(classes)):
+            with Vertical(classes=" ".join(classes), id=f"field-{wid}"):
                 yield Label(o["label"])
                 if o["choices"]:
                     yield Select([(label, key) for key, label in o["choices"]], value=value, allow_blank=False, id=wid)
@@ -218,7 +222,17 @@ class ProfileEditor(ModalScreen[Profile | None]):
                     kind = {"int": "integer", "float": "number"}.get(o["type"], "text")
                     yield Input(str(value), type=kind, password=o["widget"] == "secret", id=wid)
                 if o["help"]:
-                    yield Label(o["help"], classes="help")
+                    yield Static(o["help"], classes="help", markup=False)  # wraps, unlike a Label
+
+    def _apply_when(self) -> None:
+        """Show a field only while the option it depends on has one of its values (proxy fields...)."""
+        for section, options in self.options.items():
+            values = self.values if section == "profile" else self.values[section]
+            for o in options:
+                if o["when"]:
+                    value, wanted = values.get(o["when"]["key"]), o["when"]["values"]
+                    shown = bool(value) if wanted is None else value in wanted
+                    self.query_one(f"#field-{section}--{o['key']}").set_class(not shown, "unused")
 
     def _apply_kind(self) -> None:
         for kind in ("ssh", "serial"):
@@ -227,12 +241,15 @@ class ProfileEditor(ModalScreen[Profile | None]):
     def on_mount(self) -> None:
         self.set_class(self.show_advanced, "show-advanced")
         self._apply_kind()
+        self._apply_when()
         self.query_one("#profile--name", Input).focus()
 
     def _store(self, wid: str, value) -> None:
         section, _, key = wid.partition("--")
         target = self.values if section == "profile" else self.values[section]
         target[key] = value
+        if self.is_mounted:
+            self._apply_when()
 
     @on(Switch.Changed, "#advanced")
     def toggle_advanced(self, event: Switch.Changed) -> None:
@@ -350,7 +367,9 @@ class TermdeckTUI(App, inherit_bindings=False):
     .field { height: auto; margin-bottom: 1; }
     .field Input, .field Select { margin: 0; }
     .field TextArea { height: 5; }
-    .help { color: $text-muted; }
+    .help { color: $text-muted; width: 1fr; height: auto; }
+    .subsection { text-style: bold; color: $text-muted; margin-top: 1; }
+    ProfileEditor .unused { display: none; }
     .note { color: $warning; margin-top: 1; }
     #error { height: auto; }
     ProfileEditor .advanced { display: none; }

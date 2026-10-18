@@ -628,3 +628,26 @@ async def test_password_file_label_includes_a_non_default_port(ssh_server, passw
     finally:
         await session.close()
     assert inner.asked == [f"{USER}@localhost:{ssh_server.port} password: "]  # the file went to the target
+
+
+async def test_hostkey_option_accepts_the_fingerprint_without_asking_or_saving(ssh_server, password_file):
+    from termdeck.ssh import known_hosts_path
+
+    fingerprint = ssh_server.key.get_fingerprint("sha256")
+    code, out, err = await run_cli(ssh_server, "--password-file", str(password_file), "--hostkey", fingerprint,
+                                   None, "echo", "hi", trust=False)
+    assert code == 0 and b"ran echo hi" in out, err
+    assert not known_hosts_path().exists() or "ssh-ed25519" not in known_hosts_path().read_text()
+
+
+async def test_wrong_hostkey_option_does_not_accept_an_unknown_key(ssh_server, password_file):
+    other = "SHA256:" + "A" * 43
+    code, out, err = await run_cli(ssh_server, "--password-file", str(password_file), "--hostkey", other,
+                                   None, "echo", "hi", trust=False)
+    assert code != 0 and b"ran echo" not in out
+
+
+async def test_malformed_hostkey_option_is_refused(ssh_server, password_file):
+    code, out, err = await run_cli(ssh_server, "--password-file", str(password_file), "--hostkey", "bogus",
+                                   None, "echo", "hi", trust=False)
+    assert code != 0 and "fingerprint" in err

@@ -159,8 +159,11 @@ dialog h2 { margin: 0; font-size: 16px; font-weight: 600; flex: 1; }
 .field.wide { grid-column: 1 / -1; }
 .field > span { font-size: 12px; font-weight: 500; }
 .field small { color: var(--muted); font-size: 11px; }
-.field.bool { flex-direction: row; align-items: center; gap: 10px; }
-.field.bool > span { flex: 1; }
+/* Switches: label and switch on one line, the help below, over the full width. */
+.field.bool { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 10px; grid-column: 1 / -1; }
+.field.bool small { grid-column: 1 / -1; }
+.field.unused { display: none; }
+.subsection { grid-column: 1 / -1; font-size: 12px; font-weight: 600; margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--border); }
 body:not(.show-advanced) .advanced { display: none; }
 .adv-badge { font-size: 9px; text-transform: uppercase; color: var(--warn); margin-left: 6px; letter-spacing: .05em; }
 

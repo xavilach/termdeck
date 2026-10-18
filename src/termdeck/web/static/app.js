@@ -263,18 +263,40 @@ function fieldRow(opt, values) {
   const [id, input] = fieldInput(opt, values[opt.key], (v) => {
     values[opt.key] = v;
     if (opt.key === "kind") renderEditor();
+    else applyWhen();
   });
   if (opt.widget === "device") attachPortSuggestions(input);
-  const wide = opt.wide;
-  return el("label", {
-    class: ["field", opt.type === "bool" && "bool", wide && "wide", opt.advanced && "advanced"].filter(Boolean).join(" "),
+  const row = el("label", {
+    class: ["field", opt.type === "bool" && "bool", opt.wide && "wide", opt.advanced && "advanced"].filter(Boolean).join(" "),
     for: id,
   },
     el("span", {}, opt.label, opt.advanced ? el("span", { class: "adv-badge" }, "adv") : null),
     input,
-    opt.help && opt.type !== "bool" ? el("small", {}, opt.help) : null,
-    opt.help && opt.type === "bool" ? el("small", { style: "flex-basis:100%" }, opt.help) : null,
+    opt.help ? el("small", {}, opt.help) : null,
   );
+  // Shown only while the option it depends on has one of the listed values (e.g. proxy fields).
+  if (opt.when) {
+    const { key, values: wanted } = opt.when;  // wanted null: shown while that option is set
+    row.whenShown = () => (wanted === null ? Boolean(values[key]) : wanted.includes(values[key]));
+  }
+  return row;
+}
+
+function applyWhen() {
+  for (const row of $("#editor-body").querySelectorAll(".field")) {
+    if (row.whenShown) row.classList.toggle("unused", !row.whenShown());
+  }
+}
+
+// Fields with subheadings for their group (advanced SSH options: Session, Proxy, Authentication...).
+function grouped(options, values) {
+  let group = "";
+  return options.flatMap((opt) => {
+    const heading = opt.group && opt.group !== group
+      ? el("h4", { class: `subsection ${opt.advanced ? "advanced" : ""}` }, opt.group) : null;
+    group = opt.group || group;
+    return [heading, fieldRow(opt, values)];
+  });
 }
 
 let portCache = null;
@@ -293,6 +315,8 @@ function section(title, rows, extraClass = "") {
   rows = rows.filter(Boolean);
   if (!rows.length) return null;
   const allAdvanced = rows.every((r) => r.classList.contains("advanced"));
+  // The "adv" badge tells advanced fields apart in mixed sections; in an advanced section it only repeats the title.
+  if (allAdvanced) rows.forEach((r) => r.querySelector(".adv-badge")?.remove());
   return el("div", { class: `section ${allAdvanced ? "advanced" : ""} ${extraClass}` },
     el("h3", {}, title), el("div", { class: "fields" }, rows));
 }
@@ -352,9 +376,10 @@ function renderEditor() {
     section("General", o.profile.map((opt) => fieldRow(opt, v))),
     section(kind === "ssh" ? "SSH connection" : "Serial port", conn.filter((opt) => !opt.advanced).map((opt) => fieldRow(opt, v[kind]))),
     kind === "ssh" ? el("div", { class: "section" }, el("h3", {}, "Port forwards"), forwardsEditor(v.ssh.forwards)) : null,
-    section(kind === "ssh" ? "SSH (advanced)" : "Serial line (advanced)", conn.filter((opt) => opt.advanced).map((opt) => fieldRow(opt, v[kind]))),
+    section(kind === "ssh" ? "SSH (advanced)" : "Serial line (advanced)", grouped(conn.filter((opt) => opt.advanced), v[kind])),
     section("Terminal", o.terminal.filter(applies).map((opt) => fieldRow(opt, v.terminal))),
   ].filter(Boolean));
+  applyWhen();
 }
 
 function openEditor(profile = null, { isNew = !profile } = {}) {

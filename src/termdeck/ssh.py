@@ -1,16 +1,22 @@
 """SSH connections: interactive shell, port forwards and SFTP (asyncssh)."""
 
 import asyncio
+import getpass
+import json
+import os
+import re
 import signal as signal_module
 import socket
-from dataclasses import replace
+import sys
+from dataclasses import MISSING, asdict, fields, replace
 from pathlib import Path
 
 import asyncssh
 
 from .config import atomic_write, config_dir, file_lock, open_private, user_path
 from .errors import ConnectError
-from .profiles import Profile, check_host, parse_env, parse_jump
+from .profiles import Profile, SSHSettings, check_algorithms, check_host, parse_env, parse_jump, parse_tty_modes
+from .proxy import CommandTunnel, ProxyTunnel, proxy_command, uses_proxy
 from .session import HostKey, Prompter, Session, describe_error as _describe, notify, printable
 from .sftp import SFTP
 
@@ -72,22 +78,29 @@ def forget_host(host: str, port: int = 22) -> int:
 
 
 class _Client(asyncssh.SSHClient):
-    def __init__(self, prompter: Prompter, label: str):
+    def __init__(self, prompter: Prompter, label: str, trusted: set[str] = frozenset()):
         self._prompter = prompter
         self._label = label
+        self._trusted = trusted  # fingerprints the profile accepts without asking
         self._password_tries = 0
         self._password: str | None = None  # the last one typed, for a password change; never stored
         self.rejected_key: asyncssh.SSHKey | None = None
         self.known_keys: list[asyncssh.SSHKey] = []
         self.key_changed = False
         self.lost: Exception | None = None
+        self.checked: tuple[str, int] | None = None
+        self._notices: list[str] = []  # shown once connected
         self._tasks: set[asyncio.Task] = set()
 
     def validate_host_public_key(self, host, addr, port, key) -> bool:
         # Called only for keys missing from known_hosts. The handshake fails and
         # SSHConnection.connect asks the user before reconnecting.
+        if self._trusted:  # pinned by the profile (Trusted host keys, plink -hostkey): known_hosts is not used
+            self.rejected_key = key
+            return bool({key.get_fingerprint("sha256"), key.get_fingerprint("md5")} & self._trusted)
         trusted, cas = asyncssh.read_known_hosts(_known_hosts_files()).match(host, addr, port)[:2]
         self.rejected_key = key
+        self.checked = (host, port)  # where asyncssh looks the key up (after ~/.ssh/config, logical host)
         # The same key can match both the name and the address: list it once.
         self.known_keys = list({k.export_public_key(): k for k in trusted}.values())
         self.key_changed = bool(trusted or cas)  # a host vouched for by a CA is not "unknown" either
@@ -166,6 +179,37 @@ def _csv(value: str) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
+NEVER = 2**62  # rekey limits that are never reached
+# Algorithms kept for old servers, as PuTTY warns about them below its "warn below here" line.
+_LEGACY = re.compile(r"cbc|3des|arcfour|blowfish|-96|md5|group1-|sha1|rsa1024|ssh-dss|^ssh-rsa(-cert-v01@openssh\.com)?$")
+
+
+async def _algorithms(text: str, what: str, prompter: Prompter) -> list[str]:
+    """A preference list checked against what asyncssh supports; weak choices are pointed out."""
+    wanted = check_algorithms(text, what)
+    if weak := [name for name in wanted if _LEGACY.search(name)]:
+        await notify(prompter, f"warning: weak {what} allowed: {', '.join(weak)} (for old servers only)")
+    return wanted
+
+
+def term_modes(profile: Profile) -> dict[int, int]:
+    """The profile's terminal modes as asyncssh PTY opcodes (names with or without RFC 4254's V).
+
+    As PuTTY's "Auto": ERASE follows the Backspace key setting and IUTF8 the character set,
+    unless the profile's list sets them.
+    """
+    s, t = profile.ssh, profile.terminal
+    modes = {asyncssh.PTY_OP_ISPEED: s.terminal_speed, asyncssh.PTY_OP_OSPEED: s.terminal_speed,
+             asyncssh.PTY_VERASE: 8 if t.backspace_sends == "bs" else 127,
+             asyncssh.PTY_IUTF8: int(t.encoding.replace("_", "-").lower() in ("utf-8", "utf8"))}
+    for name, value in parse_tty_modes(s.tty_modes).items():
+        opcode = getattr(asyncssh, f"PTY_{name}", None) or getattr(asyncssh, f"PTY_V{name}", None)
+        if opcode is None:
+            raise ConnectError(f"unknown terminal mode {name}")
+        modes[opcode] = value
+    return modes
+
+
 def jump_profile(profile: Profile) -> Profile:
     """Profile for the jump host: [user@]host[:port], connection options inherited.
 
@@ -175,7 +219,7 @@ def jump_profile(profile: Profile) -> Profile:
     user, host, port = parse_jump(profile.ssh.jump_host)
     ssh = replace(profile.ssh, host=host, port=port, username=user or profile.ssh.username,
                   jump_host="", forwards=[], agent_forwarding=False, x11_forwarding=False,
-                  env="", remote_command="")
+                  env="", remote_command="", subsystem="", no_shell=False, logical_host="", trusted_keys="")
     return replace(profile, name=f"{profile.name} (jump)", ssh=ssh)
 
 
@@ -188,6 +232,8 @@ class SSHConnection:
         self.jump = jump
         self.listeners: list[asyncssh.SSHListener] = []
         self._files: SFTP | None = None
+        self.users = 1  # sessions using this connection (share_connection)
+        self.share_key: tuple | None = None
 
     @classmethod
     async def connect(cls, profile: Profile, prompter: Prompter) -> "SSHConnection":
@@ -203,53 +249,95 @@ class SSHConnection:
     @classmethod
     async def _connect(cls, profile: Profile, prompter: Prompter, jump: "SSHConnection | None") -> "SSHConnection":
         s = profile.ssh
-        username = s.username or await prompter.ask(f"login as ({s.host}): ", secret=False)
-        if not username:
-            raise ConnectError("No username given, connection cancelled")
-        options = {
-            "connect_timeout": s.connect_timeout or None,
-            "keepalive_interval": s.keepalive,
-            "compression_algs": ["zlib@openssh.com", "zlib", "none"] if s.compression else ["none"],
-            "agent_forwarding": s.agent_forwarding,
-            "family": {"ipv4": socket.AF_INET, "ipv6": socket.AF_INET6}.get(s.address_family, socket.AF_UNSPEC),
-        }
-        if jump:
+        username = s.username or (getpass.getuser() if s.username_from_env else "")
+        if not username and not s.use_ssh_config:  # with ~/.ssh/config its User (or yours) applies
+            username = await prompter.ask(f"login as ({s.host}): ", secret=False)
+            if not username:
+                raise ConnectError("No username given, connection cancelled")
+        options = {"config": () if s.use_ssh_config else None}  # () reads ~/.ssh/config, None nothing
+
+        def setting(name: str, field: str, value) -> None:
+            """An asyncssh option from the profile; with ~/.ssh/config on, options left at
+            their default are not passed, so the config file's values apply."""
+            if not (s.use_ssh_config and getattr(s, field) == SSH_DEFAULTS[field]):
+                options[name] = value
+
+        setting("connect_timeout", "connect_timeout", s.connect_timeout or None)
+        setting("keepalive_interval", "keepalive", s.keepalive)
+        setting("compression_algs", "compression", ["zlib@openssh.com", "zlib", "none"] if s.compression else ["none"])
+        setting("agent_forwarding", "agent_forwarding", s.agent_forwarding)
+        setting("family", "address_family",
+                {"ipv4": socket.AF_INET, "ipv6": socket.AF_INET6}.get(s.address_family, socket.AF_UNSPEC))
+        setting("tcp_keepalive", "tcp_keepalive", s.tcp_keepalive)
+        setting("rekey_seconds", "rekey_minutes", s.rekey_minutes * 60 or NEVER)
+        setting("rekey_bytes", "rekey_mb", s.rekey_mb * 2**20 or NEVER)
+        setting("kbdint_auth", "kbdint_auth", s.kbdint_auth)
+        setting("disable_trivial_auth", "no_trivial_auth", s.no_trivial_auth)
+        setting("gss_auth", "gssapi_auth", s.gssapi_auth)
+        setting("gss_kex", "gssapi_kex", s.gssapi_kex)
+        setting("gss_delegate_creds", "gssapi_delegate", s.gssapi_delegate)
+        if s.logical_host:
+            options["host_key_alias"] = s.logical_host
+        if s.certificate:
+            options["client_certs"] = [str(user_path(s.certificate))]
+        if jump and s.jump_command:
+            options["tunnel"] = JumpCommandTunnel(jump, s.jump_command, username or "")
+        elif jump:
             options["tunnel"] = jump.conn
+        elif uses_proxy(s, s.host):  # the first hop only: a jump host carries the rest
+            if s.proxy_type == "command":
+                options["tunnel"] = CommandTunnel(proxy_command(s, s.host, s.port, username or ""))
+            else:
+                where = f"{s.proxy_username}@{s.proxy_host}" + (f":{s.proxy_port}" if s.proxy_port else "")
+                ask = lambda: prompter.ask(f"{where} proxy password: ")  # noqa: E731
+                options["tunnel"] = ProxyTunnel(s, ask)
+            await notify(prompter, f"connecting through the {options['tunnel']}")  # PuTTY's proxy diagnostics
         if not s.use_agent:
             options["agent_path"] = None
         if s.key_file:
             options["client_keys"] = [await _load_key(s.key_file, prompter)]
-        if s.ciphers:
-            options["encryption_algs"] = _csv(s.ciphers)
-        if s.kex_algs:
-            options["kex_algs"] = _csv(s.kex_algs)
-        label = f"{username}@{s.host}" + (f":{s.port}" if s.port != 22 else "")
+        for key, text, what in (("encryption_algs", s.ciphers, "cipher"), ("kex_algs", s.kex_algs, "key exchange"),
+                                ("mac_algs", s.mac_algs, "MAC"), ("server_host_key_algs", s.hostkey_algs, "host key type"),
+                                ("signature_algs", s.signature_algs, "signature type")):
+            if text:
+                options[key] = await _algorithms(text, what, prompter)
+        label = f"{username or '?'}@{s.host}" + (f":{s.port}" if s.port != 22 else "")
+        trusted = set(s.trusted_keys.split())
+        # Trusted host keys pin the key, as in PuTTY: no known_hosts, so every key reaches the
+        # check, and anything else is refused without asking.
+        known_hosts = ([], [], []) if trusted else _known_hosts_files()
 
         for _ in range(2):
-            client = _Client(prompter, label)
+            client = _Client(prompter, label, trusted)
             try:
                 conn = await asyncssh.connect(
                     s.host,
-                    s.port,
-                    username=username,
-                    known_hosts=_known_hosts_files(),
+                    () if s.use_ssh_config and s.port == 22 else s.port,  # (): the config's Port may apply
+                    username=username or (),
+                    known_hosts=known_hosts,
                     client_factory=lambda: client,
                     **options,
                 )
+                for text in client._notices:
+                    await notify(prompter, text)
                 return cls(conn, profile, jump, client)
             except asyncssh.HostKeyNotVerifiable:
                 key = client.rejected_key
                 if key is None:
                     raise
+                if trusted:
+                    raise ConnectError(f"the host key {key.get_algorithm()} {key.get_fingerprint()} is not one of "
+                                       "the profile's Trusted host keys") from None
+                host, port = client.checked or (s.host, s.port)
                 info = HostKey(
-                    host=s.host, port=s.port, key_type=key.get_algorithm(), fingerprint=key.get_fingerprint(),
+                    host=host, port=port, key_type=key.get_algorithm(), fingerprint=key.get_fingerprint(),
                     changed=client.key_changed,
                     old_fingerprints=[f"{k.get_algorithm()} {k.get_fingerprint()}" for k in client.known_keys],
                     known_hosts=str(known_hosts_path()),
                 )
                 if not await prompter.confirm_host_key(info):
                     raise
-                await asyncio.to_thread(remember_host_key, s.host, s.port, key, client.known_keys)
+                await asyncio.to_thread(remember_host_key, host, port, key, client.known_keys)
         raise asyncssh.HostKeyNotVerifiable("host key still not trusted after accepting it")
 
     async def start_forwards(self) -> list[str]:
@@ -274,26 +362,41 @@ class SSHConnection:
                 errors.append(f"forward {fwd} failed: {exc}")
         return errors
 
-    async def open_shell(self, cols: int, rows: int, notices: list[str] = (), separate_stderr: bool = False) -> Session:
+    async def open_shell(self, cols: int, rows: int, notices: list[str] = (), separate_stderr: bool = False,
+                         profile: Profile | None = None) -> Session:
         """The shell, command or subsystem; with no_shell, a session that only keeps the forwards open.
 
         `separate_stderr` keeps the remote error output apart (read_stderr) when there is no
         terminal, for scripts; otherwise it is merged into the output, as a terminal shows it.
+        `profile` is the tab's own (a shared connection serves several profiles).
         """
-        s = self.profile.ssh
+        profile = profile or self.profile
+        s = profile.ssh
         if s.no_shell:
-            return SSHForwards(self, notices)
+            return SSHForwards(self, notices, profile)
+        extra = {}  # asyncssh's own defaults unless the profile says otherwise
+        if s.pty:
+            extra.update(term_type=profile.terminal.term_type, term_size=(cols, rows), term_modes=term_modes(profile))
+        display = s.x11_display or os.environ.get("DISPLAY", "")
+        if sys.platform == "win32" and display.startswith(":"):
+            display = "localhost" + display  # Windows X servers (VcXsrv, X410) listen on TCP, not a unix socket
+        if s.x11_forwarding and sys.platform == "win32" and not display:
+            raise ConnectError("X11 forwarding needs a local X server: start one (VcXsrv, X410) and set "
+                               "X display to localhost:0")
+        if display:
+            extra["x11_display"] = display
+        if s.x11_auth_file:
+            extra["x11_auth_path"] = str(user_path(s.x11_auth_file))
         process = await self.conn.create_process(
             None if s.subsystem else (s.remote_command or None),
             subsystem=s.subsystem or None,
-            term_type=self.profile.terminal.term_type if s.pty else None,
-            term_size=(cols, rows) if s.pty else None,
             env=parse_env(s.env),
             x11_forwarding=s.x11_forwarding,
             stderr=asyncssh.PIPE if separate_stderr and not s.pty else asyncssh.STDOUT,
             encoding=None,
+            **extra,
         )
-        return SSHShell(self, process, notices, separate_stderr=separate_stderr and not s.pty)
+        return SSHShell(self, process, notices, separate_stderr=separate_stderr and not s.pty, profile=profile)
 
     async def open_stream(self, host: str, port: int) -> "SSHStream":
         """A TCP connection opened from the server to host:port (like ssh -W, plink -nc)."""
@@ -305,6 +408,16 @@ class SSHConnection:
         if self._files is None:
             self._files = SFTP(self.conn)
         return self._files
+
+    async def release(self) -> None:
+        """A session is done with the connection; the last one closes it."""
+        self.users -= 1
+        if self.users > 0:
+            return
+        if _SHARED.get(self.share_key) is self:
+            del _SHARED[self.share_key]
+        self.close()
+        await self.wait_closed()
 
     def close(self) -> None:
         if self._files:
@@ -323,13 +436,15 @@ class SSHShell(Session):
     """Interactive shell. Closing it closes the whole connection, forwards included."""
 
     def __init__(self, conn: SSHConnection, process: asyncssh.SSHClientProcess, notices,
-                 separate_stderr: bool = False):
+                 separate_stderr: bool = False, profile: Profile | None = None):
         self.connection = conn
+        self.profile = profile or conn.profile
         self._process = process
         self._separate_stderr = separate_stderr
-        self.title = conn.profile.name
+        self.title = self.profile.name
         self.exit_status: int | None = None
         self.exit_signal: str | None = None
+        self._closed = False
         for text in notices:
             self.notice(text)
 
@@ -383,24 +498,94 @@ class SSHShell(Session):
         return True
 
     def resize(self, cols: int, rows: int) -> None:
-        if self.connection.profile.ssh.pty:  # no terminal, no size
+        if self.profile.ssh.pty:  # no terminal, no size
             self._process.change_terminal_size(cols, rows)
 
     def sftp(self) -> SFTP:
         return self.connection.sftp()
 
     async def close(self) -> None:
-        self.connection.close()
-        await self.connection.wait_closed()
+        if not self._closed:
+            self._closed = True
+            self._process.close()  # this channel; the connection may serve other tabs
+            await self.connection.release()
+
+
+class JumpCommandTunnel:
+    """Reach the host through a command run on the jump host (nc %host %port), or a subsystem
+    (subsystem:NAME): PuTTY's "SSH to proxy and execute a command"."""
+
+    def __init__(self, jump: "SSHConnection", command: str, username: str):
+        self._jump, self._command, self._username = jump, command, username
+
+    def __str__(self) -> str:
+        return f"jump host command {self._command}"
+
+    async def create_connection(self, protocol_factory, host: str, port: int):
+        conn = protocol_factory()
+        command = self._command.replace("%%", "\0").replace("%host", host).replace("%port", str(port))
+        command = command.replace("%user", self._username).replace("\0", "%")
+        subsystem = command[len("subsystem:"):].strip() if command.startswith("subsystem:") else None
+        try:
+            process = await self._jump.conn.create_process(None if subsystem else command, subsystem=subsystem,
+                                                           encoding=None)
+        except asyncssh.Error as exc:
+            raise ConnectError(f"{self}: {exc}") from None
+        pipe = _ProcessPipe(conn, process)
+        conn.connection_made(pipe)
+        pipe.start()
+        return pipe, conn
+
+
+class _ProcessPipe:
+    """The transport asyncssh writes to: a process on the jump host (stdin, stdout; stderr kept)."""
+
+    def __init__(self, conn, process: asyncssh.SSHClientProcess):
+        self._conn, self._process = conn, process
+        self._reader: asyncio.Task | None = None
+        self._errors: list[str] = []
+
+    def start(self) -> None:
+        self._reader = asyncio.ensure_future(self._pump())
+
+    async def _pump(self) -> None:
+        exc = None
+        try:
+            while data := await self._process.stdout.read(65536):
+                self._conn.data_received(data)
+        except (asyncssh.Error, OSError) as error:
+            exc = error
+        said = (await self._process.stderr.read(4096)).decode("utf-8", "replace").strip()
+        self._conn.connection_lost(exc or ConnectError(
+            "the jump host command ended" + (f": {printable(said)}" if said else "")))
+
+    def get_extra_info(self, name: str, default=None):
+        return default
+
+    def write(self, data: bytes) -> None:
+        if not self._process.stdin.is_closing():
+            self._process.stdin.write(data)
+
+    def is_closing(self) -> bool:
+        return self._process.stdin.is_closing()
+
+    def abort(self) -> None:
+        self.close()
+
+    def close(self) -> None:
+        self._process.close()
+        if self._reader:
+            self._reader.cancel()
 
 
 class SSHForwards(Session):
     """A connection kept open for its port forwards only (no shell, like ssh -N)."""
 
-    def __init__(self, conn: SSHConnection, notices):
+    def __init__(self, conn: SSHConnection, notices, profile: Profile | None = None):
         self.connection = conn
-        self.title = conn.profile.name
-        forwards = ", ".join(str(f) for f in conn.profile.ssh.forwards) or "none"
+        profile = profile or conn.profile
+        self.title = profile.name
+        forwards = ", ".join(str(f) for f in profile.ssh.forwards) or "none"
         self.notice(f"connected without a shell; port forwards: {forwards}")
         for text in notices:
             self.notice(text)
@@ -421,8 +606,9 @@ class SSHForwards(Session):
         return self.connection.sftp()
 
     async def close(self) -> None:
-        self.connection.close()
-        await self.connection.wait_closed()
+        if not getattr(self, "_closed", False):  # released once, even if closed twice
+            self._closed = True
+            await self.connection.release()
 
 
 class SSHStream(Session):
@@ -454,19 +640,58 @@ class SSHStream(Session):
         return self.connection.sftp()
 
     async def close(self) -> None:
-        self.connection.close()
-        await self.connection.wait_closed()
+        if not getattr(self, "_closed", False):  # released once, even if closed twice
+            self._closed = True
+            await self.connection.release()
+
+
+# Settings of one channel, which tabs sharing a connection may each have their own of.
+CHANNEL_SETTINGS = {"remote_command", "subsystem", "no_shell", "pty", "tty_modes", "terminal_speed", "env",
+                    "x11_display", "x11_auth_file", "share_connection", "username", "host"}
+SSH_DEFAULTS = {f.name: f.default for f in fields(SSHSettings) if f.default is not MISSING}
+
+# Connections offered for sharing (share_connection), by what identifies the login.
+_SHARED: dict[tuple, SSHConnection] = {}
+
+
+def _share_key(profile: Profile) -> tuple | None:
+    """What a login and its connection-wide settings consist of; None: not shareable.
+
+    Agent and X11 forwarding and the port forwards belong to the connection, so tabs
+    that differ in them get their own. Without a username the login is not known yet.
+    """
+    s = profile.ssh
+    username = s.username or (getpass.getuser() if s.username_from_env else "")
+    if not username:
+        return None
+    settings = {k: v for k, v in asdict(s).items() if k not in CHANNEL_SETTINGS}
+    return (username, s.host.lower(), json.dumps(settings, sort_keys=True, default=str))
 
 
 async def open_session(profile: Profile, prompter: Prompter, cols: int, rows: int,
                        scripted: bool = False) -> Session:
-    """Connect, open the port forwards and start the shell (the transport entry point)."""
+    """Connect, open the port forwards and start the shell (the transport entry point).
+
+    With share_connection, a live connection of the same login in this process is
+    reused for a new channel: no new login, and its port forwards stay with it.
+    """
+    key = _share_key(profile) if profile.ssh.share_connection else None
+    if key and (conn := _SHARED.get(key)) and not conn.conn.is_closed():
+        conn.users += 1
+        try:
+            return await conn.open_shell(cols, rows, [f"sharing the connection of {conn.profile.name}"],
+                                         separate_stderr=scripted, profile=profile)
+        except BaseException:
+            await conn.release()
+            raise
     conn = await SSHConnection.connect(profile, prompter)
+    if key:
+        conn.share_key, _SHARED[key] = key, conn
     try:
         notices = await conn.start_forwards()
         return await conn.open_shell(cols, rows, notices, separate_stderr=scripted)
     except BaseException:
-        conn.close()
+        await conn.release()
         raise
 
 

@@ -287,3 +287,22 @@ async def test_sftp_status_keeps_listing_and_upload_progress_apart(page, ssh_ser
     await page.wait_for_function("() => document.querySelector('#sftp-transfer').textContent === ''")
     await page.wait_for_function("() => document.querySelector('#sftp-info').textContent === '2 items'")
     assert (ssh_server.root / "new.txt").read_text() == "data"
+
+
+async def test_proxy_host_field_appears_with_a_proxy_and_advanced_groups_have_subheadings(page):
+    await page.click("#new-profile")
+    await page.wait_for_selector("#editor[open]")
+    host = 'label.field:has(input[id^="f-proxy_host-"])'
+    assert await page.query_selector(host) is not None
+    await page.click(".slider")
+    assert not await page.is_visible(host)  # Proxy is None: no host to ask for
+    await page.select_option('#editor-body select[id^="f-proxy_type-"]', label="SOCKS 5")
+    assert await page.is_visible(host)
+    await page.select_option('#editor-body select[id^="f-proxy_type-"]', label="None")
+    assert not await page.is_visible(host)
+
+    section = page.locator("#editor-body .section", has=page.locator("h3", has_text="SSH (advanced)"))
+    headings = await section.locator("h4.subsection").all_text_contents()
+    assert {"Session", "Proxy", "Authentication"} <= set(headings)
+    for heading in await section.locator("h4.subsection").all():
+        assert await heading.is_visible()

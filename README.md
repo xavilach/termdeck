@@ -20,7 +20,7 @@ The core, CLI and TUI need `asyncssh`, `bcrypt`, `pyserial`, `textual` and `pyte
 
 ## Features
 
-- **SSH**: password, keyboard-interactive, keys (with passphrase), agent; jump host; keepalive, compression, agent and X11 forwarding, environment, cipher and key-exchange lists, remote command.
+- **SSH**: password, keyboard-interactive, keys (with passphrase) and certificates, agent, GSSAPI/Kerberos (`gssapi` extra on Linux and macOS); jump host; proxies (SOCKS 4/5, HTTP, Telnet, local command); keepalives, compression, rekeying; agent and X11 forwarding; environment, terminal modes; cipher, key-exchange, MAC and host-key lists; pinned host keys; connection sharing between tabs; remote command, subsystem or no shell. Like PuTTY, `~/.ssh/config` is not read unless the profile asks for it.
 - **Port forwards**: local `-L`, remote `-R`, SOCKS `-D`. Forwards listening on a non-loopback address are flagged.
 - **SFTP**: file panel in the web and desktop UIs (browse, upload by drag and drop, download, rename, delete, new folder); `termdeck sftp TARGET [COMMAND]` on the command line: the psftp commands (ls, cd, get, put, mget, mput, reget, reput, mkdir, rm, rmdir, mv, chmod, lcd...) with wildcards, never replacing files without `-f`.
 - **Serial**: any pyserial device or URL (`COM3`, `/dev/ttyUSB0`, `rfc2217://host:port`); speed, data bits, parity, stop bits, flow control, DTR/RTS, break.

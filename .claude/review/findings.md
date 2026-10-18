@@ -101,7 +101,7 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-72 | issue | Low | feat | ssh.py | TTY modes missing. | `ssh.tty_modes`. | S | open |
 | P1-73 | issue | Low | feat | ssh.py | X11 display / auth file missing. | `ssh.x11_display`, `ssh.x11_auth_file`. | S | open |
 | P1-74 | issue | Low | feat, ui | app.js:351 | Forward rows with port 0 dropped silently; empty numbers become 0; no per-forward IPv4/IPv6. | Send null for empty fields; no silent filtering. | S | fixed (b782d71) |
-| P1-75 | issue | Low | feat | ssh.py | Bug workarounds (16 `Bug*` keys) not available. | asyncssh exposes none of these. | M | open |
+| P1-75 | issue | Low | feat | ssh.py | Bug workarounds (16 `Bug*` keys) not available. | asyncssh exposes none of these. | M | needs owner (drops part of 'every PuTTY option'. asyncssh has no hook for 5 of PuTTY's 16 server-bug workarounds (BugHMAC2, BugDeriveKey2, BugRSAPad2, BugPKSessID2, BugDropStart: servers from ~2005); supporting them means patching the SSH library. Covered: BugRekey2 (rekey 0), BugFilterKexinit/BugOldGex2 (algorithm lists), BugRSASHA2CertUserauth (signature_algs, P1-339). Not applicable: BugIgnore2, BugWinadj, BugChanReq (asyncssh never sends those), BugMaxPkt2. SSH-1 only (BugIgnore1, BugPlainPW1, BugRSA1): termdeck has no SSH-1 — recommend listing SSH-1 as out of scope in REQUIREMENTS.md) |
 | P1-76 | issue | Low | feat | ssh.py | TCP keepalives, address family, logical host name, username from environment, terminal speed missing. | `ssh.*` → asyncssh `tcp_keepalive`, `family`. | S | open |
 | P1-77 | issue | Medium | feat | cli.py | Plink options `-v`, `-m`, `-s`, `-nc`, `-pwfile`, `-sshlog`, `-4/-6` missing; no event log. | `-v` to stderr, per-session event log. | M | fixed (48bc35c) |
 
@@ -355,3 +355,28 @@ PuTTY options are issues, not improvements: REQUIREMENTS.md asks for every PuTTY
 | P1-314 | issue | Low | feat | sftp.py | A dead SFTP channel stayed cached. | Dropped on asyncssh errors. | S | fixed (7b105ed) |
 | P1-315 | issue | Low | feat | README.md | sftp docs out of date. | Updated. | S | fixed (7b105ed) |
 | P1-316 | improvement | Low | feat | app.js | chmod not reachable from the web panel. | Permissions… menu item. | S | fixed (7b105ed) |
+| P1-317 | issue | High | win | proxy.py | Quoted program paths in a proxy command kept their quotes on Windows. | Strip quotes after a non-POSIX split. | S | open |
+| P1-318 | issue | Medium | win | ssh.py | X11 display ":0" uses a unix socket the Windows loop lacks. | ":N" becomes "localhost:N" on Windows; clear error without a display. | S | open |
+| P1-319 | issue | Medium | win, feat | pyproject.toml | GSSAPI options did nothing: SSPI needs pywin32 (Windows), gssapi on POSIX. | pywin32 on Windows; `gssapi` extra elsewhere. | S | open |
+| P1-320 | issue | Low | win | profiles.py | ~/.ssh/config paths with backslashes break on Windows. | Help text. | S | open |
+| P1-321 | issue | Low | conv, feat | profiles.py | Trusted keys: padded SHA256 never matched; MD5 upper case / without prefix, pasted "type bits SHA256" lines and key blobs refused. | Normalised; all accepted. | S | open |
+| P1-322 | issue | Low | conv | proxy.py | Over-long SOCKS 5 user/password/host raised a raw ValueError. | ConnectError. | S | open |
+| P1-323 | issue | Major | ui, sec, feat | ssh.py | A shared connection ran the first profile's command, settings and title; agent forwarding of one profile leaked to another; share key too narrow; empty username shared another login. | Each tab's own profile; key from every connection-wide setting; no sharing without a username. | S | open |
+| P1-324 | issue | Major | ui | profiles.py, tui, web | 43 advanced SSH fields in one flat list. | Groups with subheadings. | M | open |
+| P1-325 | issue | Minor | ui | profiles.py, tui, web | Proxy, X11, GSSAPI, PTY sub-options shown when unused. | `when` conditions. | S | open |
+| P1-326 | issue | Major | ui | proxy.py | A proxy command's stderr went into the SSH stream; its errors were lost; console window on Windows. | CommandTunnel: stderr apart, shown on failure, no window. | S | open |
+| P1-327 | issue | Minor | ui | profiles.py | Algorithm and terminal-mode typos found only at connect. | Checked when saving; plurals. | S | open |
+| P1-328 | issue | Minor | ui | proxy.py | Proxy messages used internal names; no login hint for SOCKS 5; prompt style. | Labels, hint, "user@proxy proxy password:". | S | open |
+| P1-329 | issue | Minor | ui | tui/app.py, app.css | TUI help cut off; web switches squeezed with "adv" badges repeated. | Wrapping help; one-line switches, full width; no badge in advanced sections. | S | open |
+| P1-330 | issue | Medium | sec | ssh.py | The jump host inherited logical_host (and trusted keys). | Cleared. | S | open |
+| P1-331 | issue | Low | sec | profiles.py | Terminal mode values: non-ASCII digits, > 32 bits. | Strict check. | S | open |
+| P1-332 | issue | Low | sec | ssh.py | Certificate host key types refused; sha1/rsa1024 variants not flagged weak. | Added. | S | open |
+| P1-333 | issue | Medium | feat | ssh.py | Trusted host keys did not pin the key (other keys still accepted from known_hosts). | Pinning: only listed keys, no known_hosts, no prompt. | S | open |
+| P1-334 | issue | Medium | feat | ssh.py | With ~/.ssh/config on, its User and most settings were overridden. | Defaults not passed; username left to the config. | S | open |
+| P1-335 | issue | Medium | feat | ssh.py | PuTTY's automatic ERASE and IUTF8 terminal modes not sent. | From Backspace and character set settings. | S | open |
+| P1-336 | issue | Low | feat | profiles.py, proxy.py | SOCKS 4 defaulted to remote DNS (4a); proxy password asked twice; exclusions not split on spaces. | proxy_dns auto/yes/no; cached; spaces. | S | open |
+| P1-337 | issue | Low | feat | proxy.py | Telnet proxy and proxy diagnostics missing. | Telnet proxy command; "connecting through" notice. | S | open |
+| P1-338 | issue | Low | feat | cli.py | plink -proxycmd, -loghost, -no-trivial-auth, -share missing. | Flags on connect. | S | open |
+| P1-339 | issue | Low | feat | profiles.py | BugRSASHA2CertUserauth (OpenSSH 7.2-7.7) not possible. | signature_algs option. | S | open |
+| P1-340 | issue | Low | feat | proxy | PuTTY proxy types "SSH to proxy and execute a command" and "SSH subsystem" missing ("SSH to proxy and use port forwarding" is the jump host). | — | M | open |
+| P1-341 | issue | Low | test-writer | proxy.py | SOCKS 4 failed for names resolving to IPv6 first; HTTP ignored proxy_dns=no. | Prefer IPv4; HTTP sends the resolved address. | S | open |

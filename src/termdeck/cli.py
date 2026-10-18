@@ -356,7 +356,8 @@ def _connect_profile(args, store: ProfileStore) -> Profile:
     if args.nc and (command or args.no_shell or args.subsystem or _forwards(args)):
         raise ValueError("--nc replaces the shell: it cannot be combined with a command, -N, -s or -L/-R/-D")
     ssh_only = [name for name, used in (("a command", command), ("-N", args.no_shell), ("-s", args.subsystem),
-                                         ("--nc", args.nc), ("-L/-R/-D", _forwards(args)),
+                                         ("--nc", args.nc), ("-L/-R/-D", _forwards(args)), ("--hostkey", args.hostkey),
+                                         ("--proxycmd", args.proxycmd), ("--loghost", args.loghost),
                                          ("-4/-6", args.family)) if used]
     if profile.kind != "ssh":
         if ssh_only:
@@ -367,6 +368,16 @@ def _connect_profile(args, store: ProfileStore) -> Profile:
         s.remote_command, s.subsystem, s.no_shell = command, args.subsystem or "", args.no_shell
     if args.family:
         s.address_family = args.family
+    if args.hostkey:
+        s.trusted_keys = "\n".join([s.trusted_keys, *args.hostkey]).strip()
+    if args.proxycmd:
+        s.proxy_type, s.proxy_command = "command", args.proxycmd
+    if args.loghost:
+        s.logical_host = args.loghost
+    if args.no_trivial_auth:
+        s.no_trivial_auth = True
+    if args.share is not None:
+        s.share_connection = args.share
     s.forwards += _forwards(args)
     if args.tty is not None:
         s.pty = args.tty
@@ -798,6 +809,14 @@ def build_parser() -> argparse.ArgumentParser:
     family.add_argument("-4", dest="family", action="store_const", const="ipv4", help="IPv4 only")
     family.add_argument("-6", dest="family", action="store_const", const="ipv6", help="IPv6 only")
     _add_forward_options(p)
+    p.add_argument("--proxycmd", metavar="COMMAND", help="connect through a local command (plink -proxycmd)")
+    p.add_argument("--loghost", metavar="NAME", help="look up the host key under NAME (plink -loghost)")
+    p.add_argument("--no-trivial-auth", action="store_true", help="refuse a login without password or key")
+    share = p.add_mutually_exclusive_group()
+    share.add_argument("--share", dest="share", action="store_const", const=True, help="share the connection")
+    share.add_argument("--no-share", dest="share", action="store_const", const=False, help="never share it")
+    p.add_argument("--hostkey", action="append", metavar="FINGERPRINT",
+                   help="accept this host key (SHA256:... or MD5:...) without asking, repeatable (plink -hostkey)")
     p.add_argument("--batch", action="store_true", help="never ask anything (passwords, host keys): fail instead")
     p.add_argument("--password-file", metavar="FILE", help="answer the password prompt from the first line of FILE")
     p.add_argument("-v", "--verbose", action="count", default=0, help="show connection steps (-vv: protocol)")
