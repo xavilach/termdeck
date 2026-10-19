@@ -357,6 +357,11 @@ async function startServer() {
   await page.locator(".tab", { hasText: "Coloured" }).locator(".close").click();
   await page.locator(".tab", { hasText: "Coloured" }).locator(".close").click();
 
+  // a session can be duplicated: the dialog opens with its settings and a new name
+  await page.locator(`button[title="Duplicate Slow echo"]`).click();
+  check("Duplicate opens a new session with the same settings", (await form.locator("[name=name]").inputValue()) === "Slow echo copy" && (await form.locator("[name=charDelayMs]").inputValue()) === "50" && (await page.locator("#profile-title").textContent()) === "New profile");
+  await page.keyboard.press("Escape");
+
   // null-modem pair
   await page.locator("#port-tree .item.port", { hasText: "fake:link-a" }).dblclick();
   await page.locator("#port-tree .item.port", { hasText: "fake:link-b" }).dblclick();
@@ -369,6 +374,12 @@ async function startServer() {
   s = await waitScreen(/over the cable/, b);
   check("link-a to link-b through a null-modem cable", /over the cable/.test(s), { tabNames, s });
   await shot("06-link");
+  // the line changes the device drives show as notes: DTR of one end is DSR of the other
+  await page.evaluate((i) => { tabs[i].profile.noteLines = true; }, a);
+  await page.locator(".tab", { hasText: "fake:link-b" }).click();
+  await page.click("[data-action=line-dtr]");
+  s = await waitScreen(/DSR off/, a, 4000);
+  check("a line change of the other end is noted (DTR of link-b is DSR of link-a)", /DSR off/.test(s), s);
 
   // layout: two panes
   await page.click(".layout [data-layout=cols]");

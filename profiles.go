@@ -23,6 +23,7 @@ type Profile struct {
 	Flow      string `json:"flow"`      // none, rtscts, xonxoff
 	Enter     string `json:"enter"`     // what the Enter key sends: cr, lf, crlf
 	Group     string `json:"group"`     // groups the profile in the list and picks its scripts
+	NoteLines bool   `json:"noteLines"` // write a note in the output when CTS, DSR, DCD or RI change
 	Reconnect bool   `json:"reconnect"` // open the port again when it comes back after it went away
 	LocalEcho bool   `json:"localEcho"`
 

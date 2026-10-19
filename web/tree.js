@@ -94,7 +94,8 @@ function sessionRow(p) {
   if (selectedSession === p.name) row.classList.add("selected");
   const text = el("span", "text");
   text.append(el("span", "name", p.name), el("span", "detail", summary(p)));
-  row.append(text, toolButton("✎", `Edit ${p.name}`, () => editProfile(p)));
+  row.append(text, toolButton("⧉", `Duplicate ${p.name}`, () => editProfile(null, { ...p, name: `${p.name} copy` })),
+    toolButton("✎", `Edit ${p.name}`, () => editProfile(p)));
   row.addEventListener("click", () => selectRow(row, () => { selectedSession = p.name; }));
   row.addEventListener("dblclick", () => openTab(p));
   row.addEventListener("keydown", (e) => {

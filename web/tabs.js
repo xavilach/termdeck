@@ -377,7 +377,15 @@ const MESSAGES = {
   break: (tab, m) => note(tab, m.ok ? "break sent" : `break failed: ${m.message}`),
   logging(tab, m) { tab.logging = m.on; REFRESH(tab); },
   logexists: (tab, m) => askLog(tab, m.path),
-  lines(tab, m) { tab.lines = m; REFRESH(tab); },
+  lines(tab, m) {
+    if (tab.profile.noteLines && tab.lines) {  // the lines the device drives, when one changes
+      for (const line of ["cts", "dsr", "dcd", "ri"]) {
+        if (Boolean(tab.lines[line]) !== Boolean(m[line])) note(tab, `${line.toUpperCase()} ${m[line] ? "on" : "off"}`);
+      }
+    }
+    tab.lines = m;
+    REFRESH(tab);
+  },
   tx: (tab, m) => echoTx(tab, m.data, undefined, m.data.length + 16),
   points: receivePoints,
   counters(tab, m) { tab.counters = m; updateCounters(tab); },

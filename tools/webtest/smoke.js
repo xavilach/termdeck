@@ -284,6 +284,16 @@ const tab = () => run("tabs[0]", "x");
   q("[data-graph]").click();
   check("and the button hides it again", q(".graphbar").hidden);
 
+  // control line changes become notes when asked for
+  const lineWs = run("tabs[0].ws", "x");
+  run("applyProfile(tabs[0], { ...tabs[0].profile, noteLines: true })", "x");
+  json(lineWs, { type: "lines", cts: false, dsr: false, dcd: false, ri: false, dtr: true, rts: true });
+  json(lineWs, { type: "lines", cts: true, dsr: false, dcd: false, ri: false, dtr: true, rts: true });
+  json(lineWs, { type: "lines", cts: true, dsr: true, dcd: false, ri: false, dtr: true, rts: true });
+  const lineText = run("tabs[0].term", "x").text();
+  check("a change of CTS and DSR is noted, once each", /CTS on/.test(lineText) && /DSR on/.test(lineText) && (lineText.match(/CTS on/g) || []).length === 1, lineText.slice(-160));
+  run("applyProfile(tabs[0], { ...tabs[0].profile, noteLines: false })", "x");
+
   // highlights, the filter and lines that wait for their end
   const hlTab = run("tabs[0]", "x"); const hlWs = hlTab.ws;
   run("applyProfile(tabs[0], { ...tabs[0].profile, highlights: 'ERROR = red+bold\\nok = green', graphSeries: '', quickSends: '' })", "x");

@@ -146,6 +146,7 @@
           <div class="checks">
             <label class="check" title="DTR (Data Terminal Ready) is a control wire. Keep it ticked unless you know better. Some boards, such as Arduino and ESP32, reset when it changes, so untick it to open the port without resetting them. You can also toggle it later from the toolbar."><input name="dtr" type="checkbox"> DTR</label>
             <label class="check" title="RTS (Request To Send) is a control wire, often used for flow control. Some boards (ESP32 for example) use it to reset or to enter their boot loader. You can also toggle it later from the toolbar."><input name="rts" type="checkbox"> RTS</label>
+            <label class="check" title="Write a note in the output (and keep it for redraws) when CTS, DSR, DCD or RI change, the lines the device drives. They are polled every 0.4 seconds."><input name="noteLines" type="checkbox"> Note line changes</label>
             <label class="check" title="When the port goes away (a USB adapter pulled out, a device switched off), try to open it again every second until it is back. Close the port yourself to stop."><input name="reconnect" type="checkbox"> Reconnect</label>
             <label class="check" title="Show what termdeck sends (the send bar, scripts, trigger replies) in the lines, with the Tx marker. Untick it when you do not want to see it, or when the device echoes it back (then you see it once, as received)."><input name="localEcho" type="checkbox"> Local echo</label>
           </div>
