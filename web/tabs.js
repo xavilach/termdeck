@@ -379,6 +379,7 @@ const MESSAGES = {
   logexists: (tab, m) => askLog(tab, m.path),
   lines(tab, m) { tab.lines = m; REFRESH(tab); },
   tx: (tab, m) => echoTx(tab, m.data, undefined, m.data.length + 16),
+  points: receivePoints,
   counters(tab, m) { tab.counters = m; updateCounters(tab); },
   trigger: (tab, m) => note(tab, `trigger: ${m.match}`),
   notice: (tab, m) => note(tab, m.text),

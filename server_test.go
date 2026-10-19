@@ -954,3 +954,21 @@ func resetFlaky() {
 	flakyBack = time.Time{}
 	fakeMu.Unlock()
 }
+
+func TestTheServerSendsTheGraphPoints(t *testing.T) {
+	ts := newTestServer(t)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo", "graphSeries": "T | t=\nH | /h=([0-9.]+)%/"}})
+	waitFor(t, c, ctx, "state", "connected")
+	sendJSON(t, c, ctx, map[string]any{"type": "raw", "bytes": []byte("t=21.5 h=40%\r\nt=22")})
+	m := waitFor(t, c, ctx, "points", "")
+	vals, _ := m["values"].([]any)
+	if len(vals) != 2 || m["t"] == nil {
+		t.Fatalf("points %v", m)
+	}
+	sendJSON(t, c, ctx, map[string]any{"type": "raw", "bytes": []byte(".5\r\n")}) // the rest of a line that was cut
+	m = waitFor(t, c, ctx, "points", "")
+	if v := m["values"].([]any)[0].(map[string]any); v["name"] != "T" || v["value"] != 22.5 {
+		t.Errorf("the line cut in two gave %v", v)
+	}
+}

@@ -1,14 +1,14 @@
 "use strict";
 
-// The graph: numbers found in the received lines (settings: "name | prefix | suffix" or "name | /regex/"),
-// kept as points over time and drawn as lines over the output.
+// The graph: numbers the server found in the received lines (settings: "name | prefix | suffix" or
+// "name | /regex/"), kept as points over time and drawn as lines over the output.
 
 const GRAPH_COLOURS = ["#5b9dff", "#e5a83a", "#3fbf7f", "#c48bff", "#ef7ba8", "#4dd0e1", "#ff8a65", "#a5d6a7"];
 const GRAPH_MAX_POINTS = 20000;
 const GRAPH_MARGIN = { left: 56, right: 10, top: 8, bottom: 20 };
 
-const newGraph = (profile) => ({ specs: parseSeries(profile.graphSeries), series: new Map(), partial: "", decoder: new TextDecoder(), windowSec: 60, each: false });
-const updateGraphSpecs = (tab) => { tab.graph.specs = parseSeries(tab.profile.graphSeries); };
+const newGraph = (profile) => ({ names: seriesNames(profile.graphSeries), series: new Map(), windowSec: 60, each: false });
+const updateGraphSpecs = (tab) => { tab.graph.names = seriesNames(tab.profile.graphSeries); };
 
 function addPoint(graph, name, t, value) {
   if (!graph.series.has(name)) graph.series.set(name, []);
@@ -17,16 +17,10 @@ function addPoint(graph, name, t, value) {
   if (points.length > GRAPH_MAX_POINTS) points.splice(0, points.length - GRAPH_MAX_POINTS);
 }
 
-// Received data is read for numbers as it arrives, whether the graph is shown or not.
-function feedGraph(tab, ev) {
-  const graph = tab.graph;
-  if (!graph.specs.length) return;
-  const lines = (graph.partial + graph.decoder.decode(ev.text, { stream: true })).split(/\r\n|\r|\n/);
-  graph.partial = lines.pop().slice(-4096);
-  for (const line of lines) {
-    for (const { name, value } of extractValues(line, graph.specs)) addPoint(graph, name, ev.t, value);
-  }
-  if (lines.length) scheduleGraph(tab);
+// The server reads the received lines for the numbers of the series and sends them as points.
+function receivePoints(tab, message) {
+  for (const { name, value } of message.values) addPoint(tab.graph, name, message.t, value);
+  scheduleGraph(tab);
 }
 
 const graphOpen = (pane) => !pane.graphbar.hidden;
@@ -85,7 +79,7 @@ function drawGraph(tab) {
   ctx.font = "11px system-ui, sans-serif";
   ctx.fillStyle = colour("--muted");
   const graph = tab.graph;
-  if (!graph.specs.length) {
+  if (!graph.names.length) {
     ctx.fillText("No series. Add lines such as  Temp | Temperature: | degC  under Advanced > Graph in the settings of the session.", 12, 22);
     return;
   }
@@ -118,7 +112,7 @@ function drawGraph(tab) {
   ctx.lineWidth = 1.6;
   shown.forEach((series) => {
     const own = graph.each && series.points.length ? range(series.points) : shared;
-    ctx.strokeStyle = GRAPH_COLOURS[[...graph.series.keys()].indexOf(series.name) % GRAPH_COLOURS.length];
+    ctx.strokeStyle = GRAPH_COLOURS[Math.max(graph.names.indexOf(series.name), 0) % GRAPH_COLOURS.length];
     ctx.beginPath();
     series.points.forEach((p, n) => (n ? ctx.lineTo(px(p.t), py(p.v, own)) : ctx.moveTo(px(p.t), py(p.v, own))));
     ctx.stroke();
@@ -127,7 +121,7 @@ function drawGraph(tab) {
 
 // What each line is, with its last value.
 function drawLegend(bar, graph) {
-  const names = graph.specs.map((s) => s.name);
+  const names = graph.names;
   bar.querySelector(".graph-legend").replaceChildren(...names.map((name) => {
     const points = graph.series.get(name) || [];
     const chip = el("span", "chip");

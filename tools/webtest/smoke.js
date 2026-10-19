@@ -270,13 +270,13 @@ const tab = () => run("tabs[0]", "x");
   for (let i = 0; i < 40; i++) run(`record(tabs[tabs.length - 1], { k: "note", t: ${i}, text: "n${i}" }, 500000)`, "x");
   const capped = run("({ n: tabs[tabs.length - 1].events.length, kept: tabs[tabs.length - 1].kept, first: tabs[tabs.length - 1].events[0].text })", "x");
   check("kept events stay within the cap and drop the oldest", capped.kept <= 8 * 1024 * 1024 * 1.25 && capped.n < 40 && capped.first !== "n0", capped);
-  // graph: numbers from the received lines
+  // graph: the server sends the numbers it found in the lines
   run("applyProfile(tabs[0], { ...tabs[0].profile, graphSeries: 'Temp | Temperature: | degC\\nTick | tick ' })", "x");
   const gws = run("tabs[0].ws", "x");
-  bin(gws, 5000, "2025 - Temperature: 26.1 degC\r\ntick 7 half");
-  bin(gws, 5100, " a line\r\nTemperature: 26.3 degC\r\n");
+  json(gws, { type: "points", t: 5000, values: [{ name: "Temp", value: 26.1 }] });
+  json(gws, { type: "points", t: 5100, values: [{ name: "Tick", value: 7 }, { name: "Temp", value: 26.3 }] });
   const gs = run("[...tabs[0].graph.series].map(([n, p]) => n + ':' + p.map((x) => x.v).join(','))", "x");
-  check("numbers are taken from the lines, also across chunks", JSON.stringify(gs) === JSON.stringify(["Temp:26.1,26.3", "Tick:7"]), gs);
+  check("points from the server are kept per series", JSON.stringify(gs) === JSON.stringify(["Temp:26.1,26.3", "Tick:7"]), gs);
   q("[data-graph]").click();
   check("the Graph button opens the graph with its legend", !q(".graphbar").hidden && q("[data-graph]").getAttribute("aria-pressed") === "true" && /Temp: 26.3/.test(q(".graph-legend").textContent), q(".graph-legend").textContent);
   q("[data-graph-clear]").click();

@@ -186,7 +186,7 @@ func (p *Profile) Normalize() error {
 	if p.CharDelayMs < 0 || p.CharDelayMs > 5000 || p.LineDelayMs < 0 || p.LineDelayMs > 5000 {
 		return errors.New("send delays are 0 to 5000 ms")
 	}
-	if err := checkGraphSeries(p.GraphSeries); err != nil {
+	if _, err := parseGraphSeries(p.GraphSeries); err != nil {
 		return err
 	}
 	if _, err := parseQuickSends(p.QuickSends); err != nil {

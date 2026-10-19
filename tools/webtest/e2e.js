@@ -460,9 +460,33 @@ async function startServer() {
   await input.press("Enter");
   await waitScreen(/line 300 of 300/, shellTab, 8000);
   await page.click(".viewbar [data-mark-prev]");
-  await sleep(200);
+  await page.waitForFunction((n) => /^\[termdeck\] mark/.test(tabs[n].term.getSelection()), shellTab, { timeout: 3000 }).catch(() => {});
   const marked = await page.evaluate((n) => tabs[n].term.getSelection(), shellTab);
   check("the previous-mark arrow scrolls to the mark and selects it", /^\[termdeck\] mark 1 at /.test(marked), marked);
+
+  // a button in the pane that does not have the focus works on the first click (the page must not
+  // draw it again while the mouse button is down)
+  while ((await page.locator(".tab").count()) > 0) {
+    const close = page.locator(".tab .close").first();
+    await close.click();
+    if (await page.locator(".tab .close.confirm").count()) await close.click();
+  }
+  await page.evaluate(async () => {
+    await api("/api/profiles", { method: "POST", body: { name: "QA", device: "fake:echo", quickSends: "Hi | text | hello A" } });
+    await api("/api/profiles", { method: "POST", body: { name: "QB", device: "fake:counter", quickSends: "Yo | text | hello B" } });
+    await loadProfiles();
+  });
+  await page.locator("#tree .item .name", { hasText: /^QA$/ }).dblclick();
+  await page.locator("#tree .item .name", { hasText: /^QB$/ }).dblclick();
+  await page.click(".layout [data-layout=cols]");
+  await sleep(300);
+  await page.locator(".pane").first().locator(".terminals").click();
+  const otherTx = () => page.evaluate(() => panes[1].active.counters.tx);
+  const txBefore2 = await otherTx();
+  await page.locator(".pane").nth(1).locator(".quickbar button").click();
+  await sleep(500);
+  check("a quick-send button in the other pane works on the first click", (await otherTx()) > txBefore2, { before: txBefore2, after: await otherTx() });
+  await page.click(".layout [data-layout=single]");
 
   check("no page errors or console errors", problems.length === 0, problems);
   check("the program reports no data race or panic", !/DATA RACE|panic:/.test(server.child.stderrText), server.child.stderrText.slice(0, 600));

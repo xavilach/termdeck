@@ -249,13 +249,17 @@ function showQuick(pane) {
   const entries = tab ? parseQuickSends(tab.profile.quickSends) : [];
   const bar = pane.quickbar;
   bar.hidden = entries.length === 0;
-  bar.replaceChildren(...entries.map((entry) => {
-    const button = el("button", `quick ${entry.type}`, entry.name);
-    button.title = `${entry.type}: ${entry.data}${entry.end ? ` (end ${entry.end})` : ""}`;
-    button.addEventListener("click", () => sendQuick(pane, entry));
-    return button;
-  }));
-  bar.querySelectorAll("button").forEach((b) => { b.disabled = tab.state !== "connected"; });
+  const signature = JSON.stringify(entries);
+  if (bar.dataset.signature !== signature) {  // the buttons are drawn again only when they changed: a click that is in progress keeps its button
+    bar.dataset.signature = signature;
+    bar.replaceChildren(...entries.map((entry) => {
+      const button = el("button", `quick ${entry.type}`, entry.name);
+      button.title = `${entry.type}: ${entry.data}${entry.end ? ` (end ${entry.end})` : ""}`;
+      button.addEventListener("click", () => sendQuick(pane, entry));
+      return button;
+    }));
+  }
+  bar.querySelectorAll("button").forEach((button) => { button.disabled = tab.state !== "connected"; });
 }
 
 // ---- automatic send: the input goes out again and again, every so many milliseconds

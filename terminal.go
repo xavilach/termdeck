@@ -143,7 +143,8 @@ func (t *termSession) openPort(profile Profile, reconnecting bool) bool {
 	if logErr != nil {
 		t.sendJSON(map[string]string{"type": "notice", "text": "log not written: " + logErr.Error()})
 	}
-	go t.read(gen, port, t.codec, t.triggers, t.runCtx)
+	graph, _ := parseGraphSeries(profile.GraphSeries) // checked by Normalize
+	go t.read(gen, port, t.codec, t.triggers, graph, t.runCtx)
 	go t.watchLines(gen, port, asserted(profile.DTR), asserted(profile.RTS))
 	go t.watchCounters(gen)
 	return true
@@ -167,9 +168,10 @@ func (t *termSession) askAboutLog(profile Profile) string {
 	return "none"
 }
 
-func (t *termSession) read(gen int, port serial.Port, codec *Codec, triggers []trigger, ctx context.Context) {
+func (t *termSession) read(gen int, port serial.Port, codec *Codec, triggers []trigger, graph []graphSpec, ctx context.Context) {
 	buf := make([]byte, 4096)
-	var window []byte // the end of what the device sent, to match triggers across chunks
+	var lines lineSplitter // the lines of the data, for the graph
+	var window []byte      // the end of what the device sent, to match triggers across chunks
 	for {
 		n, err := port.Read(buf)
 		if n > 0 {
@@ -183,6 +185,9 @@ func (t *termSession) read(gen int, port serial.Port, codec *Codec, triggers []t
 				return
 			}
 			window = t.match(ctx, triggers, window, text)
+			if len(graph) > 0 {
+				t.sendPoints(at, lines.feed(text), graph)
+			}
 		}
 		if err != nil || n == 0 {
 			t.mu.Lock()
@@ -398,5 +403,16 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 		case "line":
 			t.setLine(m.Line, m.Value)
 		}
+	}
+}
+
+// sendPoints tells the page the numbers the lines of a chunk gave, for its graph.
+func (t *termSession) sendPoints(at time.Time, lines []string, graph []graphSpec) {
+	var values []graphValue
+	for _, line := range lines {
+		values = append(values, extractValues(line, graph)...)
+	}
+	if len(values) > 0 {
+		t.sendJSON(map[string]any{"type": "points", "t": at.UnixMilli(), "values": values})
 	}
 }

@@ -77,16 +77,9 @@ test("parseQuickSends", () => {
   ]);
 });
 
-test("graph series and the numbers a line gives", () => {
-  const specs = F.parseSeries("# c\nTemp | Temperature: | degC\nTick | tick \nHum | /hum=([\\d.]+)%/\nBad | /(/\nnone\n | x");
-  assert.deepEqual(specs.map((s) => s.name), ["Temp", "Tick", "Hum"]);
-  const vals = (line) => F.extractValues(line, specs).map((v) => `${v.name}=${v.value}`).join(" ");
-  assert.equal(vals("2025 - Temperature: 26.1 degC"), "Temp=26.1");
-  assert.equal(vals("Temperature: 26.1 K"), "");  // the suffix is missing
-  assert.equal(vals("tick 12 temp"), "Tick=12");
-  assert.equal(vals("tick -3.5e1"), "Tick=-35");
-  assert.equal(vals("tick abc"), "");
-  assert.equal(vals("a hum=45.5% Temperature: 20 degC tick 7"), "Temp=20 Tick=7 Hum=45.5");
+test("seriesNames", () => {
+  assert.deepEqual(F.seriesNames("# c\nTemp | Temperature: | degC\nTick | tick \nHum | /hum=([\\d.]+)%/\nnone\n | x"), ["Temp", "Tick", "Hum"]);
+  assert.deepEqual(F.seriesNames(""), []);
 });
 
 test("b64", () => {
