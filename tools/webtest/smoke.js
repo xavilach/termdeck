@@ -270,6 +270,19 @@ const tab = () => run("tabs[0]", "x");
   for (let i = 0; i < 40; i++) run(`record(tabs[tabs.length - 1], { k: "note", t: ${i}, text: "n${i}" }, 500000)`, "x");
   const capped = run("({ n: tabs[tabs.length - 1].events.length, kept: tabs[tabs.length - 1].kept, first: tabs[tabs.length - 1].events[0].text })", "x");
   check("kept events stay within the cap and drop the oldest", capped.kept <= 8 * 1024 * 1024 * 1.25 && capped.n < 40 && capped.first !== "n0", capped);
+  // tabs come back after a reload
+  run("tabs.forEach((t, i) => { if (i === 0) t.state = 'closed'; })", "x");   // the first one was not connected
+  run("saveTabs()", "x");
+  const saved = w.sessionStorage.getItem("termdeck.tabs");
+  const names = run("tabs.map((t) => t.profile.name)", "x");
+  const socketsBefore = sockets.length;
+  run("[...tabs].forEach(closeTab)", "x");
+  check("no tab is left after closing them", run("tabs.length", "x") === 0);
+  w.sessionStorage.setItem("termdeck.tabs", saved);
+  run("restoreTabs()", "x");
+  await sleep(20);
+  check("restoreTabs brings the tabs back, in order", JSON.stringify(run("tabs.map((t) => t.profile.name)", "x")) === JSON.stringify(names), { names, now: run("tabs.map((t) => t.profile.name)", "x") });
+  check("the ones that were connected connect again, the other stays closed", run("tabs[0].state", "x") === "closed" && sockets.length === socketsBefore + names.length - 1, { sockets: sockets.length - socketsBefore, names: names.length });
   check("no errors", errors.length === 0, errors);
   console.log(failed ? `${failed} FAILED` : "all passed");
   process.exit(failed ? 1 : 0);

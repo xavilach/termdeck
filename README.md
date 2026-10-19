@@ -38,7 +38,7 @@ GOOS=windows GOARCH=amd64 go build -o termdeck.exe .   # Windows
 ## Data
 
 `profiles.json`, `scripts.json`, `groups.json` in `%APPDATA%\termdeck` or `~/.config/termdeck` (`TERMDECK_HOME` overrides).
-The server listens on 127.0.0.1 only; the start link works once, and a reload of the page keeps the login (kept for the life of the browser tab).
+The server listens on 127.0.0.1 only; the start link works once, and a reload of the page keeps the login and brings the tabs back (kept for the life of the browser tab): the connected ones connect again.
 
 ## Notes
 

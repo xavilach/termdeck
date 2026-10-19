@@ -206,7 +206,29 @@ function newTabElement(tab) {
   addReorder(tab);
 }
 
-function openTab(profile) {
+// The open tabs are remembered for the life of the browser tab, so that a reload (F5) brings them back:
+// the ones that were connected connect again, the others come back with their port closed.
+const TABS_KEY = "termdeck.tabs";
+
+function saveTabs() {
+  const data = { active: tabs.indexOf(active), tabs: tabs.map((t) => ({ profile: t.profile, connected: t.state === "connected" || t.state === "connecting", pane: panes.indexOf(t.pane) })) };
+  try { sessionStorage.setItem(TABS_KEY, JSON.stringify(data)); } catch { /* no storage */ }
+}
+
+function restoreTabs() {
+  let data = null;
+  try { data = JSON.parse(sessionStorage.getItem(TABS_KEY)); } catch { /* nothing kept */ }
+  if (!data || !Array.isArray(data.tabs)) return;
+  for (const saved of data.tabs) {
+    focusPane = panes[Math.min(Math.max(saved.pane, 0), panes.length - 1)];
+    openTab(saved.profile, { connect: saved.connected });
+  }
+  if (tabs[data.active]) { activate(tabs[data.active]); showLines(); }
+}
+
+addEventListener("pagehide", saveTabs);
+
+function openTab(profile, { connect: doConnect = true } = {}) {
   if (openElsewhere(profile)) return;
   const pane = focusPane || panes[0];
   const tab = { profile, pane, state: "connecting", ws: null, fontSize: profile.fontSize || 14,
@@ -221,7 +243,9 @@ function openTab(profile) {
   tabs.push(tab);
   activate(tab);
   showLines();
-  connect(tab);
+  if (doConnect) connect(tab);
+  else setState(tab, "closed");
+  saveTabs();
 }
 
 // Drag a tab to reorder it, or onto the other pane to move it there.
@@ -264,6 +288,7 @@ function moveTab(tab, pane, index) {
   refreshPane(from);
   activate(tab);
   fitPane(from);
+  saveTabs();
 }
 
 // Closing a connected tab asks first (unless the profile says not to): click the close button twice.
@@ -294,6 +319,7 @@ function closeTab(tab) {
   tab.tabEl.remove();
   tabs.splice(tabs.indexOf(tab), 1);
   pane.tabs.splice(pane.tabs.indexOf(tab), 1);
+  saveTabs();
   if (pane.active === tab) pane.active = pane.tabs[pane.tabs.length - 1] || null;
   if (pane === focusPane) active = pane.active;
   if (pane.active) return activate(pane.active);
@@ -588,6 +614,6 @@ async function checkServer() {
 setInterval(checkServer, 3000);
 setTimeout(pollPorts, portPollMs);
 
-login().then(() => { checkServer(); return Promise.all([loadProfiles(), loadGroups(), loadPorts(), loadScripts()]); }).catch((error) => {
+login().then(() => { checkServer(); return Promise.all([loadProfiles(), loadGroups(), loadPorts(), loadScripts()]); }).then(restoreTabs).catch((error) => {
   document.body.replaceChildren(el("p", "problem", error.message));
 });

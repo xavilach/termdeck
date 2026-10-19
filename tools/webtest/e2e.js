@@ -281,10 +281,22 @@ async function startServer() {
 
   // ---- a reload keeps the login (the start link works once); open ports are closed by it
   page.on("dialog", (d) => d.accept());  // "leave the page?" while ports are open
+  const labelsBefore = await page.locator(".tab .label").allTextContents();
+  const connectedBefore = await page.locator(".tab.connected").count();
   await page.reload();
   await page.waitForSelector("#port-tree .item.port", { state: "attached" });
   check("a reload keeps working without a new link", (await page.locator("body").textContent()).includes("Virtual ports"));
+  await page.waitForFunction((n) => tabs.length === n, labelsBefore.length);
+  check("the tabs come back after a reload", JSON.stringify(await page.locator(".tab .label").allTextContents()) === JSON.stringify(labelsBefore), await page.locator(".tab .label").allTextContents());
+  await page.waitForFunction((n) => tabs.filter((t) => t.state === "connected").length === n, connectedBefore, { timeout: 5000 }).catch(() => {});
+  check("and reconnect", (await page.locator(".tab.connected").count()) === connectedBefore, { was: connectedBefore, now: await page.locator(".tab.connected").count() });
   check("the expanded Virtual ports section is remembered", await page.locator("#port-tree .item.port", { hasText: "fake:shell" }).isVisible());
+  while ((await page.locator(".tab").count()) > 0) {  // start the next part with no tab open
+    const close = page.locator(".tab .close").first();
+    await close.click();
+    if (await page.locator(".tab .close.confirm").count()) await close.click();
+  }
+  await page.click(".layout [data-layout=single]");
   await page.locator("#port-tree .item.port", { hasText: "fake:shell" }).dblclick();
   await waitScreen(/login: /);   // the port was released by the reload and can be opened again
   await input.focus();
