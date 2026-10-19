@@ -68,6 +68,8 @@
       <label class="check" title="Show CR, LF and the other control characters as &lt;CR&gt;, &lt;LF&gt;, &lt;ESC&gt;... instead of acting on them. LF still ends the line (unless a pause does it). Escape sequences, such as colours, are shown as text too."><input type="checkbox" data-ctrl> Control chars</label>
       <label title="Start a new line when nothing was received for this long, in milliseconds. For data that has no line ends. 0 turns it off. While it is on, CR and LF from the device are shown as &lt;CR&gt; and &lt;LF&gt; and do not end lines. Turning it off again shows the lines as the device sent them.">New line after
         <input type="number" data-pause min="0" max="60000" step="10" value="0"> ms</label>
+      <label title="Show only the lines that contain this text, or match /regex/; put ! in front to hide those lines instead (!heartbeat). Empty shows everything. Changing it redraws the data kept, so a filtered-out line is not lost.">Filter
+        <input data-filter spellcheck="false" placeholder="text, /regex/, !hide" aria-label="Filter lines"></label>
       <button data-view-reset title="The view was changed here and is not what the session settings say. Click to go back to them." hidden>Reset view</button>
       <span class="spacer"></span>
       <span class="counters" title="Bytes received since the port opened. Clear resets it.">Rx <b data-count="rx">0</b></span>
@@ -220,6 +222,11 @@
               <div class="checks">
                 <label class="check" title="Whatever you select with the mouse is copied to the clipboard at once."><input name="copyOnSelect" type="checkbox"> Copy on select</label>
               </div>
+            </fieldset>
+            <fieldset>
+              <legend>Highlights and filter</legend>
+              <label title="Colour the received lines that match, one rule per line: pattern = colour. The pattern is text (any case) or /regex/. Colours: red, green, yellow, blue, magenta, cyan, white, grey, orange; add bold, dim, underline or inverse with +. Example: ERROR = red+bold. Lines starting with # are notes. A line is coloured when it arrives in one piece.">Highlights <textarea name="highlights" rows="3" spellcheck="false" placeholder="ERROR = red+bold&#10;/warn(ing)?/ = orange"></textarea></label>
+              <label title="Show only the lines that contain this text or match /regex/; ! in front hides them instead. You can change it later from the receive bar.">Filter <input name="filter" spellcheck="false" placeholder="text, /regex/ or !text"></label>
             </fieldset>
             <fieldset>
               <legend>Graph</legend>

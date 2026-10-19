@@ -284,6 +284,29 @@ const tab = () => run("tabs[0]", "x");
   q("[data-graph]").click();
   check("and the button hides it again", q(".graphbar").hidden);
 
+  // highlights, the filter and lines that wait for their end
+  const hlTab = run("tabs[0]", "x"); const hlWs = hlTab.ws;
+  run("applyProfile(tabs[0], { ...tabs[0].profile, highlights: 'ERROR = red+bold\\nok = green', graphSeries: '', quickSends: '' })", "x");
+  hlTab.term.out.length = 0;
+  bin(hlWs, 9000, "an ERROR here\r\nall fine\r\nok then\r\n");
+  const hlOut = hlTab.term.out.join("");
+  check("a matching line is coloured and the line end stays outside", hlOut.includes("\x1b[31;1man ERROR here\x1b[0m\r\n") && hlOut.includes("\x1b[32mok then\x1b[0m") && hlOut.includes("all fine\r\n") && !hlOut.includes("\x1b[31;1mall"), hlOut);
+  hlTab.term.out.length = 0;
+  bin(hlWs, 9100, "login: ");
+  check("a line without its end waits", !hlTab.term.out.join("").includes("login"));
+  await sleep(400);
+  check("and is shown after a short idle time", hlTab.term.out.join("").includes("login: "), hlTab.term.out.join(""));
+  const flt = q("[data-filter]"); flt.value = "fine"; fire(flt, "input");
+  await sleep(320);
+  check("the filter shows only matching lines and marks the change", hlTab.term.text().includes("all fine") && !hlTab.term.text().includes("an ERROR") && q("[data-view-reset]").hidden === false, hlTab.term.text());
+  flt.value = "!fine"; fire(flt, "input");
+  await sleep(320);
+  check("! hides the matching lines instead", !hlTab.term.text().includes("all fine") && hlTab.term.text().includes("an ERROR"), hlTab.term.text());
+  flt.value = ""; fire(flt, "input");
+  await sleep(320);
+  check("an empty filter shows everything again, nothing was lost", hlTab.term.text().includes("all fine") && hlTab.term.text().includes("an ERROR"));
+  run("applyProfile(tabs[0], { ...tabs[0].profile, highlights: '' })", "x");
+
   // a check is added after hex data
   const checkTab = run("tabs[0]", "x");
   const checkWs = checkTab.ws; json(checkWs, { type: "state", state: "connected", message: "" });

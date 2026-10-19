@@ -97,6 +97,32 @@ test("checksums match the published check values of 123456789", () => {
   assert.deepEqual(F.checksum("crc16modbus", []), [0xff, 0xff]);
 });
 
+test("highlights pick a style for a line", () => {
+  const rules = F.parseHighlights("# c\nERROR = red+bold\n/warn(ing)?/ = orange\nok = green\nbroken\n/(/ = red\nx = purple");
+  assert.equal(rules.length, 3);
+  assert.equal(F.highlightOf(rules, "an ERROR happened\r\n"), "31;1");
+  assert.equal(F.highlightOf(rules, "warning: low\n"), "38;5;208");
+  assert.equal(F.highlightOf(rules, "all OK"), "32");  // text is matched in any case
+  assert.equal(F.highlightOf(rules, "\x1b[31mnothing\x1b[0m"), "");
+  assert.equal(F.highlightOf(rules, "\x1b[1mERROR\x1b[0m"), "31;1");  // colours the device sent do not get in the way
+});
+
+test("the filter shows or hides lines", () => {
+  const show = F.compileFilter("tick");
+  const hide = F.compileFilter("!heartbeat");
+  const re = F.compileFilter("/^t[0-9]+$/");
+  assert.equal(F.passesFilter(show, "Tick 4\r\n"), true);
+  assert.equal(F.passesFilter(show, "other\n"), false);
+  assert.equal(F.passesFilter(hide, "heartbeat 3\n"), false);
+  assert.equal(F.passesFilter(hide, "data\n"), true);
+  assert.equal(F.passesFilter(re, "t42\r\n"), true);
+  assert.equal(F.passesFilter(re, "t42x\n"), false);
+  assert.equal(F.compileFilter(""), null);
+  assert.equal(F.compileFilter("!"), null);
+  assert.equal(F.compileFilter("/(/"), null);
+  assert.equal(F.passesFilter(null, "anything"), true);
+});
+
 test("b64", () => {
   assert.equal(F.b64(Uint8Array.from([0, 255, 65])), "AP9B");
   assert.equal(F.b64(new Uint8Array(20000).fill(65)).length, Math.ceil(20000 / 3) * 4);

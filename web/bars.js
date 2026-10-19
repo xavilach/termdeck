@@ -17,6 +17,7 @@ function syncBars(pane) {
   q("[data-time-mode]").value = tab.view.timeMode;
   q("[data-pause]").value = tab.view.pause;
   q("[data-ctrl]").checked = tab.view.ctrl;
+  q("[data-filter]").value = tab.view.filter;
   showFreeze(pane);
   showQuick(pane);
   syncGraph(pane);
@@ -71,7 +72,7 @@ function markChanged(pane) {
   const tab = pane.active;
   if (!tab) return;
   const saved = viewOf(tab.profile);
-  const differs = { "[data-view]": tab.view.mode !== saved.mode, "[data-stamps]": tab.view.stamps !== saved.stamps || tab.view.timeMode !== saved.timeMode, "[data-ctrl]": tab.view.ctrl !== saved.ctrl, "[data-pause]": tab.view.pause !== saved.pause,
+  const differs = { "[data-view]": tab.view.mode !== saved.mode, "[data-stamps]": tab.view.stamps !== saved.stamps || tab.view.timeMode !== saved.timeMode, "[data-ctrl]": tab.view.ctrl !== saved.ctrl, "[data-pause]": tab.view.pause !== saved.pause, "[data-filter]": tab.view.filter !== saved.filter,
     "[data-nl]": tab.view.nl !== saved.nl || (tab.view.nl === "custom" && tab.view.nlCustom !== saved.nlCustom) };
   for (const [selector, changed] of Object.entries(differs)) pane.viewbar.querySelector(selector).closest("label").classList.toggle("changed", changed);
   pane.viewbar.querySelector("[data-view-reset]").hidden = !Object.values(differs).some(Boolean);
@@ -391,6 +392,7 @@ function wireViewBar(pane) {
   // typed values apply as you type, after a short pause
   const later = (apply) => { let timer; const run = change(apply); return () => { clearTimeout(timer); timer = setTimeout(run, 250); }; };
   view("[data-nl-custom]").addEventListener("input", later((tab) => { tab.view.nlCustom = view("[data-nl-custom]").value; }));
+  view("[data-filter]").addEventListener("input", later((tab) => { tab.view.filter = view("[data-filter]").value; }));
   view("[data-ctrl]").addEventListener("change", change((tab) => { tab.view.ctrl = view("[data-ctrl]").checked; }));
   view("[data-pause]").addEventListener("input", later((tab) => {
     tab.view.pause = Math.min(Math.max(Math.floor(Number(view("[data-pause]").value)) || 0, 0), 60000);

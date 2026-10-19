@@ -32,7 +32,7 @@ async function startServer() {
 (async () => {
   const server = await startServer();
   const browser = await chromium.launch();
-  const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, acceptDownloads: true });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 1300 }, acceptDownloads: true });
   const page = await context.newPage();
   const problems = [];
   page.on("pageerror", (e) => problems.push("pageerror: " + e.message));
@@ -337,6 +337,26 @@ async function startServer() {
   await page.locator(".tab", { hasText: "fake:echo" }).locator(".close").click();
   await page.locator(".tab", { hasText: "fake:echo" }).locator(".close").click();
 
+  // highlights and the filter in the real terminal: the cell colours of the lines
+  await page.keyboard.press("Alt+Shift+N");
+  await form.locator("[name=name]").fill("Coloured");
+  await form.locator("[name=device]").fill("fake:counter");
+  await form.locator("#advanced").evaluate((d) => { d.open = true; });
+  await form.locator("[name=highlights]").fill("tick 2 = red");
+  await page.click("#profile-connect");
+  await page.waitForSelector(".tab:has-text('Coloured')");
+  const colouredTab = (await page.locator(".tab .label").allTextContents()).indexOf("Coloured");
+  await waitScreen(/tick 3 /, colouredTab);
+  const colours = await page.evaluate((n) => { const b = tabs[n].term.buffer.active; const out = {}; for (let r = 0; r < b.length; r++) { const line = b.getLine(r); const text = line.translateToString(true); const m = /^tick (\d)/.exec(text); if (m) out[m[1]] = line.getCell(0).getFgColor(); } return out; }, colouredTab);
+  check("a highlighted line has its colour in the terminal and the others do not", colours[2] === 1 && colours[1] !== 1 && colours[3] !== 1, colours);
+  await page.fill(".viewbar [data-filter]", "tick 3");
+  s = await waitScreen(/tick 3/, colouredTab);
+  await page.waitForFunction((n) => { const b = tabs[n].term.buffer.active; let t = ""; for (let r = 0; r < b.length; r++) t += b.getLine(r).translateToString(true) + "\n"; return /tick 3/.test(t) && !/tick 1 /.test(t); }, colouredTab, { timeout: 4000 });
+  check("the filter shows only the lines that match, in the real terminal", true);
+  await page.fill(".viewbar [data-filter]", "");
+  await page.locator(".tab", { hasText: "Coloured" }).locator(".close").click();
+  await page.locator(".tab", { hasText: "Coloured" }).locator(".close").click();
+
   // null-modem pair
   await page.locator("#port-tree .item.port", { hasText: "fake:link-a" }).dblclick();
   await page.locator("#port-tree .item.port", { hasText: "fake:link-b" }).dblclick();
@@ -471,12 +491,12 @@ async function startServer() {
   // ---- narrow windows: nothing runs out of its pane
   await page.click(".layout [data-layout=cols]");
   for (const w of [1280, 900, 700]) {
-    await page.setViewportSize({ width: w, height: 800 });
+    await page.setViewportSize({ width: w, height: 1300 });
     await sleep(200);
     const o = await page.evaluate(() => ({ page: document.documentElement.scrollWidth - innerWidth, panes: [...document.querySelectorAll(".pane")].map((p) => p.scrollWidth - p.clientWidth) }));
     check(`no horizontal overflow at ${w}px`, o.page <= 0 && o.panes.every((x) => x <= 1), o);
   }
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize({ width: 1280, height: 1300 });
   await page.click(".layout [data-layout=single]");
 
   // ---- a flood of lines is kept and the view switches quickly

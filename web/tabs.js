@@ -233,7 +233,7 @@ function openTab(profile, { connect: doConnect = true } = {}) {
   const pane = focusPane || panes[0];
   const tab = { profile, pane, state: "connecting", ws: null, fontSize: profile.fontSize || 14,
                 lineStart: true, txOpen: false, script: null, events: [], kept: 0, held: [], view: viewOf(profile),
-                sendEnd: { mode: profile.enter || "cr", custom: "" }, sendCheck: "none", counters: { rx: 0, tx: 0 }, sent: loadHistory(profile.name), sentAt: 0, graph: newGraph(profile) };
+                sendEnd: { mode: profile.enter || "cr", custom: "" }, sendCheck: "none", counters: { rx: 0, tx: 0 }, sent: loadHistory(profile.name), sentAt: 0, graph: newGraph(profile), pending: new Uint8Array(0), highlights: parseHighlights(profile.highlights) };
   tab.sentAt = tab.sent.length;
   newTerminal(tab);
   newTabElement(tab);

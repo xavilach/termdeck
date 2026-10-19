@@ -80,8 +80,8 @@ function addImplicitLF(tab, bytes) {
 // screen and shows the events again, so a view can be left and come back with nothing lost.
 
 const KEEP_BYTES = 8 * 1024 * 1024;
-const { ENC, hex2, stamp, formatDelta, NEWLINES, shapeText, NUMBERS, unescapeText, textBytes, parseNumbers, parseQuickSends, seriesNames, CHECKS, checksum, ALLOWED, clean, groupDigits, formatBytes, b64 } = Format;
-const viewOf = (p) => ({ mode: p.view || "text", stamps: !!p.timestamps, timeMode: p.timeMode || "clock", pause: p.linePauseMs || 0, ctrl: !!p.showControl,
+const { ENC, hex2, stamp, formatDelta, NEWLINES, shapeText, NUMBERS, unescapeText, textBytes, parseNumbers, parseQuickSends, seriesNames, CHECKS, checksum, parseHighlights, highlightOf, compileFilter, passesFilter, ALLOWED, clean, groupDigits, formatBytes, b64 } = Format;
+const viewOf = (p) => ({ mode: p.view || "text", stamps: !!p.timestamps, timeMode: p.timeMode || "clock", pause: p.linePauseMs || 0, ctrl: !!p.showControl, filter: p.filter || "",
                                     nl: p.newLine || "terminal", nlCustom: p.newLineCustom || "" });
 
 function record(tab, ev, size) {
@@ -124,11 +124,12 @@ function redraw(tab) {
   tab.hold = true;  // events that arrive meanwhile are kept, and shown by the redraw itself
   tab.term.write("", () => {
     tab.term.reset();
-    Object.assign(tab, { lineStart: true, txOpen: false, afterCR: false, lastRx: 0, lastHead: 0, hex: null, held: [], quiet: true, hold: false });
+    Object.assign(tab, { lineStart: true, txOpen: false, afterCR: false, lastRx: 0, lastHead: 0, hex: null, held: [], pending: new Uint8Array(0), quiet: true, hold: false });
     applyModes(tab);
     tab.replaying = true;
     for (const ev of shownEvents(tab)) render(tab, ev);
     tab.replaying = false;
+    if (tab.pending.length && Date.now() - tab.pendingAt > LINE_IDLE_MS) flushPending(tab);  // a prompt that was waiting for its line end
     tab.term.write("", () => { tab.quiet = false; });  // the old bells and titles are not news
   });
 }
@@ -240,9 +241,53 @@ function showRx(tab, ev) {
       tab.term.write("\r\n");  // nothing came for a while: a new line
       tab.lineStart = true;
     }
-    writeLines(tab, bytes, tab.profile.rxMarker, ev.t);
+    if (lineMode(tab)) showByLines(tab, bytes, ev.t);
+    else writeLines(tab, bytes, tab.profile.rxMarker, ev.t);
   }
   tab.lastRx = ev.t;
+}
+
+// ---- highlights and the filter work on whole lines: what has no line end yet waits (a prompt is shown
+// after a short idle time), then each line is shown, coloured, or left out
+const LINE_IDLE_MS = 300;
+const lineMode = (tab) => tab.view.filter.trim() !== "" || tab.highlights.length > 0;
+const concatBytes = (a, b) => { const out = new Uint8Array(a.length + b.length); out.set(a); out.set(b, a.length); return out; };
+
+function showByLines(tab, bytes, at) {
+  if (tab.pending.length && at - tab.pendingAt > LINE_IDLE_MS) flushPending(tab);
+  tab.pending = concatBytes(tab.pending, bytes);
+  tab.pendingAt = at;
+  for (let end = tab.pending.indexOf(10); end >= 0; end = tab.pending.indexOf(10)) {
+    const line = tab.pending.slice(0, end + 1);
+    tab.pending = tab.pending.slice(end + 1);
+    showLine(tab, line, at);
+  }
+  if (tab.replaying) return;
+  clearTimeout(tab.flushTimer);
+  if (tab.pending.length) tab.flushTimer = setTimeout(() => flushPending(tab), LINE_IDLE_MS);
+}
+
+function flushPending(tab) {
+  clearTimeout(tab.flushTimer);
+  const line = tab.pending;
+  tab.pending = new Uint8Array(0);
+  if (line.length) showLine(tab, line, tab.pendingAt);
+}
+
+// One line (or the start of one) through the filter and the highlights.
+function showLine(tab, line, at) {
+  const text = new TextDecoder().decode(line);
+  if (tab.filterText !== tab.view.filter) {  // compiled again only when it changed
+    tab.filterText = tab.view.filter;
+    tab.filterCompiled = compileFilter(tab.view.filter);
+  }
+  if (!passesFilter(tab.filterCompiled, text)) return;
+  const sgr = highlightOf(tab.highlights, text);
+  if (!sgr) return writeLines(tab, line, tab.profile.rxMarker, at);
+  let body = line.length;  // the colour ends before the line end
+  while (body > 0 && (line[body - 1] === 10 || line[body - 1] === 13)) body--;
+  const coloured = concatBytes(concatBytes(ENC.encode(`\x1b[${sgr}m`), line.slice(0, body)), concatBytes(ENC.encode("\x1b[0m"), line.slice(body)));
+  writeLines(tab, coloured, tab.profile.rxMarker, at);
 }
 
 // Text we send and show ourselves (typed lines, local echo, scripts), with the Tx marker.

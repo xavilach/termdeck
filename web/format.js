@@ -188,6 +188,51 @@ const Format = (() => {
       .map((l) => l.split("|")[0].trim()).filter(Boolean);
   }
 
+  // ---- highlights and filters on lines
+  const STYLES = { red: "31", green: "32", yellow: "33", blue: "34", magenta: "35", cyan: "36", white: "37", grey: "90",
+    orange: "38;5;208", bold: "1", dim: "2", underline: "4", inverse: "7" };
+
+  // A pattern written as text (any case) or /regex/. Null when it is not valid.
+  function compilePattern(pattern) {
+    try {
+      if (pattern.length > 2 && pattern.startsWith("/") && pattern.endsWith("/")) return new RegExp(pattern.slice(1, -1));
+      return new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    } catch { return null; }
+  }
+
+  // "pattern = colour" lines as rules { re, sgr }; the server has checked them.
+  function parseHighlights(text) {
+    const rules = [];
+    for (let line of (text || "").split("\n")) {
+      line = line.trim();
+      const at = line.lastIndexOf("=");
+      if (!line || line.startsWith("#") || at < 1) continue;
+      const re = compilePattern(line.slice(0, at).trim());
+      const sgr = line.slice(at + 1).split("+").map((s) => STYLES[s.trim()]).filter(Boolean).join(";");
+      if (re && sgr) rules.push({ re, sgr });
+    }
+    return rules;
+  }
+
+  // What the line without its colours and line end looks like to the rules, cut short.
+  const plainLine = (line) => line.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "").replace(/[\r\n]+$/, "").slice(0, 500);
+
+  // The style (a list of SGR codes) of the first rule the line matches, or "".
+  function highlightOf(rules, line) {
+    const text = plainLine(line);
+    return rules.find((r) => r.re.test(text))?.sgr || "";
+  }
+
+  // The filter: text or /regex/ shows the lines that match, with ! in front it hides them. Null: no filter.
+  function compileFilter(text) {
+    text = (text || "").trim();
+    const invert = text.startsWith("!");
+    const re = text.length > (invert ? 1 : 0) ? compilePattern(invert ? text.slice(1).trim() : text) : null;
+    return re ? { re, invert } : null;
+  }
+
+  const passesFilter = (filter, line) => !filter || filter.re.test(plainLine(line)) !== filter.invert;
+
   // ---- checksums for data written as bytes: the bytes to add after the data
   function crc(bytes, width, poly, init, reflect, xorOut) {
     const top = width === 32 ? 0x80000000 : 1 << (width - 1);
@@ -233,7 +278,7 @@ const Format = (() => {
   }
 
   return { ENC, hex2, stamp, formatDelta, bufferText, controlName, NEWLINES, unescapeText, textBytes, newlineBytes, shapeText, NUMBERS,
-           parseNumbers, parseQuickSends, seriesNames, CHECKS, checksum, ALLOWED, clean, groupDigits, formatBytes, b64 };
+           parseNumbers, parseQuickSends, seriesNames, CHECKS, checksum, parseHighlights, highlightOf, compileFilter, passesFilter, plainLine, ALLOWED, clean, groupDigits, formatBytes, b64 };
 })();
 
 if (typeof module !== "undefined") module.exports = Format;

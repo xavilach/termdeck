@@ -75,6 +75,8 @@ type Profile struct {
 	QuickSends    string `json:"quickSends"`    // lines "name | type | data": buttons of the send bar
 	CharDelayMs   int    `json:"charDelayMs"`   // slow send: pause after each character sent
 	LineDelayMs   int    `json:"lineDelayMs"`   // slow send: extra pause after a CR or LF sent
+	Highlights    string `json:"highlights"`    // lines "pattern = colour": colour the received lines that match
+	Filter        string `json:"filter"`        // show only the lines that match (text or /regex/); ! in front hides them instead
 	TimeMode      string `json:"timeMode"`      // what the time shows: clock or delta (since the line before)
 	NewLine       string `json:"newLine"`       // what ends a received line: terminal, cr, lf, crlf, custom or none
 	NewLineCustom string `json:"newLineCustom"` // the sequence for custom, with \r \n \t \xNN written out
@@ -186,6 +188,12 @@ func (p *Profile) Normalize() error {
 	}
 	if p.CharDelayMs < 0 || p.CharDelayMs > 5000 || p.LineDelayMs < 0 || p.LineDelayMs > 5000 {
 		return errors.New("send delays are 0 to 5000 ms")
+	}
+	if err := checkHighlights(p.Highlights); err != nil {
+		return err
+	}
+	if err := checkFilter(p.Filter); err != nil {
+		return err
 	}
 	if _, err := parseGraphSeries(p.GraphSeries); err != nil {
 		return err

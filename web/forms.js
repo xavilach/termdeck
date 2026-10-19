@@ -91,6 +91,7 @@ function applyProfile(tab, p) {
   Object.assign(o, boldOptions(p));
   tab.view = viewOf(p);
   updateGraphSpecs(tab);
+  tab.highlights = parseHighlights(p.highlights);
   syncBars(tab.pane);
   redraw(tab);
   renderToolbar(tab.pane);
