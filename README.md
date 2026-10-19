@@ -16,7 +16,7 @@ Press Help (left column, Alt+Shift+H) for the keys and the syntax of the setting
 
 ## Sessions
 
-- Saved as JSON, in groups, with scripts per group. Tabs, or two panes. Export / Import (left column) move them between computers.
+- Saved as JSON, in groups, with scripts per group. Tabs, or two panes. The left column can be resized (drag its edge). Export / Import (left column) move them between computers.
 - Baud, data bits, parity, stop bits, flow control (RTS/CTS, XON/XOFF, DSR/DTR on Windows), DTR/RTS, live CTS/DSR/DCD/RI, character sets.
 - Reconnect when the port comes back. RS-485 direction by RTS. Slow send (pause per character and per line end). Note line changes. Duplicate (❐).
 - The port list follows plugging and unplugging. A reload brings the tabs back (the connected ones connect again).

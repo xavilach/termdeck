@@ -525,6 +525,35 @@ function setSidebar(visible) {
 }
 const toggleSidebar = () => setSidebar(document.body.classList.contains("no-sidebar"));
 $("#sidebar-toggle").addEventListener("click", toggleSidebar);
+
+// The width of the left column can be changed by dragging its edge; it is remembered.
+const SIDEBAR_MIN = 180;
+const SIDEBAR_MAX = 600;
+function setSidebarWidth(px) {
+  const width = Math.min(Math.max(Math.round(px), SIDEBAR_MIN), SIDEBAR_MAX);
+  document.documentElement.style.setProperty("--sidebar-w", `${width}px`);
+  stored.write("termdeck.sidebar", width);
+  fitAll();
+  return width;
+}
+const savedSidebar = stored.read("termdeck.sidebar", 0);
+if (savedSidebar) document.documentElement.style.setProperty("--sidebar-w", `${Math.min(Math.max(savedSidebar, SIDEBAR_MIN), SIDEBAR_MAX)}px`);
+
+$("#sidebar-resize").addEventListener("pointerdown", (e) => {
+  e.preventDefault();  // no text selection or drag of something under it starts instead
+  const handle = e.currentTarget;
+  handle.setPointerCapture(e.pointerId);
+  handle.classList.add("dragging");
+  const move = (m) => setSidebarWidth(m.clientX - $("#sidebar").getBoundingClientRect().left);
+  const stop = () => { handle.classList.remove("dragging"); handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", stop); };
+  handle.addEventListener("pointermove", move);
+  handle.addEventListener("pointerup", stop);
+});
+$("#sidebar-resize").addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  e.preventDefault();
+  setSidebarWidth($("#sidebar").getBoundingClientRect().width + (e.key === "ArrowRight" ? 20 : -20));
+});
 try { if (localStorage.getItem("termdeck.sidebar") === "0") setSidebar(false); } catch { /* no storage */ }
 
 // ---------------------------------------------------------------- toolbar and keys

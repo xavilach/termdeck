@@ -100,7 +100,7 @@ details#advanced > summary { cursor: pointer; padding: 4px 0; color: var(--muted
 .layout button[aria-pressed=true] { background: var(--select); }
 .layout svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.3; }
 /* ---- the left column: groups are bands with their own colour, sessions and scripts are plain rows ---- */
-#sidebar { width: 250px; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+#sidebar { width: var(--sidebar-w, 250px); position: relative; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
 #tree, #port-tree { padding: 0 8px; }
 #tree { padding-top: 8px; padding-bottom: 14px; }
 #port-tree { padding-top: 4px; }
@@ -281,3 +281,6 @@ dialog#tunnel label { display: block; margin: 6px 0; }
 .viewbar details.more > .more-body label { white-space: nowrap; }
 .tab .tabmain { display: flex; align-items: center; gap: 6px; border: 0; background: none; padding: 0; min-height: 0; color: inherit; font: inherit; cursor: pointer; }
 .tab .tabmain:hover { background: none; }
+
+#sidebar-resize { touch-action: none; user-select: none; position: absolute; top: 0; right: -3px; bottom: 0; width: 6px; cursor: col-resize; z-index: 20; }
+#sidebar-resize:hover, #sidebar-resize:focus-visible, #sidebar-resize.dragging { background: var(--accent); opacity: .6; outline: none; }

@@ -383,6 +383,24 @@ async function startServer() {
   check("Duplicate opens a new session with the same settings", (await form.locator("[name=name]").inputValue()) === "Slow echo copy" && (await form.locator("[name=charDelayMs]").inputValue()) === "50" && (await page.locator("#profile-title").textContent()) === "New profile");
   await page.keyboard.press("Escape");
 
+  // the left column can be made wider or narrower, and the width is remembered
+  const sidebarWidth = () => page.evaluate(() => Math.round(document.querySelector("#sidebar").getBoundingClientRect().width));
+  const widthBefore = await sidebarWidth();
+  await page.evaluate(() => { window.__ev = []; const h = document.querySelector("#sidebar-resize"); for (const t of ["pointerdown", "pointermove", "pointerup", "pointercancel", "lostpointercapture"]) h.addEventListener(t, (e) => window.__ev.push(t + ":" + Math.round(e.clientX))); });
+  const handleBox = await page.locator("#sidebar-resize").boundingBox();
+  await page.mouse.move(handleBox.x + 3, handleBox.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(handleBox.x + 3 + 120, handleBox.y + 200, { steps: 5 });
+  await page.mouse.up();
+  const widthAfter = await sidebarWidth();
+  check("dragging the edge makes the left column wider", widthAfter > widthBefore + 80, { widthBefore, widthAfter, events: await page.evaluate(() => window.__ev), handleBox });
+  await page.locator("#sidebar-resize").focus();
+  await page.keyboard.press("ArrowLeft");
+  check("the arrow keys change it too", (await sidebarWidth()) === widthAfter - 20);
+  check("and the width is kept for the next time", (await page.evaluate(() => JSON.parse(localStorage.getItem("termdeck.sidebar")))) === widthAfter - 20);
+  await page.evaluate(() => localStorage.removeItem("termdeck.sidebar"));
+  await page.evaluate((w) => document.documentElement.style.removeProperty("--sidebar-w"), 0);
+
   // help
   await page.keyboard.press("Alt+Shift+H");
   check("Alt+Shift+H opens the help", await page.locator("#help").evaluate((d) => d.open) && /Triggers/.test(await page.locator("#help").textContent()));
