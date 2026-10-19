@@ -252,7 +252,7 @@ function renderTree() {
   const portTree = $("#port-tree");
   tree.replaceChildren();
   const ports = node("ports", `Serial ports (${portNames.length})`, "group",
-    [toolButton("⟳", "Refresh the port list", loadPorts)], (body) => {
+    [toolButton("⟳", "List the ports again (this also happens every few seconds)", () => loadPorts())], (body) => {
       for (const port of portNames) {
         const row = el("div", "item port", port);
         row.title = "Double-click to open with default settings; drag onto a group to make a session";
@@ -297,16 +297,27 @@ async function loadGroups() {
   renderTree();
 }
 
-async function loadPorts() {
+// The ports are listed again (⟳, and every few seconds); the tree is drawn again only when the list changed,
+// so that a USB adapter that is plugged in or pulled out shows up by itself.
+let portPollMs = 2000;
+async function loadPorts(quiet = false) {
+  let names = [];
   try {
-    portNames = await api("/api/ports");
+    names = await api("/api/ports");
   } catch (error) {
-    portNames = [];
-    showText($("#problem"), error.message);
+    if (!quiet) showText($("#problem"), error.message);
+    if (quiet) return;  // a poll that fails (the server is down) leaves the list as it is; the server check says so
   }
+  if (quiet && JSON.stringify(names) === JSON.stringify(portNames)) return;
+  portNames = names;
   try { virtualPortList = await api("/api/virtual"); } catch { virtualPortList = []; }
   $("#ports").replaceChildren(...[...portNames, ...virtualPortList.map((v) => v.name)].map((port) => { const o = el("option"); o.value = port; return o; }));
   renderTree();
+}
+
+function pollPorts() {
+  if (!document.hidden && secret) loadPorts(true);
+  setTimeout(pollPorts, portPollMs);
 }
 
 async function deleteGroup(group) {

@@ -32,9 +32,10 @@ w.WebSocket = class {
   send(d) { this.sent.push(JSON.parse(d)); } close() { this.readyState = 3; }
 };
 w.WebSocket.OPEN = 1;
+let portList = ["/dev/ttyUSB0"];
 const profile = { name: "p", device: "fake:echo", baud: 115200, dataBits: 8, parity: "none", stopBits: "1", flow: "none", enter: "lf", group: "", localEcho: true, rxMarker: "", txMarker: "TX ", view: "text", newLine: "terminal" };
 w.fetch = async (url, opt) => {
-  const body = { "/api/login": { secret: "s" }, "/api/profiles": { profiles: [profile] }, "/api/groups": { groups: ["Lab"] }, "/api/scripts": { scripts: [{ name: "boot", group: "", commands: ["a"], delayMs: 100, loop: false, count: 0 }] }, "/api/ports": ["/dev/ttyUSB0"], "/api/virtual": [{ name: "fake:echo", what: "echo" }], "/api/ping": {} }[url] ?? {};
+  const body = { "/api/login": { secret: "s" }, "/api/profiles": { profiles: [profile] }, "/api/groups": { groups: ["Lab"] }, "/api/scripts": { scripts: [{ name: "boot", group: "", commands: ["a"], delayMs: 100, loop: false, count: 0 }] }, "/api/ports": portList, "/api/virtual": [{ name: "fake:echo", what: "echo" }], "/api/ping": {} }[url] ?? {};
   return { ok: true, json: async () => body };
 };
 
@@ -220,6 +221,19 @@ const tab = () => run("tabs[0]", "x");
   // two sessions on the same port are refused
   run("openTab({...profiles[0], name: 'other'})", "x");
   check("same port is not opened twice", run("tabs.length", "x") === 1);
+
+  // the port list follows plugging in and pulling out
+  run("portPollMs = 30; pollPorts()", "x");
+  portList = ["/dev/ttyUSB0", "/dev/ttyUSB1"];
+  await sleep(150);
+  check("a new port shows up by itself", [...w.document.querySelectorAll("#port-tree .item.port")].some((r) => r.textContent === "/dev/ttyUSB1"));
+  portList = ["/dev/ttyUSB1"];
+  await sleep(150);
+  check("and a port that was pulled out goes", ![...w.document.querySelectorAll("#port-tree .item.port")].some((r) => r.textContent === "/dev/ttyUSB0"));
+  const rowsBefore = w.document.querySelector("#port-tree .item.port");
+  await sleep(100);
+  check("an unchanged list is not drawn again", w.document.querySelector("#port-tree .item.port") === rowsBefore);
+  run("portPollMs = 600000", "x");
 
   // closing a tab ends its auto send and file job
   const second = run("tabs.length", "x");

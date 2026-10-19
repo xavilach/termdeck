@@ -586,6 +586,7 @@ async function checkServer() {
   }
 }
 setInterval(checkServer, 3000);
+setTimeout(pollPorts, portPollMs);
 
 login().then(() => { checkServer(); return Promise.all([loadProfiles(), loadGroups(), loadPorts(), loadScripts()]); }).catch((error) => {
   document.body.replaceChildren(el("p", "problem", error.message));
