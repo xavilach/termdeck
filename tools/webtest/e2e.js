@@ -386,6 +386,7 @@ async function startServer() {
   // help
   await page.keyboard.press("Alt+Shift+H");
   check("Alt+Shift+H opens the help", await page.locator("#help").evaluate((d) => d.open) && /Triggers/.test(await page.locator("#help").textContent()));
+  await page.waitForFunction(() => document.querySelector("#about").textContent !== "", null, { timeout: 3000 }).catch(() => {});
   check("the help says which version runs and where the settings are", /termdeck 1\.\d+\.\d+ on \w+\. Settings are kept in .*home/.test(await page.locator("#about").textContent()), await page.locator("#about").textContent());
   await shot("14-help");
   await page.keyboard.press("Escape");
