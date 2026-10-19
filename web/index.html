@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>termdeck</title>
+  <link rel="stylesheet" href="/vendor/xterm.css">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <header class="brand"><span>termdeck</span></header>
+    <div id="problem" class="problem" role="status" hidden></div>
+    <nav id="port-tree" aria-label="Serial ports"></nav>
+    <nav id="tree" aria-label="Groups, sessions, scripts and ports"></nav>
+  </aside>
+  <main>
+    <div id="panes" class="single"></div>
+    <footer id="statusbar"><span id="server-status" role="status"></span><span id="notice" role="status"></span></footer>
+  </main>
+</div>
+<template id="pane-template">
+  <section class="pane">
+    <div class="tabbar">
+      <button class="sidebar-toggle" aria-label="Hide the left column" aria-expanded="true" title="Hide or show the left column (Alt+Shift+B)">‹</button>
+      <div class="tabs" role="tablist" aria-label="Sessions"></div>
+      <div class="layout" role="group" aria-label="Layout">
+        <button data-layout="single" aria-pressed="true" title="One pane"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10"/></svg></button>
+        <button data-layout="cols" aria-pressed="false" title="Two panes side by side (left and right). Each has its own tabs; drag a tab from one to the other."><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10"/><path d="M8 3v10"/></svg></button>
+        <button data-layout="rows" aria-pressed="false" title="Two panes one above the other (top and bottom). Each has its own tabs; drag a tab from one to the other."><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10"/><path d="M2 8h12"/></svg></button>
+      </div>
+    </div>
+    <div class="toolbar" hidden>
+      <span class="status"></span>
+      <span class="summary muted"></span>
+      <span class="script-status" hidden><span class="script-name"></span> <button data-action="stop-script">Stop</button></span>
+      <span class="spacer"></span>
+      <span class="lines" title="Control lines. DTR and RTS are driven by you: click to toggle. CTS, DSR, DCD and RI are driven by the device and only shown here.">
+        <button data-action="line-dtr" aria-pressed="false">DTR</button><button data-action="line-rts" aria-pressed="false">RTS</button>
+        <span class="led" data-led="cts">CTS</span><span class="led" data-led="dsr">DSR</span><span class="led" data-led="dcd">DCD</span><span class="led" data-led="ri">RI</span>
+      </span>
+      <span class="vsep"></span>
+      <button data-action="port" title="Close the port, or open it again, keeping the lines on screen">Close port</button>
+      <button data-action="break" title="Send a break signal: a long pause on the line that some devices use as an attention or reset signal">Break</button>
+      <button data-action="clear" title="Clear the lines on screen (Ctrl+Shift+L)">Clear</button>
+      <button data-action="reset" title="Reset the terminal: forget the screen modes the device switched on (colours, cursor keys, alternate screen) and clear it. Use it when the screen is garbled.">Reset</button>
+      <button data-action="log" aria-pressed="false" title="Start or stop writing the log file. Needs a log file set in the session settings.">Log</button>
+      <span class="vsep"></span>
+      <button data-action="settings" title="Settings of this session">Settings</button>
+      <button data-action="font-down" title="Smaller text" aria-label="Smaller text">A-</button>
+      <button data-action="font-up" title="Larger text" aria-label="Larger text">A+</button>
+    </div>
+    <div class="workspace">
+      <div class="terminals"><p class="empty muted">Open a session from the list on the left, or a port from Serial ports.</p></div>
+    </div>
+  </section>
+</template>
+<!-- Editing a session or a script happens in this dialog. -->
+<dialog id="panel" aria-label="Edit">
+        <form id="profile-form" class="panel-page" autocomplete="off">
+          <header><h2 id="profile-title">Profile</h2></header>
+          <div class="grid">
+            <label title="The name this session has in the list on the left, for example &quot;Router console&quot; or &quot;Dev board&quot;.">Name <input name="name" required spellcheck="false"></label>
+            <label title="Sessions and scripts are organised in groups, like folders. A script is offered only for sessions of its group. Leave empty (or type General) to keep it in the General group.">Group <input name="group" list="groups" spellcheck="false" placeholder="General"></label>
+            <label title="The serial port to open on the computer running termdeck. On Windows it looks like COM3 (see Device Manager); on Linux /dev/ttyUSB0 or /dev/ttyACM0. The ports found are listed at the top of the left column and suggested here.">Port <input name="device" required list="ports" spellcheck="false"></label>
+            <label title="The speed of the line, in bits per second. It must be the same on the device, otherwise you see garbage. Common values: 9600, 115200. Check the device&#x27;s manual; 115200 is a frequent default.">Baud <input name="baud" type="number" min="50" value="115200"></label>
+            <label title="Number of data bits in each character. Almost every device uses 8. Change it only if the device&#x27;s manual says so.">Data bits <select name="dataBits"><option>8</option><option>7</option><option>6</option><option>5</option></select></label>
+            <label title="A simple error check added to each character. None is by far the most common (with 8 data bits). Use Even, Odd, Mark or Space only if the device requires it.">Parity <select name="parity"><option value="none">None</option><option value="even">Even</option><option value="odd">Odd</option><option value="mark">Mark</option><option value="space">Space</option></select></label>
+            <label title="Number of stop bits marking the end of each character. 1 is the usual value; use 2 (or 1.5) only if the device&#x27;s manual says so.">Stop bits <select name="stopBits"><option>1</option><option>1.5</option><option>2</option></select></label>
+            <label title="How the two sides slow each other down to avoid losing data. None: no control (the usual case). RTS/CTS: uses two wires of the cable and needs a cable with them. XON/XOFF: uses two special characters inside the data, so binary data should not be sent. DSR/DTR: uses two other wires; available on Windows only.">Flow control <select name="flow"><option value="none">None</option><option value="rtscts">RTS/CTS</option><option value="xonxoff">XON/XOFF</option><option value="dsrdtr">DSR/DTR (Windows only)</option></select></label>
+            <label title="What the Enter key sends to the device to end a command. Most devices expect CR (the default). Try CR LF for DOS-style devices, or LF for Unix-style ones, if commands are not accepted.">Enter sends <select name="enter"><option value="cr">CR</option><option value="lf">LF</option><option value="crlf">CR LF</option></select></label>
+            <label title="Character set the device uses. Leave it on UTF-8 unless the device prints wrong characters for accents or symbols; many older devices use ISO-8859-1 (Latin-1), Windows-1252 or CP437/CP850 (the old DOS sets, which also hold box-drawing characters). What you type is converted the same way.">Character set <select name="charset"><option value="utf-8">UTF-8</option><option value="iso-8859-1">ISO-8859-1 (Latin-1)</option><option value="iso-8859-2">ISO-8859-2 (Central Europe)</option><option value="iso-8859-15">ISO-8859-15 (Latin-9)</option><option value="windows-1250">Windows-1250</option><option value="windows-1251">Windows-1251 (Cyrillic)</option><option value="windows-1252">Windows-1252</option><option value="cp437">CP437 (DOS)</option><option value="cp850">CP850 (DOS Europe)</option><option value="cp866">CP866 (DOS Cyrillic)</option><option value="koi8-r">KOI8-R</option><option value="koi8-u">KOI8-U</option><option value="macintosh">Macintosh</option></select></label>
+          </div>
+          <div class="checks">
+            <label class="check" title="DTR (Data Terminal Ready) is a control wire. Keep it ticked unless you know better. Some boards, such as Arduino and ESP32, reset when it changes, so untick it to open the port without resetting them. You can also toggle it later from the toolbar."><input name="dtr" type="checkbox"> DTR</label>
+            <label class="check" title="RTS (Request To Send) is a control wire, often used for flow control. Some boards (ESP32 for example) use it to reset or to enter their boot loader. You can also toggle it later from the toolbar."><input name="rts" type="checkbox"> RTS</label>
+            <label class="check" title="For devices that have no line editor of their own. You type and correct the line here (Backspace, Ctrl+U to erase the line, Ctrl+W to erase a word, Up and Down for the history) and it is sent only when you press Enter. Turn the device&#x27;s own echo off, or you will see every line twice."><input name="lineEdit" type="checkbox"> Line editing</label>
+            <label class="check" title="Shows on screen what you type, as the device does not send it back. Tick it if you type but see nothing; untick it if every character appears twice."><input name="localEcho" type="checkbox"> Local echo</label>
+          </div>
+          <fieldset>
+            <legend>Markers</legend>
+            <div class="grid">
+              <label title="Text added at the start of each line received from the device, to tell it apart from what you sent. For example &quot;RX&gt; &quot; (keep the trailing space if you want one). Leave empty for nothing.">Received <input name="rxMarker" spellcheck="false"></label>
+              <label title="Text added at the start of each line you send, to tell it apart from what the device sent. For example &quot;TX&gt; &quot;. It appears for lines termdeck shows itself: line editing, local echo and scripts. A device that echoes your typing shows it as received text. Leave empty for nothing.">Sent <input name="txMarker" spellcheck="false"></label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Log</legend>
+            <label title="Where to save everything sent and received, one line each. Leave empty to keep no log. {name}, {date} and {time} are replaced by the session name, the day and the time, for example logs/{name}-{date}.log. The file is created only once the port is open, and is added to if it exists.">File <input name="logPath" spellcheck="false" placeholder="logs/{name}-{date}.log"></label>
+            <div class="grid">
+              <label title="What to do when the log file is already there when the port opens. Append: add to the end. Overwrite: start the file again. Ask: you are asked each time.">If the file exists <select name="logExisting"><option value="append">Append</option><option value="overwrite">Overwrite</option><option value="ask">Ask</option></select></label>
+            </div>
+            <div class="checks">
+              <label class="check" title="Leave escape sequences (colours, cursor moves) and control characters out of the log so it reads as plain text. A Backspace erases the character before it."><input name="logPrintable" type="checkbox"> Printable only</label>
+              <label class="check" title="Start the log with a line saying when it was opened, the port and the speed."><input name="logHeader" type="checkbox"> Header line</label>
+            </div>
+            <div class="grid">
+              <label title="Text written at the start of each received line in the log file, for example &quot;RX &quot;. Leave empty for nothing. Independent of the markers shown on screen.">Received <input name="logRxMarker" spellcheck="false"></label>
+              <label title="Text written at the start of each sent line in the log file, for example &quot;TX &quot;. Leave empty for nothing. Independent of the markers shown on screen.">Sent <input name="logTxMarker" spellcheck="false"></label>
+            </div>
+          </fieldset>
+          <details id="advanced">
+            <summary>Advanced</summary>
+            <div class="checks">
+              <label class="check" title="Fixes text that shifts to the right line after line (a staircase). Tick it if the device ends its lines with only LF (line feed): the cursor then also returns to the start of the line."><input name="implicitCR" type="checkbox"> CR in every LF</label>
+              <label class="check" title="Fixes lines that overwrite each other on the same row. Tick it if the device ends its lines with only CR (carriage return): the cursor then also moves down a line."><input name="implicitLF" type="checkbox"> LF in every CR</label>
+              <label class="check" title="Makes the cursor in the lines blink."><input name="cursorBlink" type="checkbox"> Blinking cursor</label>
+              <label class="check" title="When ticked, closing a tab (or the browser page) while its port is open asks first: click the tab&#x27;s close button a second time to confirm."><input name="warnClose" type="checkbox"> Ask before closing</label>
+            </div>
+            <div class="grid">
+              <label title="The code sent when you press Backspace. DEL (the default) suits most devices; choose BS if Backspace does not erase, or shows ^? or ^H.">Backspace sends <select name="backspace"><option value="del">DEL (^?)</option><option value="bs">BS (^H)</option></select></label>
+              <label title="What happens when the device sends the bell character (Ctrl+G), for example after a mistyped command. Flash: the lines flash briefly. Beep: a short sound. Both, or Nothing.">Bell <select name="bell"><option value="visual">Flash</option><option value="sound">Beep</option><option value="both">Both</option><option value="none">Nothing</option></select></label>
+              <label title="Colours of the lines. System follows the light or dark setting of your computer.">Theme <select name="theme"><option value="auto">System</option><option value="dark">Dark</option><option value="light">Light</option></select></label>
+              <label title="Size of the text in the lines, from 6 to 72. You can also change it while connected with the A+ and A- buttons.">Font size <input name="fontSize" type="number" min="6" max="72" value="14"></label>
+              <label title="Name of the font to use, for example Consolas or Fira Code, or several separated by commas (the first one installed is used). Leave empty for the default. Pick a fixed-width font.">Font <input name="fontFamily" spellcheck="false"></label>
+              <label title="Shape of the cursor in the lines.">Cursor <select name="cursor"><option value="block">Block</option><option value="bar">Bar</option><option value="underline">Underline</option></select></label>
+              <label title="How many lines you can scroll back to. A bigger number uses more memory.">Scrollback <input name="scrollback" type="number" min="100" max="1000000" value="10000"></label>
+            </div>
+                      <fieldset>
+              <legend>Keyboard</legend>
+              <div class="grid">
+                <label title="The codes sent by Home and End. xterm: what the browser terminal normally sends. Standard: ESC[1~ and ESC[4~ (PuTTY&#x27;s default). rxvt: ESC[H and ESC Ow. Choose another one if Home and End do nothing, or print odd characters, on the device.">Home and End <select name="homeEnd"><option value="xterm">xterm</option><option value="standard">Standard</option><option value="rxvt">rxvt</option></select></label>
+                <label title="The codes sent by F1 to F12 (and the edit keys for VT400 and SCO). xterm is what the browser terminal normally sends. ESC[n~ is the VT220 style; Linux console, VT400, VT100+ and SCO are for devices that expect exactly those. Use the one in the device&#x27;s manual.">Function keys <select name="funcKeys"><option value="xterm">xterm</option><option value="tilde">ESC[n~</option><option value="linux">Linux console</option><option value="vt400">VT400</option><option value="vt100p">VT100+</option><option value="sco">SCO</option></select></label>
+              </div>
+              <div class="checks">
+                <label class="check" title="The arrow keys send ESC O A instead of ESC [ A from the start. Some devices expect it without switching it on themselves."><input name="appCursor" type="checkbox"> App cursor keys</label>
+                <label class="check" title="Ignore the device when it asks for application cursor keys: the arrow keys always send the normal codes."><input name="noAppCursor" type="checkbox"> Block app cursor keys</label>
+                <label class="check" title="The numeric keypad sends escape codes (ESC O p...) instead of digits from the start. Rarely needed."><input name="appKeypad" type="checkbox"> App keypad</label>
+                <label class="check" title="Ignore the device when it asks for the application keypad: the numeric keypad always types digits."><input name="noAppKeypad" type="checkbox"> Block app keypad</label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Terminal</legend>
+              <label title="Text sent back when the device sends ENQ (Ctrl+E), so it can ask what terminal it talks to. Leave empty to send nothing.">Answerback <input name="answerback" spellcheck="false"></label>
+              <div class="checks">
+                <label class="check" title="When a line is longer than the screen, continue on the next row. Untick for devices that expect long lines to be cut off."><input name="autoWrap" type="checkbox"> Wrap long lines</label>
+                <label class="check" title="Cursor positions are counted from the top of the scrolling region, as the old DEC terminals did. Leave off unless the device&#x27;s manual asks for it."><input name="originMode" type="checkbox"> Origin mode</label>
+                <label class="check" title="Many devices can set a window title. By default it is shown in the tooltip of the tab and next to the session summary; tick this to ignore it."><input name="ignoreTitle" type="checkbox"> Ignore device title</label>
+                <label class="check" title="Some programs on the device ask to receive mouse clicks. Tick this to keep the mouse for selecting and copying text."><input name="noMouseReport" type="checkbox"> No mouse reports</label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Mouse and paste</legend>
+              <div class="grid">
+                <label title="What a right click does. Copy or paste: copies the selected text, or pastes when nothing is selected. Paste: always pastes. Nothing: the browser&#x27;s own menu.">Right click <select name="rightClick"><option value="copypaste">Copy or paste</option><option value="paste">Paste</option><option value="none">Nothing</option></select></label>
+              </div>
+              <div class="checks">
+                <label class="check" title="Whatever you select with the mouse is copied to the clipboard at once."><input name="copyOnSelect" type="checkbox"> Copy on select</label>
+                <label class="check" title="Pasted text normally loses control characters (except line breaks and tabs), so pasting cannot send escape codes to the device. Tick this to paste them as they are."><input name="pasteControls" type="checkbox"> Paste control chars</label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Colours</legend>
+              <label title="Overrides colours of the theme, one per line as NAME=#rrggbb. Names: foreground, background, cursor, selection, black, red, green, yellow, blue, magenta, cyan, white, and brightBlack... brightWhite. Example: background=#101820">Colour lines <textarea name="colours" rows="4" spellcheck="false" placeholder="background=#101820"></textarea></label>
+              <div class="grid">
+                <label title="How bold text shows. Bright colour: the colour gets brighter. Bold font: only the font gets heavier. Both: bold font in a brighter colour.">Bold text <select name="bold"><option value="colour">Bright colour</option><option value="font">Bold font</option><option value="both">Both</option></select></label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Bell</legend>
+              <div class="checks">
+                <label class="check" title="When the bell rings in a tab you are not looking at, its tab flashes until you open it."><input name="bellTab" type="checkbox"> Flash the tab</label>
+              </div>
+              <label title="A sound to play instead of the beep (a short .wav or .mp3, up to 300 KB). It is saved in the session.">Bell sound <input type="file" id="bell-file" accept="audio/*"> <span id="bell-name" class="muted"></span> <button type="button" id="bell-clear" title="Go back to the default beep">Remove</button><input type="hidden" name="bellSound"></label>
+            </fieldset>
+          </details>
+          <p id="profile-error" class="problem" hidden></p>
+          <div class="buttons">
+            <button type="button" id="profile-delete" class="danger">Delete</button>
+            <span class="spacer"></span>
+            <button type="button" data-back>Cancel</button>
+            <button type="submit" class="primary">Save</button>
+            <button type="button" id="profile-connect" class="primary">Save and open</button>
+          </div>
+        </form>
+
+        <form id="script-form" class="panel-page" autocomplete="off" hidden>
+          <header><h2 id="script-title">Script</h2></header>
+          <div class="grid">
+            <label title="The name this session has in the list on the left, for example &quot;Router console&quot; or &quot;Dev board&quot;.">Name <input name="name" required spellcheck="false"></label>
+            <label title="Sessions and scripts are organised in groups, like folders. A script is offered only for sessions of its group. Leave empty (or type General) to keep it in the General group.">Group <input name="group" list="groups" spellcheck="false" placeholder="General"></label>
+          </div>
+          <label title="The commands to send, one per line. The Enter key chosen in the session is added to each one, so write only the text, for example &quot;help&quot;. Empty lines at the end are ignored.">Commands
+            <textarea name="commands" rows="10" spellcheck="false" required></textarea></label>
+          <div class="grid">
+            <label title="Waiting time after each command before the next one is sent, in milliseconds (1000 = 1 second). Give the device time to answer.">Pause (ms) <input name="delayMs" type="number" min="0" max="3600000" value="1000"></label>
+            <label title="When looping: how many times to run the whole list. 0 means keep going until you press Stop.">Rounds <input name="count" type="number" min="0" value="0"></label>
+          </div>
+          <div class="checks"><label class="check" title="Run the commands again and again, instead of once. Stop it with the Stop button."><input name="loop" type="checkbox"> Loop</label></div>
+          <p id="script-error" class="problem" hidden></p>
+          <div class="buttons">
+            <button type="button" id="script-delete" class="danger">Delete</button>
+            <span class="spacer"></span>
+            <button type="button" data-back>Cancel</button>
+            <button type="submit" class="primary">Save</button>
+          </div>
+        </form>
+</dialog>
+<dialog id="log-ask" aria-label="Log file exists">
+  <form method="dialog">
+    <p id="log-ask-text"></p>
+    <div class="buttons">
+      <span class="spacer"></span>
+      <button value="none" title="Open the port without writing a log this time">Do not log</button>
+      <button value="overwrite" class="danger" title="Erase the old content and start the file again">Overwrite</button>
+      <button value="append" class="primary" title="Add to the end of the existing file">Append</button>
+    </div>
+  </form>
+</dialog>
+<datalist id="ports"></datalist>
+<datalist id="groups"></datalist>
+
+<script src="/vendor/xterm.js"></script>
+<script src="/vendor/addon-fit.js"></script>
+<script src="/keys.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
