@@ -237,3 +237,5 @@ option[value=cmd] { color: var(--t-cmd); }
 .viewbar button[data-graph][aria-pressed=true] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .backup { display: inline-flex; gap: 4px; }
 .backup button { min-height: 22px; padding: 1px 8px; font-weight: 400; }
+.sendbar label.check-hint { display: inline-flex; align-items: center; gap: 4px; margin: 0; color: var(--t); font-weight: 600; white-space: nowrap; }
+.sendbar [data-send-check] { color: var(--t); border-color: var(--t); }

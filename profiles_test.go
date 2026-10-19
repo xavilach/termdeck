@@ -219,7 +219,11 @@ func TestQuickSendsAreParsedAndValidated(t *testing.T) {
 	if got[0].End != "cr" || got[0].Data != "41 42" || got[1].End != "" || got[5].Data != "a | b" || got[5].End != "lf" {
 		t.Errorf("parsed %+v", got)
 	}
-	for _, bad := range []string{"no bars", "x | float | 1", " | text | a", "x | hex | 4", "x | dec | 256", "x | bin | 102", "x | cmd | speed=1", "x | text | a | end=never", strings.Repeat("n", 41) + " | text | a"} {
+	withCheck, err := parseQuickSends("Modbus | hex | 01 03 00 00 00 01 | check=crc16modbus | end=none")
+	if err != nil || withCheck[0].Check != "crc16modbus" || withCheck[0].End != "none" || withCheck[0].Data != "01 03 00 00 00 01" {
+		t.Errorf("%v %+v", err, withCheck)
+	}
+	for _, bad := range []string{"x | hex | 41 | check=crc99", "no bars", "x | float | 1", " | text | a", "x | hex | 4", "x | dec | 256", "x | bin | 102", "x | cmd | speed=1", "x | text | a | end=never", strings.Repeat("n", 41) + " | text | a"} {
 		if _, err := parseQuickSends(bad); err == nil {
 			t.Errorf("%q should be refused", bad)
 		}

@@ -69,17 +69,32 @@ test("bufferText joins wrapped rows and drops the empty rows at the end", () => 
 });
 
 test("parseQuickSends", () => {
+  assert.deepEqual(F.parseQuickSends("M | hex | 01 03 | check=crc16modbus | end=none"), [{ name: "M", type: "hex", data: "01 03", end: "none", check: "crc16modbus" }]);
   const got = F.parseQuickSends("# c\nReset | hex | 41 42 | end=cr\nHello | TEXT | AT\\r\nPipe | text | a | b | end=lf\nbroken\n | text | x\n");
   assert.deepEqual(got, [
-    { name: "Reset", type: "hex", data: "41 42", end: "cr" },
-    { name: "Hello", type: "text", data: "AT\\r", end: "" },
-    { name: "Pipe", type: "text", data: "a | b", end: "lf" },
+    { name: "Reset", type: "hex", data: "41 42", end: "cr", check: "none" },
+    { name: "Hello", type: "text", data: "AT\\r", end: "", check: "none" },
+    { name: "Pipe", type: "text", data: "a | b", end: "lf", check: "none" },
   ]);
 });
 
 test("seriesNames", () => {
   assert.deepEqual(F.seriesNames("# c\nTemp | Temperature: | degC\nTick | tick \nHum | /hum=([\\d.]+)%/\nnone\n | x"), ["Temp", "Tick", "Hum"]);
   assert.deepEqual(F.seriesNames(""), []);
+});
+
+test("checksums match the published check values of 123456789", () => {
+  const data = [...Buffer.from("123456789")];
+  const hex = (kind) => F.checksum(kind, data).map((b) => b.toString(16).padStart(2, "0")).join("");
+  assert.equal(hex("sum8"), "dd");
+  assert.equal(hex("xor8"), "31");   // 0x31 ^ 0x32 ^ ... ^ 0x39
+  assert.equal(hex("crc8"), "f4");
+  assert.equal(hex("crc16modbus"), "374b");  // 0x4B37, low byte first
+  assert.equal(hex("crc16ccitt"), "29b1");
+  assert.equal(hex("crc16xmodem"), "31c3");
+  assert.equal(hex("crc32"), "2639f4cb");    // 0xCBF43926, low byte first
+  assert.deepEqual(F.checksum("none", data), []);
+  assert.deepEqual(F.checksum("crc16modbus", []), [0xff, 0xff]);
 });
 
 test("b64", () => {

@@ -30,6 +30,7 @@ function syncBars(pane) {
   const end = pane.sendbar.querySelector("[data-send-end]");
   end.value = tab.sendEnd.mode;
   pane.sendbar.querySelector("[data-send-end-custom]").value = tab.sendEnd.custom;
+  pane.sendbar.querySelector("[data-send-check]").value = tab.sendCheck;
   showEnding(pane);
 }
 
@@ -55,6 +56,7 @@ function showEnding(pane) {
   const mode = pane.sendbar.querySelector("[data-send-end]").value;
   pane.sendbar.querySelector(".end-hint").hidden = pane.sendbar.dataset.type === "cmd";
   pane.sendbar.querySelector("[data-send-end-custom]").hidden = mode !== "custom";
+  pane.sendbar.querySelector(".check-hint").hidden = !["hex", "dec", "bin"].includes(pane.sendbar.dataset.type);
 }
 
 // What the send bar adds after the data, as bytes.
@@ -204,14 +206,14 @@ function submitSend(pane, auto = false) {
   const type = pane.sendbar.querySelector("[data-send-type]").value;
   const text = pane.sendbar.querySelector("[data-send-text]").value;
   if (!text && type !== "text") return false;
-  if (!sendData(tab, type, text, type === "cmd" ? [] : endingBytes(tab))) return false;
+  if (!sendData(tab, type, text, type === "cmd" ? [] : endingBytes(tab), tab.sendCheck)) return false;
   rememberSent(tab, { type, text });
   if (!auto) pane.sendbar.querySelector("[data-send-text]").value = "";
   return true;
 }
 
 // Send data of a type with its end (bytes), and show it when Local echo is on. Says whether it went out.
-function sendData(tab, type, text, ending) {
+function sendData(tab, type, text, ending, check = "none") {
   try {
     if (type === "cmd") {
       tab.ws.send(JSON.stringify({ type: "steps", data: text }));
@@ -221,7 +223,7 @@ function sendData(tab, type, text, ending) {
       echoTx(tab, text, ENC.encode(data), text.length + 32);
     } else {
       const numbers = parseNumbers(type, text);
-      const bytes = Uint8Array.from([...numbers, ...ending]);
+      const bytes = Uint8Array.from([...numbers, ...checksum(check, numbers), ...ending]);
       sendRaw(tab, bytes);
       echoTx(tab, Array.from(bytes, hex2).join(" "), bytes, bytes.length * 3 + 32);
     }
@@ -242,7 +244,7 @@ function quickEnding(tab, entry) {
 
 function sendQuick(pane, entry) {
   const tab = pane.active;
-  if (tab?.state === "connected") sendData(tab, entry.type, entry.data, quickEnding(tab, entry));
+  if (tab?.state === "connected") sendData(tab, entry.type, entry.data, quickEnding(tab, entry), entry.check);
 }
 
 function showQuick(pane) {
@@ -432,6 +434,12 @@ function wireSendBar(pane) {
   };
   send("[data-send-end]").addEventListener("change", () => { endChange(); if (send("[data-send-end]").value === "custom") send("[data-send-end-custom]").focus(); });
   send("[data-send-end-custom]").addEventListener("input", endChange);
+  send("[data-send-check]").addEventListener("change", () => { if (pane.active) pane.active.sendCheck = send("[data-send-check]").value; });
+  for (const [kind, { label }] of Object.entries(CHECKS)) {
+    const option = el("option", "", label);
+    option.value = kind;
+    send("[data-send-check]").append(option);
+  }
   input.addEventListener("input", () => regroup(input, send("[data-send-type]").value));
   // Characters the type cannot have are not accepted, typed or pasted.
   input.addEventListener("beforeinput", (e) => {

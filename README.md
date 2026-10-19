@@ -24,7 +24,8 @@ GOOS=windows GOARCH=amd64 go build -o termdeck.exe .   # Windows
 - Graph (Graph button): numbers the server takes from the received lines (Go regular expressions: a pattern cannot run away on a long line), set per session under Advanced as `name | prefix | suffix` or `name | /regex/`, drawn over time (windows from 10 s to all, each series on its own scale if wanted), Save CSV.
 - Marks (Mark button, Alt+Shift+M): a line in the output and in the log; ◀ ▶ jump between them.
 - Reconnect (session option): when the port goes away, it is opened again every second until it is back.
-- Quick sends (Advanced): buttons above the send bar, one per line `name | type | data` (`| end=cr` to choose the end).
+- Quick sends (Advanced): buttons above the send bar, one per line `name | type | data` (`| end=cr`, `| check=crc16modbus` to choose the end and a check).
+- Check (send bar, byte types): add a sum, XOR, CRC-8, CRC-16 (Modbus, CCITT, XMODEM) or CRC-32 after the data.
 - Slow send (Advanced): a pause after each character and after line ends, for devices that lose data; Stop and Cancel drop what is waiting.
 - Rx/Tx counters, Find (Ctrl+Shift+F, regex), triggers (`login: => admin`, `/regex/ => @hex=0D`; paused when they loop, e.g. over an echo).
 - Export and Import (top of the left column): sessions, scripts and groups in one file; items with the same name are replaced, nothing is stored if one is invalid.

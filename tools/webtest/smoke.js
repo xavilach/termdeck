@@ -284,6 +284,18 @@ const tab = () => run("tabs[0]", "x");
   q("[data-graph]").click();
   check("and the button hides it again", q(".graphbar").hidden);
 
+  // a check is added after hex data
+  const checkTab = run("tabs[0]", "x");
+  const checkWs = checkTab.ws; json(checkWs, { type: "state", state: "connected", message: "" });
+  q("[data-send-type]").value = "hex"; fire(q("[data-send-type]"), "change");
+  q("[data-send-check]").value = "xor8"; fire(q("[data-send-check]"), "change");
+  const fromCheck = checkWs.sent.length;
+  q("[data-send-text]").value = "01 02 04"; q("[data-send]").click();
+  const checked = checkWs.sent.slice(fromCheck).find((m) => m.type === "raw");
+  check("a check is added after hex data (XOR of 01 02 04 is 07)", checked && Buffer.from(checked.bytes, "base64").toString("hex") === "010204070a", checked);  // the data, its check, then the End (LF)
+  q("[data-send-check]").value = "none"; fire(q("[data-send-check]"), "change");
+  q("[data-send-type]").value = "text"; fire(q("[data-send-type]"), "change");
+
   // sending jumps to the bottom of the output
   json(run("tabs[0].ws", "x"), { type: "state", state: "connected", message: "" });
   const bottomTab = run("tabs[0]", "x"); const bottomBefore = bottomTab.term.bottomed || 0;

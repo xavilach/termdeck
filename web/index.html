@@ -113,6 +113,8 @@
       <label class="end-hint" title="What is added after the data, for Text, Hex, Decimal and Binary. None sends the data alone. Custom is written like \r \n \t \xNN. It starts as the Enter key of the session.">End
         <select data-send-end><option value="none">None</option><option value="cr">CR</option><option value="lf">LF</option><option value="crlf">CR LF</option><option value="custom">Custom</option></select>
         <input data-send-end-custom hidden spellcheck="false" placeholder="\r\n" aria-label="Custom end"></label>
+      <label class="check-hint" title="Bytes added after the data to check it: a sum, an XOR or a CRC. For Hex, Decimal and Binary only. The check bytes come before the End.">Check
+        <select data-send-check><option value="none">None</option></select></label>
       <label class="check auto" title="Send the data again and again, every so many milliseconds, until you untick it, change tab or the port closes. The input is kept while it runs."><input type="checkbox" data-auto> Auto</label>
       <input type="number" data-auto-ms min="10" max="3600000" step="100" value="1000" title="Milliseconds between two automatic sends" aria-label="Milliseconds between automatic sends"><span class="muted">ms</span>
       <button data-send class="primary">Send</button>
@@ -225,7 +227,7 @@
             </fieldset>
             <fieldset>
               <legend>Quick sends</legend>
-              <label title="Buttons above the send bar, one per line: name | type | data. The type is text, hex, dec, bin or cmd. Text gets the line end of the session, the others nothing; add | end=cr (or lf, crlf, none, session) to choose. Examples: Version | text | AT+GMR    Reset | hex | 7E 01 00 7E | end=none    Wiggle | cmd | dtr=0; wait=100; dtr=1. Lines starting with # are notes.">Buttons <textarea name="quickSends" rows="3" spellcheck="false" placeholder="Version | text | AT+GMR&#10;Reset | cmd | dtr=0; wait=100; dtr=1"></textarea></label>
+              <label title="Buttons above the send bar, one per line: name | type | data. The type is text, hex, dec, bin or cmd. Text gets the line end of the session, the others nothing; add | end=cr (or lf, crlf, none, session) and | check=crc16modbus (or sum8, xor8, crc8, crc16ccitt, crc16xmodem, crc32) to choose. Examples: Version | text | AT+GMR    Reset | hex | 7E 01 00 7E | end=none    Wiggle | cmd | dtr=0; wait=100; dtr=1. Lines starting with # are notes.">Buttons <textarea name="quickSends" rows="3" spellcheck="false" placeholder="Version | text | AT+GMR&#10;Reset | cmd | dtr=0; wait=100; dtr=1"></textarea></label>
             </fieldset>
             <fieldset>
               <legend>Slow send</legend>

@@ -134,16 +134,17 @@ func parseTriggers(text string) ([]trigger, error) {
 
 // quickSend is a button of the send bar: a name and what it sends.
 type quickSend struct {
-	Name, Type, Data, End string
+	Name, Type, Data, End, Check string
 }
 
 var (
-	quickTypes = []string{"text", "hex", "dec", "bin", "cmd"}
-	quickEnds  = []string{"session", "none", "cr", "lf", "crlf"}
-	quickEnd   = regexp.MustCompile(`^\s*end=(\w+)\s*$`)
+	quickTypes  = []string{"text", "hex", "dec", "bin", "cmd"}
+	quickEnds   = []string{"session", "none", "cr", "lf", "crlf"}
+	quickChecks = []string{"none", "sum8", "xor8", "crc8", "crc16modbus", "crc16ccitt", "crc16xmodem", "crc32"}
+	quickOption = regexp.MustCompile(`^\s*(end|check)=(\w+)\s*$`)
 )
 
-// parseQuickSends reads lines "name | type | data" and "name | type | data | end=cr". The type is text,
+// parseQuickSends reads lines "name | type | data" with options after the data ("| end=cr", "| check=crc16modbus"). The type is text,
 // hex, dec, bin or cmd. The end (session, none, cr, lf, crlf) is the Enter key of the session for text
 // and none for the others when it is left out. Empty lines and lines starting with # are skipped.
 func parseQuickSends(text string) ([]quickSend, error) {
@@ -158,8 +159,16 @@ func parseQuickSends(text string) ([]quickSend, error) {
 			return nil, fmt.Errorf("quick send %q: use  name | type | data", line)
 		}
 		q := quickSend{Name: strings.TrimSpace(parts[0]), Type: strings.ToLower(strings.TrimSpace(parts[1]))}
-		if last := parts[len(parts)-1]; len(parts) > 3 && quickEnd.MatchString(last) {
-			q.End = quickEnd.FindStringSubmatch(last)[1]
+		for len(parts) > 3 {
+			m := quickOption.FindStringSubmatch(parts[len(parts)-1])
+			if m == nil {
+				break
+			}
+			if m[1] == "end" {
+				q.End = m[2]
+			} else {
+				q.Check = m[2]
+			}
 			parts = parts[:len(parts)-1]
 		}
 		q.Data = strings.TrimSpace(strings.Join(parts[2:], "|"))
@@ -171,6 +180,9 @@ func parseQuickSends(text string) ([]quickSend, error) {
 		}
 		if q.End != "" && !oneOf(q.End, quickEnds) {
 			return nil, fmt.Errorf("quick send %q: the end is one of %s", q.Name, strings.Join(quickEnds, ", "))
+		}
+		if q.Check != "" && !oneOf(q.Check, quickChecks) {
+			return nil, fmt.Errorf("quick send %q: the check is one of %s", q.Name, strings.Join(quickChecks, ", "))
 		}
 		if err := checkQuickData(q); err != nil {
 			return nil, fmt.Errorf("quick send %q: %w", q.Name, err)

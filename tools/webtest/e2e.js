@@ -318,6 +318,25 @@ async function startServer() {
   check("a broken file is reported and changes nothing", /Import failed/.test(await page.locator("#problem").textContent()));
   await page.evaluate(async () => { await api("/api/profiles/Imported%20one", { method: "DELETE" }); await loadProfiles(); });
 
+  // a check added to hex data: the Modbus frame "read register 0 of slave 1" gets its CRC 84 0A
+  await page.locator("#port-tree .item.port", { hasText: "fake:echo" }).dblclick();
+  const echoTab = await page.evaluate(() => tabs.findIndex((t) => t.profile.device === "fake:echo"));
+  await page.selectOption(".sendbar [data-send-type]", "hex");
+  check("the Check box shows for hex data and not for text", await page.locator(".sendbar [data-send-check]").first().isVisible());
+  await page.selectOption(".sendbar [data-send-check]", "crc16modbus");
+  await page.selectOption(".sendbar [data-send-end]", "none");
+  await page.selectOption(".viewbar [data-view]", "hex");
+  const checkInput = page.locator(".sendbar [data-send-text]").first();
+  await checkInput.fill("01 03 00 00 00 01");
+  await checkInput.press("Enter");
+  s = await waitScreen(/01 03 00 00 00 01 84 0a/, echoTab);
+  check("CRC-16 Modbus is added after the data", /01 03 00 00 00 01 84 0a/.test(s), s);
+  await page.selectOption(".sendbar [data-send-type]", "text");
+  check("and the Check box is hidden for text", !(await page.locator(".sendbar [data-send-check]").first().isVisible()));
+  await page.selectOption(".viewbar [data-view]", "text");
+  await page.locator(".tab", { hasText: "fake:echo" }).locator(".close").click();
+  await page.locator(".tab", { hasText: "fake:echo" }).locator(".close").click();
+
   // null-modem pair
   await page.locator("#port-tree .item.port", { hasText: "fake:link-a" }).dblclick();
   await page.locator("#port-tree .item.port", { hasText: "fake:link-b" }).dblclick();

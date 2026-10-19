@@ -171,9 +171,11 @@ const Format = (() => {
       if (!line || line.startsWith("#")) continue;
       const parts = line.split("|");
       if (parts.length < 3) continue;
-      const entry = { name: parts[0].trim(), type: parts[1].trim().toLowerCase(), end: "" };
-      const m = parts.length > 3 && /^\s*end=(\w+)\s*$/.exec(parts[parts.length - 1]);
-      if (m) { entry.end = m[1]; parts.pop(); }
+      const entry = { name: parts[0].trim(), type: parts[1].trim().toLowerCase(), end: "", check: "none" };
+      for (let m; parts.length > 3 && (m = /^\s*(end|check)=(\w+)\s*$/.exec(parts[parts.length - 1]));) {
+        entry[m[1]] = m[2];
+        parts.pop();
+      }
       entry.data = parts.slice(2).join("|").trim();
       if (entry.name) out.push(entry);
     }
@@ -186,6 +188,44 @@ const Format = (() => {
       .map((l) => l.split("|")[0].trim()).filter(Boolean);
   }
 
+  // ---- checksums for data written as bytes: the bytes to add after the data
+  function crc(bytes, width, poly, init, reflect, xorOut) {
+    const top = width === 32 ? 0x80000000 : 1 << (width - 1);
+    const mask = width === 32 ? 0xffffffff : (1 << width) - 1;
+    let value = init;
+    for (const byte of bytes) {
+      const b = reflect ? reverseBits(byte, 8) : byte;
+      value ^= width === 32 ? (b << 24) >>> 0 : b << (width - 8);
+      for (let i = 0; i < 8; i++) value = ((value & top ? (value << 1) ^ poly : value << 1) & mask) >>> 0;
+    }
+    if (reflect) value = reverseBits(value, width);
+    return (value ^ xorOut) >>> 0;
+  }
+
+  function reverseBits(value, width) {
+    let out = 0;
+    for (let i = 0; i < width; i++) out = ((out << 1) | ((value >>> i) & 1)) >>> 0;
+    return out;
+  }
+
+  const bytesOfNumber = (value, size, littleEndian) => {
+    const out = Array.from({ length: size }, (_, i) => (value >>> (8 * (size - 1 - i))) & 0xff);
+    return littleEndian ? out.reverse() : out;
+  };
+
+  const CHECKS = {
+    sum8: { label: "Sum (1 byte)", make: (b) => [b.reduce((s, x) => (s + x) & 0xff, 0)] },
+    xor8: { label: "XOR (1 byte)", make: (b) => [b.reduce((s, x) => s ^ x, 0)] },
+    crc8: { label: "CRC-8", make: (b) => bytesOfNumber(crc(b, 8, 0x07, 0, false, 0), 1) },
+    crc16modbus: { label: "CRC-16 Modbus (low byte first)", make: (b) => bytesOfNumber(crc(b, 16, 0x8005, 0xffff, true, 0), 2, true) },
+    crc16ccitt: { label: "CRC-16 CCITT (high byte first)", make: (b) => bytesOfNumber(crc(b, 16, 0x1021, 0xffff, false, 0), 2) },
+    crc16xmodem: { label: "CRC-16 XMODEM (high byte first)", make: (b) => bytesOfNumber(crc(b, 16, 0x1021, 0, false, 0), 2) },
+    crc32: { label: "CRC-32 (low byte first)", make: (b) => bytesOfNumber(crc(b, 32, 0x04c11db7, 0xffffffff, true, 0xffffffff), 4, true) },
+  };
+
+  // The check bytes of a kind ("none" or an unknown kind adds nothing).
+  const checksum = (kind, bytes) => (CHECKS[kind] ? CHECKS[kind].make(Array.from(bytes)) : []);
+
   function b64(bytes) {
     let text = "";
     for (let i = 0; i < bytes.length; i += 8192) text += String.fromCharCode(...bytes.subarray(i, i + 8192));
@@ -193,7 +233,7 @@ const Format = (() => {
   }
 
   return { ENC, hex2, stamp, formatDelta, bufferText, controlName, NEWLINES, unescapeText, textBytes, newlineBytes, shapeText, NUMBERS,
-           parseNumbers, parseQuickSends, seriesNames, ALLOWED, clean, groupDigits, formatBytes, b64 };
+           parseNumbers, parseQuickSends, seriesNames, CHECKS, checksum, ALLOWED, clean, groupDigits, formatBytes, b64 };
 })();
 
 if (typeof module !== "undefined") module.exports = Format;
