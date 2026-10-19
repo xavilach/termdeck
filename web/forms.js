@@ -7,7 +7,7 @@ let editing = null;       // the saved profile being edited, or null for a new o
 
 const DEFAULTS = { baud: 115200, dataBits: 8, parity: "none", stopBits: "1", flow: "none", enter: "cr", dtr: true, rts: true,
                    bell: "visual", theme: "auto", fontSize: 14, cursor: "block", scrollback: 10000,
-                   charset: "utf-8", logExisting: "append", warnClose: true, view: "text", newLine: "terminal", timeMode: "clock", linePauseMs: 0, charDelayMs: 0, lineDelayMs: 0, logMaxMB: 0, logKeep: 5,
+                   charset: "utf-8", logExisting: "append", warnClose: true, view: "text", newLine: "terminal", timeMode: "clock", linePauseMs: 0, charDelayMs: 0, lineDelayMs: 0, rtsMode: "off", rtsDelayMs: 0, logMaxMB: 0, logKeep: 5,
                    bold: "colour", rightClick: "copypaste", autoWrap: true };
 
 function quickProfile(device, baud) {
@@ -61,7 +61,7 @@ function editProfile(profile, prefill = {}) {
 
 function profileFromForm() {
   const p = readForm(form);
-  for (const key of ["baud", "dataBits", "fontSize", "scrollback", "linePauseMs", "charDelayMs", "lineDelayMs", "logMaxMB", "logKeep"]) p[key] = Number(p[key]);
+  for (const key of ["baud", "dataBits", "fontSize", "scrollback", "linePauseMs", "charDelayMs", "lineDelayMs", "rtsDelayMs", "logMaxMB", "logKeep"]) p[key] = Number(p[key]);
   return p;
 }
 

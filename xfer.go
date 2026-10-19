@@ -29,7 +29,8 @@ func (l sessionLink) write(data []byte) error {
 	}
 	l.t.writeMu.Lock()
 	defer l.t.writeMu.Unlock()
-	n, err := port.Write(data)
+	mode, delay := l.t.rs485()
+	n, err := transmit(port, mode, delay, func() (int, error) { return port.Write(data) })
 	l.t.tx.Add(int64(n))
 	return err
 }

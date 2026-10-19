@@ -154,6 +154,13 @@
             <label class="check" title="Show what termdeck sends (the send bar, scripts, trigger replies) in the lines, with the Tx marker. Untick it when you do not want to see it, or when the device echoes it back (then you see it once, as received)."><input name="localEcho" type="checkbox"> Local echo</label>
           </div>
           <fieldset>
+            <legend>RS-485</legend>
+            <div class="grid">
+              <label title="For an RS-485 adapter that is driven by RTS: RTS goes to the sending state while data is sent (high or low, as the adapter needs) and back when it is out. Off leaves RTS alone.">RS-485 direction <select name="rtsMode"><option value="off">Off</option><option value="high">RTS high while sending</option><option value="low">RTS low while sending</option></select></label>
+              <label title="How long RTS stays in the sending state after the last byte (milliseconds), for adapters that need time to finish.">RTS hold (ms) <input name="rtsDelayMs" type="number" min="0" max="1000" value="0"></label>
+            </div>
+          </fieldset>
+          <fieldset>
             <legend>Received data</legend>
             <div class="grid">
               <label title="How received data is shown when the session opens. Hex, Decimal and Binary show each byte as a number, for binary data. You can change it later from the bar above the lines.">View <select name="view"><option value="text">Text</option><option value="hex">Hex</option><option value="dec">Decimal</option><option value="bin">Binary</option></select></label>
@@ -181,12 +188,12 @@
             <label title="Where to save everything sent and received, one line each. Leave empty to keep no log. {name}, {date} and {time} are replaced by the session name, the day and the time, for example logs/{name}-{date}.log. The file is created only once the port is open, and is added to if it exists.">File <input name="logPath" spellcheck="false" placeholder="logs/{name}-{date}.log"></label>
             <div class="grid">
               <label title="What to do when the log file is already there when the port opens. Append: add to the end. Overwrite: start the file again. Ask: you are asked each time.">If the file exists <select name="logExisting"><option value="append">Append</option><option value="overwrite">Overwrite</option><option value="ask">Ask</option></select></label>
+              <label title="Start a new log file when it is this big, in megabytes: the full one is kept as name.log.1 (older ones move up). 0 means one file that grows.">Start a new file at (MB) <input name="logMaxMB" type="number" min="0" value="0"></label>
+              <label title="How many full files are kept besides the current one.">Files kept <input name="logKeep" type="number" min="1" max="1000" value="5"></label>
             </div>
             <div class="checks">
               <label class="check" title="Leave escape sequences (colours, cursor moves) and control characters out of the log so it reads as plain text. A Backspace erases the character before it."><input name="logPrintable" type="checkbox"> Printable only</label>
               <label class="check" title="Start the log with a line saying when it was opened, the port and the speed."><input name="logHeader" type="checkbox"> Header line</label>
-              <label title="Start a new log file when it is this big, in megabytes: the full one is kept as name.log.1 (older ones move up). 0 means one file that grows.">Start a new file at (MB) <input name="logMaxMB" type="number" min="0" value="0"></label>
-              <label title="How many full files are kept besides the current one.">Files kept <input name="logKeep" type="number" min="1" max="1000" value="5"></label>
               <label class="check" title="Start each line of the log with the date and time it began, with milliseconds."><input name="logTimestamps" type="checkbox"> Time on each line</label>
             </div>
             <div class="grid">

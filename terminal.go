@@ -136,6 +136,9 @@ func (t *termSession) openPort(profile Profile, reconnecting bool) bool {
 	t.gen++
 	gen := t.gen
 	t.port, t.profile, t.log, t.codec = port, profile, log, NewCodec(profile.Charset)
+	if profile.RTSMode == "high" || profile.RTSMode == "low" {
+		port.SetRTS(rs485Idle(profile.RTSMode)) // listening until something is sent
+	}
 	t.triggers, _ = parseTriggers(profile.Triggers) // checked by Normalize
 	t.runCtx, t.runStop = context.WithCancel(t.ctx)
 	t.startWriter(profile, t.runCtx)
@@ -345,7 +348,8 @@ func (t *termSession) send(data []byte, raw bool) {
 	}
 	t.writeMu.Lock()
 	defer t.writeMu.Unlock()
-	if n, err := port.Write(out); err == nil {
+	mode, delay := t.rs485()
+	if n, err := transmit(port, mode, delay, func() (int, error) { return port.Write(out) }); err == nil {
 		t.tx.Add(int64(n))
 		log.Write(dirTx, data)
 	}
@@ -434,4 +438,11 @@ func (t *termSession) sendPoints(at time.Time, lines []string, graph []graphSpec
 	if len(values) > 0 {
 		t.sendJSON(map[string]any{"type": "points", "t": at.UnixMilli(), "values": values})
 	}
+}
+
+// rs485 is the direction control of the open port, and its delay.
+func (t *termSession) rs485() (string, time.Duration) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.profile.RTSMode, time.Duration(t.profile.RTSDelayMs) * time.Millisecond
 }

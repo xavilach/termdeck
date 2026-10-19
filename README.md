@@ -28,6 +28,7 @@ GOOS=windows GOARCH=amd64 go build -o termdeck.exe .   # Windows
 - Check (send bar, byte types): add a sum, XOR, CRC-8, CRC-16 (Modbus, CCITT, XMODEM) or CRC-32 after the data.
 - Slow send (Advanced): a pause after each character and after line ends, for devices that lose data; Stop and Cancel drop what is waiting.
 - Highlights (Advanced): `ERROR = red+bold`, `/warn(ing)?/ = orange` colour matching lines. Filter (receive bar): show only lines matching text or /regex/, `!` hides them; the data is kept, so clearing the filter shows everything.
+- RS-485 direction (session option): RTS goes to the sending state while data is sent and back after the last byte (with an optional hold), for adapters driven by RTS.
 - Note line changes (session option): CTS, DSR, DCD and RI changes are written in the output. A session can be duplicated (❐ in the left column).
 - Rx/Tx counters, Find (Ctrl+Shift+F, regex), triggers (`login: => admin`, `/regex/ => @hex=0D`; paused when they loop, e.g. over an echo).
 - Export and Import (top of the left column): sessions, scripts and groups in one file; items with the same name are replaced, nothing is stored if one is invalid.

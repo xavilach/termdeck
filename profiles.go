@@ -77,6 +77,8 @@ type Profile struct {
 	Timestamps    bool   `json:"timestamps"`    // start each line with the time
 	GraphSeries   string `json:"graphSeries"`   // lines "name | prefix | suffix" or "name | /regex/": numbers to draw as lines
 	QuickSends    string `json:"quickSends"`    // lines "name | type | data": buttons of the send bar
+	RTSMode       string `json:"rtsMode"`       // RS-485 direction: off, or RTS high (or low) while sending
+	RTSDelayMs    int    `json:"rtsDelayMs"`    // how long RTS stays in the sending state after the last byte
 	CharDelayMs   int    `json:"charDelayMs"`   // slow send: pause after each character sent
 	LineDelayMs   int    `json:"lineDelayMs"`   // slow send: extra pause after a CR or LF sent
 	Highlights    string `json:"highlights"`    // lines "pattern = colour": colour the received lines that match
@@ -160,6 +162,7 @@ func (p *Profile) Normalize() error {
 		{&p.View, "text", views, "view"},
 		{&p.NewLine, "terminal", newLines, "new line"},
 		{&p.TimeMode, "clock", timeModes, "time"},
+		{&p.RTSMode, "off", rtsModes, "RS-485 direction"},
 	} {
 		if *f.field == "" {
 			*f.field = f.def
@@ -200,6 +203,9 @@ func (p *Profile) Normalize() error {
 		if strings.EqualFold(p.Peer.Device, p.Device) {
 			return errors.New("a tunnel needs two different ports")
 		}
+	}
+	if p.RTSDelayMs < 0 || p.RTSDelayMs > 1000 {
+		return errors.New("the RTS delay is 0 to 1000 ms")
 	}
 	if p.CharDelayMs < 0 || p.CharDelayMs > 5000 || p.LineDelayMs < 0 || p.LineDelayMs > 5000 {
 		return errors.New("send delays are 0 to 5000 ms")

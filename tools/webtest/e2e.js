@@ -643,6 +643,30 @@ async function startServer() {
   await page.locator(".tab .close").first().click();
   await page.locator(".tab .close").first().click();
 
+  // RS-485 direction control: RTS of link-a is high only while it sends, and link-b sees it as CTS
+  await page.evaluate(async () => {
+    await api("/api/profiles", { method: "POST", body: { name: "RS485 A", device: "fake:link-a", rtsMode: "high", rtsDelayMs: 1000 } });
+    await loadProfiles();
+  });
+  await page.locator("#tree .item .name", { hasText: /^RS485 A$/ }).dblclick();
+  await page.locator("#port-tree .item.port", { hasText: "fake:link-b" }).dblclick();
+  await page.waitForFunction(() => tabs.length === 2 && tabs.every((t) => t.state === "connected"));
+  const ctsOfB = () => page.evaluate(() => tabs.find((t) => t.profile.device === "fake:link-b").lines?.cts);
+  await page.waitForFunction(() => tabs.find((t) => t.profile.device === "fake:link-b").lines !== null, null, { timeout: 4000 });
+  check("while idle RTS is low (CTS of the other end is off)", (await ctsOfB()) === false);
+  await page.locator(".tab", { hasText: "RS485 A" }).click();
+  await page.locator(".sendbar [data-send-text]").first().fill("direction");
+  await page.locator(".sendbar [data-send]").first().click();
+  await page.waitForFunction(() => tabs.find((t) => t.profile.device === "fake:link-b").lines?.cts === true, null, { timeout: 4000 });
+  check("RTS goes high while the data is sent", true);
+  await page.waitForFunction(() => tabs.find((t) => t.profile.device === "fake:link-b").lines?.cts === false, null, { timeout: 6000 });
+  check("and low again after the hold time", true);
+  while ((await page.locator(".tab").count()) > 0) {
+    const close = page.locator(".tab .close").first();
+    await close.click();
+    if (await page.locator(".tab .close.confirm").count()) await close.click();
+  }
+
   check("no page errors or console errors", problems.length === 0, problems);
   check("the program reports no data race or panic", !/DATA RACE|panic:/.test(server.child.stderrText), server.child.stderrText.slice(0, 600));
   await browser.close();

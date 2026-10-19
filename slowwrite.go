@@ -44,28 +44,38 @@ func (t *termSession) writeSlowly(ctx context.Context, item outItem, charDelay, 
 		return
 	}
 	flushed := t.flushed.Load()
-	for i, b := range item.out {
-		if t.flushed.Load() != flushed {
-			return
+	mode, delay := t.rs485()
+	t.writeMu.Lock() // the direction stays "sending" for the whole item
+	defer t.writeMu.Unlock()
+	completed := true
+	transmit(port, mode, delay, func() (int, error) {
+		for i, b := range item.out {
+			if t.flushed.Load() != flushed {
+				completed = false
+				return i, nil
+			}
+			n, err := port.Write(item.out[i : i+1])
+			if err != nil {
+				completed = false
+				return i, err
+			}
+			t.tx.Add(int64(n))
+			pause := charDelay
+			if b == '\r' || b == '\n' {
+				pause += lineDelay
+			}
+			select {
+			case <-ctx.Done():
+				completed = false
+				return i + 1, nil
+			case <-time.After(pause):
+			}
 		}
-		t.writeMu.Lock()
-		n, err := port.Write(item.out[i : i+1])
-		t.writeMu.Unlock()
-		if err != nil {
-			return
-		}
-		t.tx.Add(int64(n))
-		pause := charDelay
-		if b == '\r' || b == '\n' {
-			pause += lineDelay
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(pause):
-		}
+		return len(item.out), nil
+	})
+	if completed {
+		log.Write(dirTx, item.logged)
 	}
-	log.Write(dirTx, item.logged)
 }
 
 // flushOut drops what is waiting to be sent, and stops what is being sent.
