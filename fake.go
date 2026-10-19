@@ -37,6 +37,7 @@ var fakeKinds = []fakeKind{
 		go f.every(time.Second, binaryFrame)
 		return nil
 	}},
+	{"flaky", "drops a moment after it opens and is gone for 2 seconds, then comes back: to try Reconnect", setupFlaky},
 	{"link-a", "one end of a null-modem cable: what is written here comes out of fake:link-b", setupLink},
 	{"link-b", "the other end of the cable", setupLink},
 }
@@ -107,6 +108,30 @@ func binaryFrame(n int) []byte {
 		sum += b
 	}
 	return append(frame, sum)
+}
+
+var flakyBack time.Time // the flaky port is there again after this time
+
+// setupFlaky makes a port that is pulled out 400 ms after it opens, and plugged in again 2 s later.
+func setupFlaky(f *fakePort) error {
+	fakeMu.Lock()
+	defer fakeMu.Unlock()
+	if time.Now().Before(flakyBack) {
+		return errors.New("no such device")
+	}
+	go func() {
+		select {
+		case <-f.stop:
+			return
+		case <-time.After(400 * time.Millisecond):
+		}
+		fakeMu.Lock()
+		flakyBack = time.Now().Add(2 * time.Second)
+		fakeMu.Unlock()
+		f.Close()
+	}()
+	f.onWrite = func(p *fakePort, data []byte) { p.feed(data) }
+	return nil
 }
 
 // setupLink makes the port one end of the cable; each end can be open once.

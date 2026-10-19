@@ -883,3 +883,74 @@ func TestStoppingAScriptDropsWhatIsWaitingToBeSentSlowly(t *testing.T) {
 		t.Errorf("%d characters kept coming after Stop", len(rest))
 	}
 }
+
+// states reads the "state" messages until the wanted one comes, and returns all of them.
+func statesUntil(t *testing.T, c *websocket.Conn, ctx context.Context, want string, d time.Duration) []string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(ctx, d)
+	defer cancel()
+	var seen []string
+	for {
+		_, data, err := c.Read(ctx)
+		if err != nil {
+			t.Fatalf("waiting for state %q after %v: %v", want, seen, err)
+		}
+		var m map[string]string
+		if json.Unmarshal(data, &m) == nil && m["type"] == "state" {
+			seen = append(seen, m["state"])
+			if m["state"] == want {
+				return seen
+			}
+		}
+	}
+}
+
+func TestAPortThatCameBackIsOpenedAgainWhenAskedTo(t *testing.T) {
+	ts := newTestServer(t)
+	resetFlaky()
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:flaky", "reconnect": true}})
+	statesUntil(t, c, ctx, "connected", 2*time.Second)
+	if seen := statesUntil(t, c, ctx, "reconnecting", 3*time.Second); seen[len(seen)-1] != "reconnecting" {
+		t.Fatalf("states %v", seen)
+	}
+	if seen := statesUntil(t, c, ctx, "connected", 6*time.Second); len(seen) != 1 {
+		t.Errorf("a quiet reconnect says nothing while it fails, but saw %v", seen)
+	}
+}
+
+func TestWithoutReconnectAPortThatWentAwayStaysEnded(t *testing.T) {
+	ts := newTestServer(t)
+	resetFlaky()
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:flaky"}})
+	statesUntil(t, c, ctx, "connected", 2*time.Second)
+	statesUntil(t, c, ctx, "ended", 3*time.Second)
+}
+
+func TestClosingThePortEndsTheReconnecting(t *testing.T) {
+	ts := newTestServer(t)
+	resetFlaky()
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:flaky", "reconnect": true}})
+	statesUntil(t, c, ctx, "reconnecting", 4*time.Second)
+	sendJSON(t, c, ctx, map[string]any{"type": "close"})
+	statesUntil(t, c, ctx, "closed", time.Second)
+	cctx, cancel := context.WithTimeout(ctx, 3500*time.Millisecond)
+	defer cancel()
+	for {
+		_, data, err := c.Read(cctx)
+		if err != nil {
+			return // nothing came: it stopped
+		}
+		if strings.Contains(string(data), `"connected"`) {
+			t.Fatal("the port was opened again after it was closed")
+		}
+	}
+}
+
+func resetFlaky() {
+	fakeMu.Lock()
+	flakyBack = time.Time{}
+	fakeMu.Unlock()
+}

@@ -249,6 +249,23 @@ async function startServer() {
   await page.locator(".tab", { hasText: "Slow echo" }).locator(".close").click();
   await page.locator(".tab", { hasText: "Slow echo" }).locator(".close").click();
 
+  // reconnect: the flaky virtual port drops 400 ms after it opens and is back 2 s later
+  await page.keyboard.press("Alt+Shift+N");
+  await form.locator("[name=name]").fill("Flaky");
+  await form.locator("[name=device]").fill("fake:flaky");
+  await form.locator("[name=reconnect]").check();
+  await page.click("#profile-connect");
+  await page.waitForSelector(".tab:has-text('Flaky')");
+  await page.waitForFunction(() => /Reconnecting/.test(document.querySelector(".toolbar .status").textContent), null, { timeout: 4000 });
+  check("a port that went away shows Reconnecting and can be stopped", (await page.locator("[data-action=port]").first().textContent()) === "Stop reconnecting");
+  await page.waitForFunction(() => /^Connected/.test(document.querySelector(".toolbar .status").textContent), null, { timeout: 8000 });
+  check("and is opened again by itself when it is back", true);
+  await page.waitForFunction(() => /Reconnecting/.test(document.querySelector(".toolbar .status").textContent), null, { timeout: 4000 });
+  await page.click("[data-action=port]");
+  await sleep(3500);
+  check("Stop reconnecting leaves the port closed", /Port closed/.test(await page.locator(".toolbar .status").first().textContent()));
+  await page.locator(".tab", { hasText: "Flaky" }).locator(".close").click();
+
   // null-modem pair
   await page.locator("#port-tree .item.port", { hasText: "fake:link-a" }).dblclick();
   await page.locator("#port-tree .item.port", { hasText: "fake:link-b" }).dblclick();

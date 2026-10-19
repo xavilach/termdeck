@@ -18,11 +18,12 @@ type Profile struct {
 	Device    string `json:"device"`
 	Baud      int    `json:"baud"`
 	DataBits  int    `json:"dataBits"`
-	Parity    string `json:"parity"`   // none, even, odd, mark, space
-	StopBits  string `json:"stopBits"` // 1, 1.5, 2
-	Flow      string `json:"flow"`     // none, rtscts, xonxoff
-	Enter     string `json:"enter"`    // what the Enter key sends: cr, lf, crlf
-	Group     string `json:"group"`    // groups the profile in the list and picks its scripts
+	Parity    string `json:"parity"`    // none, even, odd, mark, space
+	StopBits  string `json:"stopBits"`  // 1, 1.5, 2
+	Flow      string `json:"flow"`      // none, rtscts, xonxoff
+	Enter     string `json:"enter"`     // what the Enter key sends: cr, lf, crlf
+	Group     string `json:"group"`     // groups the profile in the list and picks its scripts
+	Reconnect bool   `json:"reconnect"` // open the port again when it comes back after it went away
 	LocalEcho bool   `json:"localEcho"`
 
 	// Control lines at open: nil means asserted. Some boards reset when DTR changes.

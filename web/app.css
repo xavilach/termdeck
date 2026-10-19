@@ -219,3 +219,5 @@ option[value=cmd] { color: var(--t-cmd); }
 .quickbar .dec { border-left-color: var(--t-dec); }
 .quickbar .bin { border-left-color: var(--t-bin); }
 .quickbar .cmd { border-left-color: var(--t-cmd); }
+.tab.reconnecting .dot { background: var(--warn); }
+.status.reconnecting { color: var(--warn); }

@@ -211,7 +211,7 @@ function newTabElement(tab) {
 const TABS_KEY = "termdeck.tabs";
 
 function saveTabs() {
-  const data = { active: tabs.indexOf(active), tabs: tabs.map((t) => ({ profile: t.profile, connected: t.state === "connected" || t.state === "connecting", pane: panes.indexOf(t.pane) })) };
+  const data = { active: tabs.indexOf(active), tabs: tabs.map((t) => ({ profile: t.profile, connected: ["connected", "connecting", "reconnecting"].includes(t.state), pane: panes.indexOf(t.pane) })) };
   try { sessionStorage.setItem(TABS_KEY, JSON.stringify(data)); } catch { /* no storage */ }
 }
 
@@ -370,6 +370,7 @@ const MESSAGES = {
   state(tab, m) {
     setState(tab, m.state);
     if (m.state === "failed" || m.state === "ended") note(tab, m.message || m.state);
+    else if (m.state === "reconnecting") note(tab, `${m.message}: opening the port again as soon as it is back`);
     else if (m.state === "connected") note(tab, `connected to ${summary(tab.profile)}`);
     else if (m.state === "closed") note(tab, "port closed");
   },
@@ -437,7 +438,7 @@ function setState(tab, state) {
   if (tab === tab.pane.active) { renderToolbar(tab.pane); if (tab === active) renderTree(); }
 }
 
-const STATUS = { connecting: "Connecting…", connected: "Connected", failed: "Failed", ended: "Disconnected", closed: "Port closed" };
+const STATUS = { reconnecting: "Reconnecting…", connecting: "Connecting…", connected: "Connected", failed: "Failed", ended: "Disconnected", closed: "Port closed" };
 
 function renderLines(pane) {
   const tab = pane.active;
@@ -467,7 +468,7 @@ function renderToolbar(pane) {
   logButton.setAttribute("aria-pressed", String(!!tab.logging));
   logButton.disabled = tab.state !== "connected";
   const portButton = q("[data-action=port]");
-  portButton.textContent = tab.state === "connected" ? "Close port" : "Open port";
+  portButton.textContent = { connected: "Close port", reconnecting: "Stop reconnecting" }[tab.state] || "Open port";
   portButton.disabled = tab.state === "connecting";
   pane.viewbar.hidden = pane.sendbar.hidden = false;
   const off = tab.state !== "connected";
@@ -512,7 +513,7 @@ try { if (localStorage.getItem("termdeck.sidebar") === "0") setSidebar(false); }
 // What each toolbar button does for the pane's tab.
 const sendMessage = (tab, message) => tab.ws?.send(JSON.stringify(message));
 const TOOLBAR = {
-  port(tab) { if (tab.state === "connected") sendMessage(tab, { type: "close" }); else connect(tab); },
+  port(tab) { if (tab.state === "connected" || tab.state === "reconnecting") sendMessage(tab, { type: "close" }); else connect(tab); },
   break: (tab) => sendMessage(tab, { type: "break" }),
   clear: clearTab,
   reset(tab) {

@@ -287,6 +287,13 @@ const tab = () => run("tabs[0]", "x");
   run("applyProfile(tabs[0], { ...tabs[0].profile, quickSends: '' })", "x");
   check("no quick sends, no bar", q(".quickbar").hidden === true);
 
+  // the state while the page waits for a port to come back
+  json(qws, { type: "state", state: "reconnecting", message: "read error" });
+  check("reconnecting: status, button and notes", /Reconnecting/.test(q(".toolbar .status").textContent) && q("[data-action=port]").textContent === "Stop reconnecting" && run("tabs[0].tabEl.className", "x").includes("reconnecting"), q("[data-action=port]").textContent);
+  qws.sent.length = 0; q("[data-action=port]").click();
+  check("the button then stops it", qws.sent.pop().type === "close");
+  json(qws, { type: "state", state: "connected", message: "" });
+
   // tabs come back after a reload
   run("tabs.forEach((t, i) => { if (i === 0) t.state = 'closed'; })", "x");   // the first one was not connected
   run("saveTabs()", "x");

@@ -44,17 +44,18 @@ type termSession struct {
 
 	writeMu sync.Mutex // one command at a time reaches the port
 
-	opMu     sync.Mutex   // one open at a time
-	answers  chan string  // the page's answer about an existing log file
-	codec    *Codec       // device character set; nil for UTF-8
-	rx, tx   atomic.Int64 // bytes received and sent since the port opened
-	triggers []trigger
-	replyMu  sync.Mutex      // trigger replies go out one at a time, in order
-	pending  atomic.Int32    // trigger replies waiting or running
-	runCtx   context.Context // ends when the port closes: for steps typed in Cmd and trigger replies
-	runStop  context.CancelFunc
-	outQ     chan outItem // set when the profile has send delays: what the writer sends
-	flushed  atomic.Int64 // changes when the waiting data is dropped
+	opMu          sync.Mutex   // one open at a time
+	answers       chan string  // the page's answer about an existing log file
+	codec         *Codec       // device character set; nil for UTF-8
+	rx, tx        atomic.Int64 // bytes received and sent since the port opened
+	triggers      []trigger
+	replyMu       sync.Mutex      // trigger replies go out one at a time, in order
+	pending       atomic.Int32    // trigger replies waiting or running
+	runCtx        context.Context // ends when the port closes: for steps typed in Cmd and trigger replies
+	runStop       context.CancelFunc
+	reconnectStop context.CancelFunc // ends the loop that opens the port again
+	outQ          chan outItem       // set when the profile has send delays: what the writer sends
+	flushed       atomic.Int64       // changes when the waiting data is dropped
 
 	trigMu         sync.Mutex // guards the two below: the replies of the last second, and whether they are paused
 	replyTimes     []time.Time
@@ -85,28 +86,40 @@ func (t *termSession) sendState(state, message string) {
 }
 
 // open (re)opens the port of profile.
-func (t *termSession) open(profile Profile) {
-	t.close()
+func (t *termSession) open(profile Profile) { t.openPort(profile, false) }
+
+// openPort opens the port of profile and says whether it did. A reconnecting attempt is quiet: it says
+// nothing while it fails, and does not stop the reconnecting loop it belongs to.
+func (t *termSession) openPort(profile Profile, reconnecting bool) bool {
+	if !reconnecting {
+		t.close()
+	}
 	if err := profile.Normalize(); err != nil {
 		t.sendState("failed", err.Error())
-		return
+		return false
 	}
-	t.sendState("connecting", "")
+	if !reconnecting {
+		t.sendState("connecting", "")
+	}
 	if !t.srv.claimPort(profile.Device, t) {
-		t.sendState("failed", profile.Device+" is already open in another tab")
-		return
+		if !reconnecting {
+			t.sendState("failed", profile.Device+" is already open in another tab")
+		}
+		return false
 	}
 	port, err := openPort(profile)
 	if err != nil {
 		t.srv.releasePort(profile.Device, t)
-		t.sendState("failed", err.Error())
-		return
+		if !reconnecting {
+			t.sendState("failed", err.Error())
+		}
+		return false
 	}
 	// The log is created only now, so a port that does not open leaves no file behind.
 	existing := profile.LogExisting
 	if existing == "ask" {
 		existing = "append"
-		if logExists(profile) {
+		if logExists(profile) && !reconnecting { // no question to answer while the page is not waiting
 			existing = t.askAboutLog(profile)
 		}
 	}
@@ -133,6 +146,7 @@ func (t *termSession) open(profile Profile) {
 	go t.read(gen, port, t.codec, t.triggers, t.runCtx)
 	go t.watchLines(gen, port, asserted(profile.DTR), asserted(profile.RTS))
 	go t.watchCounters(gen)
+	return true
 }
 
 // askAboutLog asks the page what to do with the log file that is already there.
@@ -180,7 +194,15 @@ func (t *termSession) read(gen int, port serial.Port, codec *Codec, triggers []t
 				if err != nil {
 					message = err.Error()
 				}
-				t.sendState("ended", message)
+				t.mu.Lock()
+				profile := t.profile
+				t.mu.Unlock()
+				if profile.Reconnect {
+					t.sendState("reconnecting", message)
+					t.startReconnect(profile)
+				} else {
+					t.sendState("ended", message)
+				}
 			}
 			return
 		}
@@ -253,8 +275,8 @@ func (t *termSession) setLogging(on bool) {
 // close stops any script and closes the port and the log. It is safe to call when nothing is open.
 func (t *termSession) close() bool {
 	t.mu.Lock()
-	port, log, stop, device, runStop := t.port, t.log, t.stopRun, t.profile.Device, t.runStop
-	t.port, t.log, t.stopRun, t.runStop = nil, nil, nil, nil
+	port, log, stop, device, runStop, reconnect := t.port, t.log, t.stopRun, t.profile.Device, t.runStop, t.reconnectStop
+	t.port, t.log, t.stopRun, t.runStop, t.reconnectStop = nil, nil, nil, nil, nil
 	if port != nil {
 		t.gen++
 	}
@@ -264,6 +286,9 @@ func (t *termSession) close() bool {
 	}
 	if runStop != nil {
 		runStop()
+	}
+	if reconnect != nil {
+		reconnect()
 	}
 	if port != nil {
 		port.Close()
