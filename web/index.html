@@ -61,7 +61,7 @@
     <div class="viewbar" hidden>
       <span class="bar-title" title="Settings of what the device sends">Receive</span>
       <label title="How received data is shown. Text: as the device sends it. Hex, Decimal, Binary: each byte as a number, in rows, with the text next to it. Changing it redraws what is on screen from the data kept (the last 8 MB), so nothing is lost by switching back and forth.">
-        <select data-view aria-label="View"><option value="text">Text</option><option value="hex">Hex</option><option value="dec">Decimal</option><option value="bin">Binary</option></select></label>
+        <select data-view aria-label="View"><option value="text">Text</option><option value="hex">Hex</option><option value="dec">Decimal</option><option value="bin">Binary</option><option value="frames">Frames</option></select></label>
       <label title="What ends a line in the received text. Terminal: the way a terminal does it (CR returns to the start of the line, LF goes down). CR, LF, CR LF or Custom: that sequence ends the line and any other CR or LF is dropped (shown as &lt;CR&gt; or &lt;LF&gt; with Control chars). None: only a pause ends lines. Custom is written like in the send bar: \r \n \t \xNN.">New line at
         <select data-nl><option value="terminal">Terminal</option><option value="cr">CR</option><option value="lf">LF</option><option value="crlf">CR LF</option><option value="custom">Custom</option><option value="none">None</option></select>
         <input data-nl-custom hidden spellcheck="false" placeholder="\r\n" aria-label="Custom new line"></label>
@@ -163,7 +163,7 @@
           <fieldset>
             <legend>Received data</legend>
             <div class="grid">
-              <label title="How received data is shown when the session opens. Hex, Decimal and Binary show each byte as a number, for binary data. You can change it later from the bar above the lines.">View <select name="view"><option value="text">Text</option><option value="hex">Hex</option><option value="dec">Decimal</option><option value="bin">Binary</option></select></label>
+              <label title="How received data is shown when the session opens. Hex, Decimal and Binary show each byte as a number, for binary data; Frames cuts the bytes into frames (describe them under Advanced). You can change it later from the bar above the lines.">View <select name="view"><option value="text">Text</option><option value="hex">Hex</option><option value="dec">Decimal</option><option value="bin">Binary</option><option value="frames">Frames</option></select></label>
               <label title="Start a new line when nothing was received for this long (milliseconds), for data without line ends. CR and LF are then shown as &lt;CR&gt; and &lt;LF&gt; instead of ending lines. 0 means never.">New line after pause (ms) <input name="linePauseMs" type="number" min="0" max="60000" value="0"></label>
             </div>
             <div class="grid">
@@ -235,6 +235,10 @@
               <div class="checks">
                 <label class="check" title="Whatever you select with the mouse is copied to the clipboard at once."><input name="copyOnSelect" type="checkbox"> Copy on select</label>
               </div>
+            </fieldset>
+            <fieldset>
+              <legend>Frames</legend>
+              <label title="How the Frames view cuts the received bytes into frames, one line each, with the check verified. One setting per line: sync = AA 55 (the bytes a frame starts with) · size = u8@2 + 5 (the size of the frame: a field, u8 or u16be or u16le at an offset, plus a number; or just a number) · end = 0D 0A (the frame ends with these bytes; instead of size) · header = 3 (bytes shown apart before the payload) · check = crc16modbus (the check at the end of the frame, over the bytes before it: sum8, xor8, crc8, crc16modbus, crc16ccitt, crc16xmodem, crc32). Bytes outside a frame show as ??.">Description <textarea name="frameSpec" rows="4" spellcheck="false" placeholder="sync = AA 55&#10;size = u8@2 + 5&#10;header = 3&#10;check = crc16modbus"></textarea></label>
             </fieldset>
             <fieldset>
               <legend>Highlights and filter</legend>
@@ -372,6 +376,8 @@
     <p>View (Text, Hex, Decimal, Binary), <b>New line at</b>, time (clock or since the last line), control characters, new line after a pause, filter. Changing them redraws the data kept (the last 8 MB), so nothing is lost. A changed setting is marked; <b>Reset view</b> goes back to the session's.</p>
     <h3>Tunnel</h3>
     <p>The Tunnel button joins two ports: what one receives is written to the other, both directions are shown (green A→B, cyan B→A) and can be logged. Rx counts A to B, Tx counts B to A. Nothing is sent from the send bar into a tunnel.</p>
+    <h3>Frames</h3>
+    <p>View: Frames cuts the received bytes into frames. Describe them in the session settings (Advanced, Frames), one setting per line: <code>sync = AA 55</code> · <code>size = u8@2 + 5</code> (the size of the frame: u8, u16be or u16le at an offset, plus a number; or a plain number) · <code>end = 0D 0A</code> (instead of size) · <code>header = 3</code> · <code>check = crc16modbus</code>. A bad check shows as BAD with what it should be.</p>
     <h3>Virtual ports</h3>
     <p><code>fake:echo</code>, <code>fake:shell</code> (admin/admin), <code>fake:counter</code>, <code>fake:binary</code>, <code>fake:flaky</code> (drops and returns), <code>fake:stream</code> (600 KB/s for 5 s), <code>fake:link-a</code> and <code>fake:link-b</code> (a null-modem cable).</p>
   </article>

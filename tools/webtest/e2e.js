@@ -372,6 +372,19 @@ async function startServer() {
   await page.click("#help [data-close-help]");
   check("the Help button opens it and Close closes it", !(await page.locator("#help").evaluate((d) => d.open)));
 
+  // the Frames view: fake:binary sends AA 55 <len> <payload> <sum> every second
+  await page.evaluate(async () => {
+    await api("/api/profiles", { method: "POST", body: { name: "Framed", device: "fake:binary", view: "frames", frameSpec: "sync = AA 55\nsize = u8@2 + 4\nheader = 3\ncheck = sum8" } });
+    await loadProfiles();
+  });
+  await page.locator("#tree .item .name", { hasText: /^Framed$/ }).dblclick();
+  const framedTab = await page.evaluate(() => tabs.findIndex((t) => t.profile.name === "Framed"));
+  s = await waitScreen(/AA 55 05 \| 00 02 10 20 30 \| [0-9A-F]{2}  OK/, framedTab, 8000);
+  check("the Frames view shows the frames of fake:binary with their check OK", /AA 55 05 \| 00 01 10 20 30 \| [0-9A-F]{2}  OK/.test(s), s);
+  await shot("17-frames");
+  await page.locator(".tab", { hasText: "Framed" }).locator(".close").click();
+  await page.locator(".tab", { hasText: "Framed" }).locator(".close").click();
+
   // null-modem pair
   await page.locator("#port-tree .item.port", { hasText: "fake:link-a" }).dblclick();
   await page.locator("#port-tree .item.port", { hasText: "fake:link-b" }).dblclick();

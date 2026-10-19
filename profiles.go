@@ -81,6 +81,7 @@ type Profile struct {
 	RTSDelayMs    int    `json:"rtsDelayMs"`    // how long RTS stays in the sending state after the last byte
 	CharDelayMs   int    `json:"charDelayMs"`   // slow send: pause after each character sent
 	LineDelayMs   int    `json:"lineDelayMs"`   // slow send: extra pause after a CR or LF sent
+	FrameSpec     string `json:"frameSpec"`     // how the Frames view cuts the bytes into frames (sync, size, end, header, check)
 	Highlights    string `json:"highlights"`    // lines "pattern = colour": colour the received lines that match
 	Filter        string `json:"filter"`        // show only the lines that match (text or /regex/); ! in front hides them instead
 	TimeMode      string `json:"timeMode"`      // what the time shows: clock or delta (since the line before)
@@ -102,7 +103,7 @@ var (
 	bells       = []string{"none", "visual", "sound", "both"}
 	themes      = []string{"auto", "dark", "light"}
 	cursors     = []string{"block", "bar", "underline"}
-	views       = []string{"text", "hex", "dec", "bin"}
+	views       = []string{"text", "hex", "dec", "bin", "frames"}
 	newLines    = []string{"terminal", "cr", "lf", "crlf", "custom", "none"}
 	timeModes   = []string{"clock", "delta"}
 	dataBitsS   = []int{5, 6, 7, 8}
@@ -209,6 +210,9 @@ func (p *Profile) Normalize() error {
 	}
 	if p.CharDelayMs < 0 || p.CharDelayMs > 5000 || p.LineDelayMs < 0 || p.LineDelayMs > 5000 {
 		return errors.New("send delays are 0 to 5000 ms")
+	}
+	if err := checkFrameSpec(p.FrameSpec); err != nil {
+		return err
 	}
 	if err := checkHighlights(p.Highlights); err != nil {
 		return err

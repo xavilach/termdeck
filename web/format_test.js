@@ -123,6 +123,45 @@ test("the filter shows or hides lines", () => {
   assert.equal(F.passesFilter(null, "anything"), true);
 });
 
+test("frames are cut from a byte stream, with the check verified", () => {
+  const spec = F.parseFrameSpec("# a frame\nsync = AA 55\nsize = u8@2 + 5\nheader = 3\ncheck = crc16modbus");
+  assert.equal(spec.error, undefined);
+  const frame = (payload) => { const body = [0xaa, 0x55, payload.length, ...payload]; return [...body, ...F.checksum("crc16modbus", body)]; };
+  const good = frame([1, 2, 3]);
+  const bad = frame([9, 8]); bad[bad.length - 1] ^= 0xff;
+  const feed = F.makeFrameParser(spec);
+  const stream = [0x00, 0x11, ...good, ...bad, ...good];
+  // the stream arrives in pieces
+  const rows = [];
+  for (let i = 0; i < stream.length; i += 4) rows.push(...feed(stream.slice(i, i + 4)));
+  const lines = rows.map((r) => F.frameLine(spec, r));
+  assert.equal(lines[0], "?? 00 11");
+  assert.match(lines[1], /^AA 55 03 \| 01 02 03 \| [0-9A-F]{2} [0-9A-F]{2}  OK$/);
+  assert.match(lines[2], /^AA 55 02 \| 09 08 \| [0-9A-F]{2} [0-9A-F]{2}  BAD \(expected [0-9A-F]{2} [0-9A-F]{2}\)$/);
+  assert.match(lines[3], /OK$/);
+  assert.equal(rows.length, 4);
+});
+
+test("frames can end with a delimiter or have a fixed size", () => {
+  const ended = F.parseFrameSpec("end = 0D 0A");
+  const feed = F.makeFrameParser(ended);
+  assert.deepEqual(feed([0x41, 0x42, 0x0d]).length, 0);
+  const rows = feed([0x0a, 0x43, 0x0d, 0x0a]);
+  assert.deepEqual(rows.map((r) => r.bytes), [[0x41, 0x42, 0x0d, 0x0a], [0x43, 0x0d, 0x0a]]);
+  const fixed = F.makeFrameParser(F.parseFrameSpec("sync = 7E\nsize = 4\ncheck = sum8"));
+  const got = fixed([0x7e, 1, 2, 0x81, 0x7e, 1, 2, 0x00]);
+  assert.equal(got[0].ok, true);   // 7E + 01 + 02 = 0x81
+  assert.equal(got[1].ok, false);
+  assert.equal(F.parseFrameSpec("size = u16be@1 + 3").size.at, 1);
+});
+
+test("a frame description is checked", () => {
+  for (const bad of ["sync = AA", "size = 4\nend = 0D", "size = banana", "colour = red", "size = 4\ncheck = md5", "size = 4\nheader = x", "nothing here"]) {
+    assert.ok(F.parseFrameSpec(bad).error, bad);
+  }
+  assert.ok(F.makeFrameParser(F.parseFrameSpec("size = u8@0 + 0"))([0, 5]).every((r) => r.noise), "a size that cannot be a frame is noise");
+});
+
 test("b64", () => {
   assert.equal(F.b64(Uint8Array.from([0, 255, 65])), "AP9B");
   assert.equal(F.b64(new Uint8Array(20000).fill(65)).length, Math.ceil(20000 / 3) * 4);

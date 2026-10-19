@@ -80,7 +80,7 @@ function addImplicitLF(tab, bytes) {
 // screen and shows the events again, so a view can be left and come back with nothing lost.
 
 const KEEP_BYTES = 8 * 1024 * 1024;
-const { ENC, hex2, stamp, formatDelta, NEWLINES, shapeText, NUMBERS, unescapeText, textBytes, parseNumbers, parseQuickSends, seriesNames, CHECKS, checksum, parseHighlights, highlightOf, compileFilter, passesFilter, ALLOWED, clean, groupDigits, formatBytes, b64 } = Format;
+const { ENC, hex2, stamp, formatDelta, NEWLINES, shapeText, NUMBERS, unescapeText, textBytes, parseNumbers, parseQuickSends, seriesNames, CHECKS, checksum, parseFrameSpec, makeFrameParser, frameLine, parseHighlights, highlightOf, compileFilter, passesFilter, ALLOWED, clean, groupDigits, formatBytes, b64 } = Format;
 const viewOf = (p) => ({ mode: p.view || "text", stamps: !!p.timestamps, timeMode: p.timeMode || "clock", pause: p.linePauseMs || 0, ctrl: !!p.showControl, filter: p.filter || "",
                                     nl: p.newLine || "terminal", nlCustom: p.newLineCustom || "" });
 
@@ -124,8 +124,9 @@ function redraw(tab) {
   tab.hold = true;  // events that arrive meanwhile are kept, and shown by the redraw itself
   tab.term.write("", () => {
     tab.term.reset();
-    Object.assign(tab, { lineStart: true, txOpen: false, afterCR: false, lastRx: 0, lastHead: 0, lastDir: null, hex: null, held: [], pending: new Uint8Array(0), quiet: true, hold: false });
+    Object.assign(tab, { lineStart: true, txOpen: false, afterCR: false, lastRx: 0, lastHead: 0, lastDir: null, hex: null, frameWarned: false, held: [], pending: new Uint8Array(0), quiet: true, hold: false });
     applyModes(tab);
+    frameParserOf(tab);  // the frames are cut again from the start
     tab.replaying = true;
     for (const ev of shownEvents(tab)) render(tab, ev);
     tab.replaying = false;
@@ -158,7 +159,7 @@ function lineHead(tab, marker, at) {
 
 // ---- hex, decimal and binary rows: each byte as a number, then the text of the row
 function endRow(tab, out) {
-  const f = NUMBERS[tab.view.mode];
+  const f = NUMBERS[tab.view.mode] || NUMBERS.hex;
   out.push(" ".repeat((f.per - tab.hex.n) * f.width) + ` |${tab.hex.chars}|\r\n`);
   tab.hex = null;
   tab.lineStart = true;
@@ -177,7 +178,7 @@ const TUNNEL_MARKERS = { a2b: "\x1b[32mA→B \x1b[0m", b2a: "\x1b[36mB→A \x1b[
 const markerOf = (tab, dir) => TUNNEL_MARKERS[dir] || (dir === "rx" ? tab.profile.rxMarker : tab.profile.txMarker);
 
 function hexWrite(tab, data, dir, at) {
-  const f = NUMBERS[tab.view.mode];
+  const f = NUMBERS[tab.view.mode] || NUMBERS.hex;  // the Frames view without a description shows hex
   const out = [];
   if (tab.hex && (tab.hex.dir !== dir || (tab.view.pause > 0 && at - tab.hex.at > tab.view.pause))) endRow(tab, out);
   for (const b of data) {
@@ -237,7 +238,9 @@ function writeLines(tab, bytes, marker, at) {
 // Received data, with the time and the Rx marker at the start of each line.
 function showRx(tab, ev) {
   const pause = tab.view.pause;
-  if (tab.view.mode !== "text") {
+  if (tab.view.mode === "frames") {
+    showFrames(tab, ev);
+  } else if (tab.view.mode !== "text") {
     hexWrite(tab, ev.raw, ev.dir || "rx", ev.t);
   } else {
     if (ev.dir && tab.lastDir && ev.dir !== tab.lastDir && !tab.lineStart) {  // the other way: a line of its own
@@ -254,6 +257,26 @@ function showRx(tab, ev) {
     else writeLines(tab, bytes, markerOf(tab, ev.dir || "rx"), ev.t);
   }
   tab.lastRx = ev.t;
+}
+
+// ---- frames: the bytes cut into frames by the session's description, a line each
+function frameParserOf(tab) {
+  const spec = parseFrameSpec(tab.profile.frameSpec);
+  tab.frameSpec = spec;
+  tab.frameFeed = spec.error ? null : makeFrameParser(spec);
+}
+
+function showFrames(tab, ev) {
+  if (!tab.frameFeed) {
+    if (!tab.frameWarned) { tab.frameWarned = true; note(tab, `Frames view: ${tab.frameSpec?.error || "no frame description"} (set it under Advanced > Frames in the session settings)`); }
+    return hexWrite(tab, ev.raw, "rx", ev.t);  // without a description the bytes show as hex
+  }
+  for (const row of tab.frameFeed(ev.raw)) {
+    const line = frameLine(tab.frameSpec, row);
+    const sgr = row.noise ? "2" : row.ok === false ? "31" : "";
+    const text = ENC.encode(`${sgr ? `\x1b[${sgr}m` : ""}${line}${sgr ? "\x1b[0m" : ""}\r\n`);
+    writeLines(tab, text, tab.profile.rxMarker, ev.t);
+  }
 }
 
 // ---- highlights and the filter work on whole lines: what has no line end yet waits (a prompt is shown

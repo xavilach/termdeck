@@ -284,6 +284,22 @@ const tab = () => run("tabs[0]", "x");
   q("[data-graph]").click();
   check("and the button hides it again", q(".graphbar").hidden);
 
+  // the Frames view: frames cut from raw bytes, with the check verified
+  const frameWs = run("tabs[0].ws", "x");
+  run("applyProfile(tabs[0], { ...tabs[0].profile, frameSpec: 'sync = AA 55\\nsize = u8@2 + 4\\nheader = 3\\ncheck = sum8' })", "x");
+  const frameView = q("[data-view]"); frameView.value = "frames"; fire(frameView, "change");
+  const rawFrame = (payload, spoil = 0) => { const body = [0xaa, 0x55, payload.length, ...payload]; return String.fromCharCode(...body, (body.reduce((a, b) => a + b, 0) + spoil) & 0xff); };
+  bin(frameWs, 9500, "xx" + rawFrame([1, 2, 3]).slice(0, 5));
+  bin(frameWs, 9501, rawFrame([1, 2, 3]).slice(5) + rawFrame([9], 1));
+  const frameText = run("tabs[0].term", "x").text();
+  check("the Frames view shows noise, good frames (also cut across chunks) and bad ones", /\?\? 78 78/.test(frameText) && /AA 55 03 \| 01 02 03 \| 0[0-9A-F]  OK/.test(frameText) && /AA 55 01 \| 09 \| [0-9A-F]{2}  BAD \(expected/.test(frameText), frameText.slice(-200));
+  run("applyProfile(tabs[0], { ...tabs[0].profile, frameSpec: 'size = banana' })", "x");  // saving settings resets the view
+  frameView.value = "frames"; fire(frameView, "change");
+  bin(frameWs, 9600, "abc");
+  check("without a valid description it says so and shows hex", /Frames view: size = banana/.test(run("tabs[0].term", "x").text()) && /61 62/.test(run("tabs[0].term", "x").text()), run("tabs[0].term", "x").text().slice(-200));
+  run("applyProfile(tabs[0], { ...tabs[0].profile, frameSpec: '' })", "x");
+  frameView.value = "text"; fire(frameView, "change");
+
   // control line changes become notes when asked for
   const lineWs = run("tabs[0].ws", "x");
   run("applyProfile(tabs[0], { ...tabs[0].profile, noteLines: true })", "x");
