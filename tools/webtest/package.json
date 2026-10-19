@@ -7,7 +7,8 @@
     "smoke": "node smoke.js",
     "test": "npm run lint && npm run smoke",
     "e2e": "node e2e.js",
-    "a11y": "node a11y.js"
+    "a11y": "node a11y.js",
+    "monkey": "node monkey.js"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

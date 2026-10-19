@@ -199,8 +199,8 @@ askTwice($("#script-delete"), async () => {
 });
 
 function runScript(tab, name) {
-  tab.ws?.send(JSON.stringify({ type: "script", name }));
+  sendMessage(tab, { type: "script", name });
 }
 function stopScript(tab) {
-  tab.ws?.send(JSON.stringify({ type: "stop" }));
+  sendMessage(tab, { type: "stop" });
 }

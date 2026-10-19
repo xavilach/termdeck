@@ -444,7 +444,7 @@ function connect(tab) {
 function askLog(tab, path) {
   const dialog = $("#log-ask");
   $("#log-ask-text").textContent = `The log file ${path} already exists for ${tab.profile.name}. What should termdeck do?`;
-  const answer = (value) => tab.ws?.send(JSON.stringify({ type: "loganswer", answer: value }));
+  const answer = (value) => sendMessage(tab, { type: "loganswer", answer: value });
   dialog.addEventListener("close", () => answer(dialog.returnValue || "none"), { once: true });
   dialog.returnValue = "none";
   dialog.showModal();
@@ -506,7 +506,7 @@ try { const saved = localStorage.getItem("termdeck.layout"); if (saved === "cols
 
 function send(tab, data) {
   if (tab.ws?.readyState === WebSocket.OPEN && tab.state === "connected") {
-    tab.ws.send(JSON.stringify({ type: "input", data }));
+    sendMessage(tab, { type: "input", data });
   }
 }
 
@@ -530,7 +530,12 @@ try { if (localStorage.getItem("termdeck.sidebar") === "0") setSidebar(false); }
 // ---------------------------------------------------------------- toolbar and keys
 
 // What each toolbar button does for the pane's tab.
-const sendMessage = (tab, message) => tab.ws?.send(JSON.stringify(message));
+// A message to the server, when the connection of the tab is open (it is not while it is still opening or lost).
+function sendMessage(tab, message) {
+  if (tab.ws?.readyState !== WebSocket.OPEN) return false;
+  tab.ws.send(JSON.stringify(message));
+  return true;
+}
 const TOOLBAR = {
   port(tab) { if (tab.state === "connected" || tab.state === "reconnecting") sendMessage(tab, { type: "close" }); else connect(tab); },
   break: (tab) => sendMessage(tab, { type: "break" }),

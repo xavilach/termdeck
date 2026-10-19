@@ -235,6 +235,11 @@ const tab = () => run("tabs[0]", "x");
   check("an unchanged list is not drawn again", w.document.querySelector("#port-tree .item.port") === rowsBefore);
   run("portPollMs = 600000", "x");
 
+  // a message while the connection is still opening is dropped, not thrown (found by the monkey test)
+  const sentOk = run("openTab({ ...profiles[0], name: 'opening', device: 'fake:binary' }); sendMessage(tabs[tabs.length - 1], { type: 'mark', data: 'x' })", "x");
+  check("a message to a connection that is still opening is not sent and does not throw", sentOk === false && errors.length === 0, errors);
+  run("closeTab(tabs[tabs.length - 1])", "x");
+
   // closing a tab ends its auto send and file job
   const second = run("tabs.length", "x");
   typ.value = "text"; fire(typ, "change"); input.value = "tick"; end.value = "none"; fire(end, "change");

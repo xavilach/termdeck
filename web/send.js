@@ -69,7 +69,7 @@ function setSendType(pane, type) {
 }
 
 function sendRaw(tab, bytes) {
-  if (tab.ws?.readyState === WebSocket.OPEN && tab.state === "connected") tab.ws.send(JSON.stringify({ type: "raw", bytes: b64(bytes) }));
+  if (tab.state === "connected") sendMessage(tab, { type: "raw", bytes: b64(bytes) });
 }
 
 // What was sent from the send bar is remembered per session, also after the page is reloaded.
@@ -105,10 +105,10 @@ function submitSend(pane, auto = false) {
 function sendData(tab, type, text, ending, check = "none") {
   try {
     if (type === "cmd") {
-      tab.ws.send(JSON.stringify({ type: "steps", data: text }));
+      sendMessage(tab, { type: "steps", data: text });
     } else if (type === "text") {
       const data = unescapeText(text) + String.fromCharCode(...ending);
-      tab.ws.send(JSON.stringify({ type: "input", data }));
+      sendMessage(tab, { type: "input", data });
       echoTx(tab, text, ENC.encode(data), text.length + 32);
     } else {
       const numbers = parseNumbers(type, text);

@@ -142,7 +142,7 @@ function clearTab(tab) {
   tab.hex = null;
   tab.held = [];
   tab.counters = { rx: 0, tx: 0 };
-  tab.ws?.send(JSON.stringify({ type: "resetcounters" }));
+  sendMessage(tab, { type: "resetcounters" });
   updateCounters(tab);
 }
 
