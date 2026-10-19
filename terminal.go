@@ -53,6 +53,8 @@ type termSession struct {
 	pending  atomic.Int32    // trigger replies waiting or running
 	runCtx   context.Context // ends when the port closes: for steps typed in Cmd and trigger replies
 	runStop  context.CancelFunc
+	outQ     chan outItem // set when the profile has send delays: what the writer sends
+	flushed  atomic.Int64 // changes when the waiting data is dropped
 
 	trigMu         sync.Mutex // guards the two below: the replies of the last second, and whether they are paused
 	replyTimes     []time.Time
@@ -115,6 +117,7 @@ func (t *termSession) open(profile Profile) {
 	t.port, t.profile, t.log, t.codec = port, profile, log, NewCodec(profile.Charset)
 	t.triggers, _ = parseTriggers(profile.Triggers) // checked by Normalize
 	t.runCtx, t.runStop = context.WithCancel(t.ctx)
+	t.startWriter(profile, t.runCtx)
 	t.trigMu.Lock()
 	t.replyTimes, t.triggersPaused = nil, false
 	t.trigMu.Unlock()
@@ -287,6 +290,16 @@ func (t *termSession) send(data []byte, raw bool) {
 	if !raw {
 		out = codec.ToDevice(data)
 	}
+	t.mu.Lock()
+	queue, ctx := t.outQ, t.runCtx
+	t.mu.Unlock()
+	if queue != nil { // slow send: the writer sends it
+		select {
+		case queue <- outItem{out, data}:
+		case <-ctx.Done():
+		}
+		return
+	}
 	t.writeMu.Lock()
 	defer t.writeMu.Unlock()
 	if n, err := port.Write(out); err == nil {
@@ -347,6 +360,8 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			t.runScript(m.Name)
 		case "stop":
 			t.stopScript()
+		case "flush":
+			t.flushOut()
 		case "log":
 			go func() {
 				t.opMu.Lock()

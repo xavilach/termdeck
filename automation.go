@@ -173,6 +173,7 @@ func (t *termSession) stopScript() {
 	if stop != nil {
 		stop()
 	}
+	t.flushOut() // what the script left waiting in a slow send is not sent
 }
 
 // looping notes a reply and says whether the triggers are in a loop: a reply that makes the device send

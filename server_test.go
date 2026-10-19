@@ -819,3 +819,67 @@ func TestATriggerThatTriggersItselfIsPaused(t *testing.T) {
 		t.Errorf("notice %v", m)
 	}
 }
+
+// readFor collects what the page receives from the device for a while.
+func readFor(t *testing.T, c *websocket.Conn, ctx context.Context, d time.Duration) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(ctx, d)
+	defer cancel()
+	var got []byte
+	for {
+		_, text, err := readFrame(c, ctx)
+		if err != nil {
+			return string(got)
+		}
+		got = append(got, text...)
+	}
+}
+
+func TestSlowSendPutsTimeBetweenCharactersAndCanBeFlushed(t *testing.T) {
+	ts := newTestServer(t)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo", "charDelayMs": 40, "lineDelayMs": 100}})
+	waitFor(t, c, ctx, "state", "connected")
+	start := time.Now()
+	sendJSON(t, c, ctx, map[string]any{"type": "raw", "bytes": []byte("ab\ncd")})
+	var got string
+	for len(got) < 5 && time.Since(start) < 3*time.Second {
+		_, text, err := readFrame(c, ctx)
+		if err != nil {
+			break
+		}
+		got += string(text)
+	}
+	if got != "ab\ncd" {
+		t.Fatalf("echoed %q", got)
+	}
+	if elapsed := time.Since(start); elapsed < 40*4+100-20 {
+		t.Errorf("4 pauses of 40 ms and one of 100 ms expected, it took %v", elapsed)
+	}
+
+	// a long send is stopped by a flush: only the first characters get out
+	sendJSON(t, c, ctx, map[string]any{"type": "raw", "bytes": []byte(strings.Repeat("x", 100))})
+	time.Sleep(150 * time.Millisecond)
+	sendJSON(t, c, ctx, map[string]any{"type": "flush"})
+	got = readFor(t, c, ctx, 600*time.Millisecond)
+	if len(got) == 0 || len(got) > 15 {
+		t.Errorf("after a flush %d characters came out of 100", len(got))
+	}
+}
+
+func TestStoppingAScriptDropsWhatIsWaitingToBeSentSlowly(t *testing.T) {
+	ts := newTestServer(t)
+	if code, _ := ts.do(t, "POST", "/api/scripts", `{"name":"long","commands":["`+strings.Repeat("y", 80)+`"],"delayMs":0,"loop":true}`, ts.secret); code != 200 {
+		t.Fatal("save")
+	}
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo", "charDelayMs": 20}})
+	waitFor(t, c, ctx, "state", "connected")
+	sendJSON(t, c, ctx, map[string]any{"type": "script", "name": "long"})
+	time.Sleep(200 * time.Millisecond)
+	sendJSON(t, c, ctx, map[string]any{"type": "stop"})
+	readFor(t, c, ctx, 300*time.Millisecond) // what was already on its way
+	if rest := readFor(t, c, ctx, 500*time.Millisecond); len(rest) > 3 {
+		t.Errorf("%d characters kept coming after Stop", len(rest))
+	}
+}

@@ -198,6 +198,13 @@
               </div>
             </fieldset>
             <fieldset>
+              <legend>Slow send</legend>
+              <div class="grid">
+                <label title="For devices that lose characters sent at full speed: wait this long (milliseconds) after each character sent from the send bar, a script or a trigger. 0 sends at full speed. The delays also apply to files.">Pause after each character (ms) <input name="charDelayMs" type="number" min="0" max="5000" value="0"></label>
+                <label title="An extra wait (milliseconds) after a CR or LF sent, for devices that need time to take a line in.">Extra pause after a line end (ms) <input name="lineDelayMs" type="number" min="0" max="5000" value="0"></label>
+              </div>
+            </fieldset>
+            <fieldset>
               <legend>Triggers</legend>
               <label title="Answer what the device sends, one rule per line: text =&gt; reply. The text is looked for in the received data; write /regex/ for a regular expression. The reply is sent with the Enter key of the session; start it with @ for steps such as @dtr=1; wait=500; hex=0D. Lines starting with # are notes. Example: login: =&gt; admin">Rules <textarea name="triggers" rows="3" spellcheck="false" placeholder="login: => admin&#10;/Password:?/ => secret"></textarea></label>
             </fieldset>

@@ -155,6 +155,9 @@ func TestStepsAndTriggersAreValidated(t *testing.T) {
 	if err := p.Normalize(); err != nil {
 		t.Error(err)
 	}
+	if (&Profile{Device: "x", CharDelayMs: -1}).Normalize() == nil || (&Profile{Device: "x", LineDelayMs: 6000}).Normalize() == nil {
+		t.Error("bad send delays were accepted")
+	}
 	if (&Profile{Device: "x", TimeMode: "never"}).Normalize() == nil {
 		t.Error("a bad time mode was accepted")
 	}

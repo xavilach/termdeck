@@ -200,7 +200,7 @@ async function startServer() {
   await form.locator("[name=rxMarker]").fill("RX ");
   await form.locator("[name=txMarker]").fill("TX ");
   await form.locator("[name=logPath]").fill(path.join(server.dir, "auto-login.log"));
-  await form.locator("#advanced > summary").click();
+  await form.locator("#advanced").evaluate((d) => { d.open = true; });
   await form.locator("[name=triggers]").fill("login: => admin\n/Password:/ => admin");
   await page.click("#profile-connect");
   await sleep(500);
@@ -222,6 +222,26 @@ async function startServer() {
   await page.locator(".tab", { hasText: "Auto login" }).locator(".close").click();
   await page.locator(".tab", { hasText: "Auto login" }).locator(".close").click();  // a second click confirms
   check("closing a connected tab asks first, then closes", await page.locator(".tab", { hasText: "Auto login" }).count() === 0);
+
+  // slow send, set in the dialog: a pause after each character
+  await page.keyboard.press("Alt+Shift+N");
+  await form.locator("[name=name]").fill("Slow echo");
+  await form.locator("[name=device]").fill("fake:echo");
+  await form.locator("#advanced").evaluate((d) => { d.open = true; });
+  await form.locator("[name=charDelayMs]").fill("50");
+  await page.click("#profile-connect");
+  await page.waitForSelector(".tab:has-text('Slow echo')");
+  const slowTab = (await page.locator(".tab .label").allTextContents()).indexOf("Slow echo");
+  const slowInput = page.locator(".sendbar [data-send-text]").first();
+  await slowInput.fill("0123456789");
+  await page.selectOption(".sendbar [data-send-end]", "none");
+  const slowStart = Date.now();
+  await slowInput.press("Enter");
+  await waitScreen(/0123456789/, slowTab, 5000);
+  const slowTook = Date.now() - slowStart;
+  check("slow send: ten characters take about half a second", slowTook >= 400 && slowTook < 3000, slowTook);
+  await page.locator(".tab", { hasText: "Slow echo" }).locator(".close").click();
+  await page.locator(".tab", { hasText: "Slow echo" }).locator(".close").click();
 
   // null-modem pair
   await page.locator("#port-tree .item.port", { hasText: "fake:link-a" }).dblclick();

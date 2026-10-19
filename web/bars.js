@@ -397,7 +397,12 @@ function wireSendBar(pane) {
     send("[data-file]").value = "";
     sendFile(pane, file);
   });
-  send("[data-file-cancel]").addEventListener("click", () => { if (pane.active?.job) pane.active.job.stop = true; });
+  send("[data-file-cancel]").addEventListener("click", () => {
+    const tab = pane.active;
+    if (!tab?.job) return;
+    tab.job.stop = true;
+    sendMessage(tab, { type: "flush" });  // what is waiting in a slow send is dropped too
+  });
 }
 
 // The find bar.

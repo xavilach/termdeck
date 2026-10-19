@@ -21,6 +21,7 @@ GOOS=windows GOARCH=amd64 go build -o termdeck.exe .   # Windows
 - View: text, hex, decimal or binary rows; New line at (Terminal, CR, LF, CR LF, Custom, None: other CR/LF are dropped, or shown as `<CR>` `<LF>` with control characters on); control characters as `<ESC>`...; time at the start of each line; new line after a pause. Changing the view redraws the kept data (last 8 MB), so switching back restores it.
 - The port list follows plugging and unplugging by itself. Virtual ports (own section in the left column, reduced at first) to try things without hardware: `fake:echo`, `fake:shell` (login admin/admin, type `help`), `fake:counter`, `fake:binary`, and `fake:link-a` / `fake:link-b` (a null-modem cable: open one in each tab).
 - Freeze (keep the screen while data is still kept), Copy, Save text, Save raw (the bytes the device sent). Time can show the clock or the time since the previous line.
+- Slow send (Advanced): a pause after each character and after line ends, for devices that lose data; Stop and Cancel drop what is waiting.
 - Rx/Tx counters, Find (Ctrl+Shift+F, regex), triggers (`login: => admin`, `/regex/ => @hex=0D`; paused when they loop, e.g. over an echo).
 - Log per session: Rx/Tx line markers, append/overwrite/ask, printable only, start/stop while connected.
 - Rx/Tx line markers on screen.
