@@ -298,6 +298,26 @@ async function startServer() {
   await page.locator(".tab", { hasText: "Graphed" }).locator(".close").click();
   await page.locator(".tab", { hasText: "Graphed" }).locator(".close").click();
 
+  // export and import of the settings
+  const [settingsDownload] = await Promise.all([page.waitForEvent("download"), page.click("#export-settings")]);
+  const settingsFile = path.join(server.dir, "settings.json");
+  await settingsDownload.saveAs(settingsFile);
+  const settings = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
+  check("Export saves the sessions, scripts and groups", settings.version === 1 && settings.profiles.some((p) => p.name === "Slow echo") && Array.isArray(settings.scripts) && Array.isArray(settings.groups), Object.keys(settings));
+  settings.profiles.push({ name: "Imported one", device: "fake:echo" });
+  settings.profiles = settings.profiles.filter((p) => p.name !== "Slow echo");
+  const importFile = path.join(server.dir, "import.json");
+  fs.writeFileSync(importFile, JSON.stringify(settings));
+  await page.setInputFiles("#import-file", importFile);
+  await page.waitForSelector("#tree .item .name:text-is('Imported one')", { timeout: 4000 });
+  check("Import adds the sessions of the file", await page.locator("#tree .item .name", { hasText: /^Imported one$/ }).count() === 1);
+  check("and keeps what was there", await page.locator("#tree .item .name", { hasText: /^Slow echo$/ }).count() === 1);
+  fs.writeFileSync(importFile, "{ not json");
+  await page.setInputFiles("#import-file", importFile);
+  await page.waitForSelector("#problem:not([hidden])", { timeout: 3000 });
+  check("a broken file is reported and changes nothing", /Import failed/.test(await page.locator("#problem").textContent()));
+  await page.evaluate(async () => { await api("/api/profiles/Imported%20one", { method: "DELETE" }); await loadProfiles(); });
+
   // null-modem pair
   await page.locator("#port-tree .item.port", { hasText: "fake:link-a" }).dblclick();
   await page.locator("#port-tree .item.port", { hasText: "fake:link-b" }).dblclick();
@@ -410,7 +430,7 @@ async function startServer() {
   await page.waitForSelector("#tree .item .name:text-is('Counter')");
   await row("Counter").dragTo(page.locator("#tree .node-head.group", { hasText: "General" }));
   await sleep(400);
-  check("a session dragged onto a group moves there", await page.locator("#tree .group-node").first().locator(".item .name", { hasText: /^Counter$/ }).count() === 1);
+  check("a session dragged onto a group moves there", await page.locator("#tree .group-node").first().locator(".item .name", { hasText: /^Counter$/ }).count() === 1, await page.locator("#tree").innerText());
   await row("Counter").dblclick();
   await waitScreen(/tick 1/, 1);
   await row("Counter").locator("button[title='Edit Counter']").click();

@@ -27,7 +27,8 @@ GOOS=windows GOARCH=amd64 go build -o termdeck.exe .   # Windows
 - Quick sends (Advanced): buttons above the send bar, one per line `name | type | data` (`| end=cr` to choose the end).
 - Slow send (Advanced): a pause after each character and after line ends, for devices that lose data; Stop and Cancel drop what is waiting.
 - Rx/Tx counters, Find (Ctrl+Shift+F, regex), triggers (`login: => admin`, `/regex/ => @hex=0D`; paused when they loop, e.g. over an echo).
-- Log per session: Rx/Tx line markers, append/overwrite/ask, printable only, start/stop while connected.
+- Export and Import (top of the left column): sessions, scripts and groups in one file; items with the same name are replaced, nothing is stored if one is invalid.
+- Log per session: optional date and time on each line, Rx/Tx line markers, append/overwrite/ask, printable only, start/stop while connected.
 - Rx/Tx line markers on screen.
 - The lines are read-only; everything is sent from the send bar (and scripts, triggers). Local echo shows what is sent.
 - Character sets.

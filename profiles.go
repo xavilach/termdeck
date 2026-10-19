@@ -373,6 +373,32 @@ func (s *Store[T]) Get(name string) (T, error) {
 }
 
 // Put saves item under its name; oldName (when not empty) is the item being edited or renamed.
+// Upsert stores item, replacing the one with the same name (any case), and says whether it replaced one.
+func (s *Store[T]) Upsert(item T) (replaced bool, err error) {
+	if err := s.normalize(&item); err != nil {
+		return false, err
+	}
+	name := s.name(&item)
+	if name == "" {
+		return false, errors.New("name is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	items, err := s.load()
+	if err != nil {
+		return false, err
+	}
+	out := make([]T, 0, len(items)+1)
+	for i := range items {
+		if strings.EqualFold(s.name(&items[i]), name) {
+			replaced = true
+			continue
+		}
+		out = append(out, items[i])
+	}
+	return replaced, s.save(append(out, item))
+}
+
 func (s *Store[T]) Put(oldName string, item T) error {
 	if err := s.normalize(&item); err != nil {
 		return err

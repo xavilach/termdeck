@@ -10,7 +10,12 @@
 <body>
 <div id="app">
   <aside id="sidebar">
-    <header class="brand"><span>termdeck</span></header>
+    <header class="brand"><span>termdeck</span>
+      <span class="backup">
+        <button id="export-settings" title="Save all sessions, scripts and groups in a file">Export</button>
+        <button id="import-settings" title="Add the sessions, scripts and groups of a file saved with Export; items with the same name are replaced">Import</button>
+        <input type="file" id="import-file" accept=".json,application/json" hidden>
+      </span></header>
     <div id="problem" class="problem" role="status" hidden></div>
     <nav id="port-tree" aria-label="Serial ports"></nav>
     <nav id="tree" aria-label="Groups, sessions, scripts and ports"></nav>
@@ -303,6 +308,7 @@
 <script src="/view.js"></script>
 <script src="/graph.js"></script>
 <script src="/bars.js"></script>
+<script src="/backup.js"></script>
 <script src="/tabs.js"></script>
 </body>
 </html>

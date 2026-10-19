@@ -235,3 +235,5 @@ option[value=cmd] { color: var(--t-cmd); }
 .graph-legend .chip i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 .graph-canvas { display: block; width: 100%; height: 200px; }
 .viewbar button[data-graph][aria-pressed=true] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.backup { display: inline-flex; gap: 4px; }
+.backup button { min-height: 22px; padding: 1px 8px; font-weight: 400; }
