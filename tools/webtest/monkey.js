@@ -33,7 +33,7 @@ const pick = (list) => list[Math.floor(random() * list.length)];
   const words = ["hello", "41 42", "\\r\\n", "dtr=1; wait=10", "AT", "300", "0100 0001", "x".repeat(200), "/(/", "!tick", "tick 1"];
   const log = [];
   for (let i = 0; i < steps && problems.length === 0; i++) {
-    const action = pick(["open", "open", "click", "click", "click", "select", "type", "shortcut", "view", "close", "wait"]);
+    const action = pick(["open", "open", "click", "click", "click", "select", "type", "shortcut", "view", "close", "wait", "settings", "script"]);
     log.push(action);
     try {
       if (action === "open") {
@@ -62,6 +62,29 @@ const pick = (list) => list[Math.floor(random() * list.length)];
       } else if (action === "close") {
         const tab = page.locator(".tab .close").first();
         if (await tab.count()) { await tab.click({ timeout: 1500 }); if (await page.locator(".tab .close.confirm").count()) await page.locator(".tab .close.confirm").first().click({ timeout: 1500 }); }
+      } else if (action === "settings") {
+        // the settings dialog of the active tab: random values in its fields, then Save
+        await page.locator(".toolbar [data-action=settings]:visible").first().click({ timeout: 1500 });
+        await page.evaluate(() => { document.querySelector("#advanced").open = true; });
+        const fields = await page.locator("#profile-form input:not([type=hidden]):not([type=file]), #profile-form select, #profile-form textarea").all();
+        for (const f of fields) {
+          if (random() < 0.7) continue;
+          const tag = await f.evaluate((e) => e.tagName + ":" + e.type);
+          try {
+            if (tag.startsWith("SELECT")) await f.selectOption(pick(await f.locator("option").evaluateAll((os) => os.map((o) => o.value))), { timeout: 500 });
+            else if (tag.endsWith("checkbox")) await f.setChecked(random() < 0.5, { timeout: 500 });
+            else if (tag.endsWith("number")) await f.fill(pick(["0", "5", "100", "-1", "99999999", "abc"]), { timeout: 500 });
+            else await f.fill(pick(["", "ERROR = red", "x | y | z", "a => b", "name | text | hi", "sync = AA\nsize = 4", "/(/", "logs/x-{date}.log", "..", "ä€"]), { timeout: 500 });
+          } catch { /* a field that cannot be filled */ }
+        }
+        await page.locator("#profile-form button[type=submit]").click({ timeout: 1500 });
+        await page.waitForTimeout(150);
+      } else if (action === "script") {
+        await page.locator("button[title='New script in General']").first().click({ timeout: 1500 });
+        await page.fill("#script-form [name=name]", "m" + Math.floor(random() * 1000));
+        await page.fill("#script-form [name=commands]", pick(["echo hi", "@expect=x; timeout=50", "@dtr=0; wait=10", "a\nb\n@hex=41", "@@x", "@speed=1"]));
+        await page.locator("#script-form button[type=submit]").click({ timeout: 1500 });
+        await page.waitForTimeout(150);
       } else await page.waitForTimeout(100 + Math.floor(random() * 400));
     } catch (e) {
       if (!/Timeout|detached|not attached|closed|intercepts pointer|outside of the viewport|not visible|not stable/i.test(e.message)) problems.push(`step ${i} (${action}): ${e.message.split("\n")[0]}`);
