@@ -35,3 +35,12 @@ func TestCodecs(t *testing.T) {
 		t.Errorf("unmappable character: %q", got)
 	}
 }
+
+func FuzzCodecNeverPanics(f *testing.F) {
+	f.Add("cp437", []byte("a\x80\xff"))
+	f.Add("koi8-r", []byte("\xc1\xc2"))
+	f.Fuzz(func(t *testing.T, name string, data []byte) {
+		codec := NewCodec(name)
+		_ = codec.ToDevice(codec.FromDevice(data))
+	})
+}

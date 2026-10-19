@@ -23,7 +23,6 @@ type Profile struct {
 	Flow      string `json:"flow"`     // none, rtscts, xonxoff
 	Enter     string `json:"enter"`    // what the Enter key sends: cr, lf, crlf
 	Group     string `json:"group"`    // groups the profile in the list and picks its scripts
-	LineEdit  bool   `json:"lineEdit"` // edit the line locally, send it on Enter
 	LocalEcho bool   `json:"localEcho"`
 
 	// Control lines at open: nil means asserted. Some boards reset when DTR changes.
@@ -31,22 +30,14 @@ type Profile struct {
 	RTS *bool `json:"rts"`
 
 	// What the page does with the text (rarer options, behind "Advanced").
-	ImplicitCR  bool   `json:"implicitCR"` // a LF received also returns the cursor to the start of the line
-	ImplicitLF  bool   `json:"implicitLF"` // a CR received also moves down a line
-	Backspace   string `json:"backspace"`  // del (^?) or bs (^H)
-	Answerback  string `json:"answerback"` // sent when the device sends ENQ (Ctrl+E); empty sends nothing
-	HomeEnd     string `json:"homeEnd"`    // xterm (browser default), standard (ESC[1~ ESC[4~) or rxvt
-	FuncKeys    string `json:"funcKeys"`   // xterm (browser default), tilde, linux, vt400, vt100p, sco
-	AppCursor   bool   `json:"appCursor"`  // cursor keys start in application mode
-	NoAppCursor bool   `json:"noAppCursor"`
-	AppKeypad   bool   `json:"appKeypad"` // the numeric keypad starts in application mode
-	NoAppKeypad bool   `json:"noAppKeypad"`
-	Colours     string `json:"colours"` // NAME=#rrggbb per line, over the theme
-	Bold        string `json:"bold"`    // how bold text shows: colour, font or both
+	ImplicitCR bool   `json:"implicitCR"` // a LF received also returns the cursor to the start of the line
+	ImplicitLF bool   `json:"implicitLF"` // a CR received also moves down a line
+	Answerback string `json:"answerback"` // sent when the device sends ENQ (Ctrl+E); empty sends nothing
+	Colours    string `json:"colours"`    // NAME=#rrggbb per line, over the theme
+	Bold       string `json:"bold"`       // how bold text shows: colour, font or both
 
 	CopyOnSelect  bool   `json:"copyOnSelect"`
 	RightClick    string `json:"rightClick"` // copypaste, paste or none
-	PasteControls bool   `json:"pasteControls"`
 	NoMouseReport bool   `json:"noMouseReport"`
 	AutoWrap      *bool  `json:"autoWrap"` // nil means on
 	OriginMode    bool   `json:"originMode"`
@@ -74,6 +65,15 @@ type Profile struct {
 	LogPrintable bool   `json:"logPrintable"` // leave out escape sequences and control characters
 	LogHeader    bool   `json:"logHeader"`    // start the log with a line saying when and what
 	LogTxMarker  string `json:"logTxMarker"`
+
+	// How received data is shown at first (the toolbar changes it for an open tab).
+	View          string `json:"view"`          // text, hex, dec or bin
+	Timestamps    bool   `json:"timestamps"`    // start each line with the time
+	NewLine       string `json:"newLine"`       // what ends a received line: terminal, cr, lf, crlf, custom or none
+	NewLineCustom string `json:"newLineCustom"` // the sequence for custom, with \r \n \t \xNN written out
+	ShowControl   bool   `json:"showControl"`   // show CR, LF and other control characters as <CR>, <LF>, <ESC>...
+	LinePauseMs   int    `json:"linePauseMs"`   // start a new line after this pause in the data; 0 means never
+	Triggers      string `json:"triggers"`      // lines "text => reply": send the reply when the text is received
 }
 
 var (
@@ -81,15 +81,14 @@ var (
 	stopBits    = []string{"1", "1.5", "2"}
 	flows       = []string{"none", "rtscts", "xonxoff", "dsrdtr"}
 	existings   = []string{"append", "overwrite", "ask"}
-	homeEnds    = []string{"xterm", "standard", "rxvt"}
-	funcKeys    = []string{"xterm", "tilde", "linux", "vt400", "vt100p", "sco"}
 	bolds       = []string{"colour", "font", "both"}
 	rightClicks = []string{"copypaste", "paste", "none"}
 	enters      = []string{"cr", "lf", "crlf"}
-	backspaces  = []string{"del", "bs"}
 	bells       = []string{"none", "visual", "sound", "both"}
 	themes      = []string{"auto", "dark", "light"}
 	cursors     = []string{"block", "bar", "underline"}
+	views       = []string{"text", "hex", "dec", "bin"}
+	newLines    = []string{"terminal", "cr", "lf", "crlf", "custom", "none"}
 	dataBitsS   = []int{5, 6, 7, 8}
 )
 
@@ -137,16 +136,15 @@ func (p *Profile) Normalize() error {
 		{&p.StopBits, "1", stopBits, "stop bits"},
 		{&p.Flow, "none", flows, "flow control"},
 		{&p.Enter, "cr", enters, "enter key"},
-		{&p.Backspace, "del", backspaces, "backspace key"},
 		{&p.Charset, "utf-8", charsetNames(), "character set"},
-		{&p.HomeEnd, "xterm", homeEnds, "Home and End keys"},
-		{&p.FuncKeys, "xterm", funcKeys, "function keys"},
 		{&p.Bold, "colour", bolds, "bold text"},
 		{&p.RightClick, "copypaste", rightClicks, "right click"},
 		{&p.LogExisting, "append", existings, "log file handling"},
 		{&p.Bell, "visual", bells, "bell"},
 		{&p.Theme, "auto", themes, "theme"},
 		{&p.Cursor, "block", cursors, "cursor"},
+		{&p.View, "text", views, "view"},
+		{&p.NewLine, "terminal", newLines, "new line"},
 	} {
 		if *f.field == "" {
 			*f.field = f.def
@@ -172,6 +170,15 @@ func (p *Profile) Normalize() error {
 		return errors.New("the answerback is limited to 255 characters")
 	}
 	if err := checkColours(p.Colours); err != nil {
+		return err
+	}
+	if len(p.NewLineCustom) > 64 {
+		return errors.New("the custom new line is limited to 64 characters")
+	}
+	if p.LinePauseMs < 0 || p.LinePauseMs > 60_000 {
+		return fmt.Errorf("new line pause %d ms is out of range (0 to 60000)", p.LinePauseMs)
+	}
+	if _, err := parseTriggers(p.Triggers); err != nil {
 		return err
 	}
 	if p.BellSound != "" && (len(p.BellSound) > 400_000 || !strings.HasPrefix(p.BellSound, "data:audio/")) {
@@ -235,6 +242,11 @@ func (s *Script) Normalize() error {
 	}
 	if len(s.Commands) == 0 {
 		return errors.New("a script needs at least one command")
+	}
+	for _, command := range s.Commands {
+		if _, _, err := scriptSteps(command); err != nil {
+			return fmt.Errorf("script line %q: %w", command, err)
+		}
 	}
 	if s.DelayMs < 0 || s.DelayMs > 3_600_000 {
 		return fmt.Errorf("delay %d ms is out of range (0 to 3600000)", s.DelayMs)

@@ -38,6 +38,7 @@ type Logger struct {
 	printable bool // leave out escape sequences and control characters
 	lines     [2][]byte
 	timers    [2]*time.Timer
+	err       error // the first error writing the file (the disk is full, say)
 }
 
 // OpenLog opens the profile's log. It returns nil, nil when the profile has none or `existing` is "none".
@@ -157,7 +158,9 @@ func (l *Logger) endLine(dir int) {
 		text = printableOnly(text)
 	}
 	line := append([]byte(l.markers[dir]), text...)
-	l.f.Write(append(line, '\n'))
+	if _, err := l.f.Write(append(line, '\n')); err != nil && l.err == nil {
+		l.err = err
+	}
 	l.lines[dir] = l.lines[dir][:0]
 }
 
@@ -166,6 +169,16 @@ func (l *Logger) flushPartial(dir int) {
 	if len(l.lines[dir]) > 0 {
 		l.endLine(dir)
 	}
+}
+
+// Err is the first error writing the file, or nil. Safe on a nil Logger.
+func (l *Logger) Err() error {
+	if l == nil {
+		return nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.err
 }
 
 func (l *Logger) Close() {

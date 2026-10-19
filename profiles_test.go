@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -14,7 +15,7 @@ func TestNormalizeDefaultsAndErrors(t *testing.T) {
 	if p.Baud != 115200 || p.DataBits != 8 || p.Parity != "none" || p.StopBits != "1" || p.Flow != "none" || p.Enter != "cr" {
 		t.Fatalf("defaults not applied: %+v", p)
 	}
-	if p.Backspace != "del" || p.Bell != "visual" || p.Theme != "auto" || p.Cursor != "block" || p.FontSize != 14 || p.Scrollback != 10000 {
+	if p.Bell != "visual" || p.Theme != "auto" || p.Cursor != "block" || p.FontSize != 14 || p.Scrollback != 10000 {
 		t.Fatalf("display defaults not applied: %+v", p)
 	}
 	if !asserted(p.DTR) || !asserted(p.RTS) {
@@ -25,7 +26,7 @@ func TestNormalizeDefaultsAndErrors(t *testing.T) {
 		t.Error("a line set to false is not asserted")
 	}
 	for _, bad := range []Profile{
-		{Device: "x", Backspace: "tab"}, {Device: "x", Charset: "klingon"}, {Device: "x", LogExisting: "maybe"}, {Device: "x", Bell: "loud"}, {Device: "x", Theme: "pink"}, {Device: "x", Cursor: "star"},
+		{Device: "x", Charset: "klingon"}, {Device: "x", LogExisting: "maybe"}, {Device: "x", Bell: "loud"}, {Device: "x", Theme: "pink"}, {Device: "x", Cursor: "star"},
 		{Device: "x", FontSize: 3}, {Device: "x", FontSize: 200}, {Device: "x", Scrollback: 5},
 		{Device: ""}, {Device: "x", Baud: 1}, {Device: "x", DataBits: 9},
 		{Device: "x", Parity: "weird"}, {Device: "x", Flow: "dtr"}, {Device: "x", Enter: "tab"},
@@ -105,21 +106,21 @@ func TestGeneralIsTheEmptyGroup(t *testing.T) {
 }
 
 func TestPuttyStyleOptionsAreValidated(t *testing.T) {
-	good := Profile{Device: "x", HomeEnd: "rxvt", FuncKeys: "sco", Bold: "font", RightClick: "paste", Answerback: "termdeck",
+	good := Profile{Device: "x", Bold: "font", RightClick: "paste", Answerback: "termdeck",
 		Colours: "background=#101820\n\nforeground = #AABBCC\nbrightRed=#ff0000"}
 	if err := good.Normalize(); err != nil {
 		t.Fatal(err)
 	}
 	def := Profile{Device: "x"}
 	def.Normalize()
-	if def.HomeEnd != "xterm" || def.FuncKeys != "xterm" || def.Bold != "colour" || def.RightClick != "copypaste" {
+	if def.Bold != "colour" || def.RightClick != "copypaste" {
 		t.Errorf("defaults: %+v", def)
 	}
 	if !asserted(def.AutoWrap) {
 		t.Error("auto wrap is on unless turned off")
 	}
 	for _, bad := range []Profile{
-		{Device: "x", HomeEnd: "vt"}, {Device: "x", FuncKeys: "f"}, {Device: "x", Bold: "huge"}, {Device: "x", RightClick: "menu"},
+		{Device: "x", Bold: "huge"}, {Device: "x", RightClick: "menu"},
 		{Device: "x", Colours: "background=blue"}, {Device: "x", Colours: "sky=#112233"}, {Device: "x", Colours: "background"},
 		{Device: "x", Answerback: strings.Repeat("a", 300)}, {Device: "x", BellSound: "http://example.invalid/a.mp3"},
 	} {
@@ -130,5 +131,75 @@ func TestPuttyStyleOptionsAreValidated(t *testing.T) {
 	okSound := Profile{Device: "x", BellSound: "data:audio/wav;base64,AAAA"}
 	if err := okSound.Normalize(); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestStepsAndTriggersAreValidated(t *testing.T) {
+	for _, bad := range []string{"@dtr=2", "@wait=-1", "@hex=0", "@hex=zz", "@speed=1", "@dtr"} {
+		sc := Script{Name: "s", Commands: []string{bad}}
+		if sc.Normalize() == nil {
+			t.Errorf("%q should be refused", bad)
+		}
+	}
+	good := Script{Name: "s", Commands: []string{"@dtr=1; wait=500; dtr=0", "@hex=0x0d,0a", "@@literal"}}
+	if err := good.Normalize(); err != nil {
+		t.Error(err)
+	}
+	for _, bad := range []string{"no arrow", " => reply", "/(/ => x", "a => @wait=x"} {
+		p := Profile{Device: "x", Triggers: bad}
+		if p.Normalize() == nil {
+			t.Errorf("trigger %q should be refused", bad)
+		}
+	}
+	p := Profile{Device: "x", Triggers: "# comment\nlogin: => root\n/a+/ => @wait=1", View: "hex", LinePauseMs: 100}
+	if err := p.Normalize(); err != nil {
+		t.Error(err)
+	}
+	if (&Profile{Device: "x", View: "octal"}).Normalize() == nil || (&Profile{Device: "x", LinePauseMs: -1}).Normalize() == nil {
+		t.Error("bad view or pause accepted")
+	}
+}
+
+func FuzzParseSteps(f *testing.F) {
+	for _, seed := range []string{"dtr=1; wait=500; dtr=0", "hex=0D 0A", "", ";;", "wait=99999999999999999999", "hex=zz", "dtr", "=", "hex=0x0d,0a;wait=1"} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, text string) {
+		steps, err := parseSteps(text)
+		if err == nil && len(steps) == 0 {
+			t.Fatalf("%q parsed to nothing without an error", text)
+		}
+		for _, s := range steps {
+			if s.ms < 0 || s.ms > maxWaitMs {
+				t.Fatalf("%q: wait %d out of range", text, s.ms)
+			}
+		}
+	})
+}
+
+func FuzzParseTriggers(f *testing.F) {
+	for _, seed := range []string{"login: => admin", "/a+/ => @wait=1", "# c", "=>", "/(/ => x", "a => @hex=zz", "//=>x", "/ / => y"} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, text string) {
+		triggers, err := parseTriggers(text)
+		if err != nil {
+			return
+		}
+		for _, tr := range triggers {
+			tr.re.FindIndex([]byte("some text the device sent"))
+		}
+	})
+}
+
+func TestPortsAreSortedNaturally(t *testing.T) {
+	ports := []string{"COM10", "COM2", "COM1", "/dev/ttyUSB10", "/dev/ttyUSB2", "/dev/ttyACM0", "COM3"}
+	sort.SliceStable(ports, func(i, j int) bool { return naturalLess(ports[i], ports[j]) })
+	want := []string{"/dev/ttyACM0", "/dev/ttyUSB2", "/dev/ttyUSB10", "COM1", "COM2", "COM3", "COM10"}
+	if strings.Join(ports, " ") != strings.Join(want, " ") {
+		t.Errorf("got %v", ports)
+	}
+	if naturalLess("a", "a") || !naturalLess("a", "a1") || naturalLess("COM01", "COM1") && naturalLess("COM1", "COM01") {
+		t.Error("equal and prefix names")
 	}
 }

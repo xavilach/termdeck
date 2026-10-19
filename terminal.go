@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -23,6 +24,7 @@ type clientMessage struct {
 	Line    string  `json:"line"`   // control line to set: dtr or rts
 	Value   bool    `json:"value"`  // asserted or not
 	Name    string  `json:"name"`   // script to run
+	Bytes   []byte  `json:"bytes"`  // raw bytes to send, as they are
 }
 
 // termSession is one tab: a WebSocket that can open and close its port as often as the user wants.
@@ -42,9 +44,33 @@ type termSession struct {
 
 	writeMu sync.Mutex // one command at a time reaches the port
 
-	opMu    sync.Mutex  // one open at a time
-	answers chan string // the page's answer about an existing log file
-	codec   *Codec      // device character set; nil for UTF-8
+	opMu     sync.Mutex   // one open at a time
+	answers  chan string  // the page's answer about an existing log file
+	codec    *Codec       // device character set; nil for UTF-8
+	rx, tx   atomic.Int64 // bytes received and sent since the port opened
+	triggers []trigger
+	replyMu  sync.Mutex      // trigger replies go out one at a time, in order
+	pending  atomic.Int32    // trigger replies waiting or running
+	runCtx   context.Context // ends when the port closes: for steps typed in Cmd and trigger replies
+	runStop  context.CancelFunc
+
+	trigMu         sync.Mutex // guards the two below: the replies of the last second, and whether they are paused
+	replyTimes     []time.Time
+	triggersPaused bool
+}
+
+const (
+	maxPendingReplies = 32
+	maxMessage        = 1 << 20
+)
+
+// frame is what the page gets for data from the device: the time in milliseconds (8 bytes), the
+// length of the raw bytes (4), the raw bytes, then the same data converted to UTF-8.
+func frame(at time.Time, raw, text []byte) []byte {
+	out := make([]byte, 12, 12+len(raw)+len(text))
+	binary.BigEndian.PutUint64(out, uint64(at.UnixMilli()))
+	binary.BigEndian.PutUint32(out[8:], uint32(len(raw)))
+	return append(append(out, raw...), text...)
 }
 
 func (t *termSession) sendJSON(v any) {
@@ -87,6 +113,13 @@ func (t *termSession) open(profile Profile) {
 	t.gen++
 	gen := t.gen
 	t.port, t.profile, t.log, t.codec = port, profile, log, NewCodec(profile.Charset)
+	t.triggers, _ = parseTriggers(profile.Triggers) // checked by Normalize
+	t.runCtx, t.runStop = context.WithCancel(t.ctx)
+	t.trigMu.Lock()
+	t.replyTimes, t.triggersPaused = nil, false
+	t.trigMu.Unlock()
+	t.rx.Store(0)
+	t.tx.Store(0)
 	t.dtr, t.rts = asserted(profile.DTR), asserted(profile.RTS)
 	t.mu.Unlock()
 	t.sendState("connected", "")
@@ -94,61 +127,9 @@ func (t *termSession) open(profile Profile) {
 	if logErr != nil {
 		t.sendJSON(map[string]string{"type": "notice", "text": "log not written: " + logErr.Error()})
 	}
-	go t.read(gen, port, t.codec)
+	go t.read(gen, port, t.codec, t.triggers, t.runCtx)
 	go t.watchLines(gen, port, asserted(profile.DTR), asserted(profile.RTS))
-}
-
-// watchLines reports the control lines (the ones we drive and the ones the device drives) when they change.
-func (t *termSession) watchLines(gen int, port serial.Port, dtr, rts bool) {
-	var last map[string]any
-	for ; ; time.Sleep(400 * time.Millisecond) {
-		t.mu.Lock()
-		current := t.gen == gen
-		if current {
-			dtr, rts = t.dtr, t.rts
-		}
-		t.mu.Unlock()
-		if !current {
-			return
-		}
-		bits, err := port.GetModemStatusBits()
-		if err != nil {
-			return // not every port has status lines (a pty, some adapters)
-		}
-		now := map[string]any{"type": "lines", "cts": bits.CTS, "dsr": bits.DSR, "dcd": bits.DCD, "ri": bits.RI, "dtr": dtr, "rts": rts}
-		if fmt.Sprint(now) != fmt.Sprint(last) {
-			last = now
-			t.sendJSON(now)
-		}
-	}
-}
-
-// setLine drives DTR or RTS.
-func (t *termSession) setLine(line string, value bool) {
-	t.mu.Lock()
-	port := t.port
-	t.mu.Unlock()
-	if port == nil {
-		return
-	}
-	var err error
-	switch line {
-	case "dtr":
-		if err = port.SetDTR(value); err == nil {
-			t.mu.Lock()
-			t.dtr = value
-			t.mu.Unlock()
-		}
-	case "rts":
-		if err = port.SetRTS(value); err == nil {
-			t.mu.Lock()
-			t.rts = value
-			t.mu.Unlock()
-		}
-	}
-	if err != nil {
-		t.sendJSON(map[string]string{"type": "notice", "text": "cannot set " + line + ": " + err.Error()})
-	}
+	go t.watchCounters(gen)
 }
 
 // askAboutLog asks the page what to do with the log file that is already there.
@@ -169,16 +150,22 @@ func (t *termSession) askAboutLog(profile Profile) string {
 	return "none"
 }
 
-func (t *termSession) read(gen int, port serial.Port, codec *Codec) {
+func (t *termSession) read(gen int, port serial.Port, codec *Codec, triggers []trigger, ctx context.Context) {
 	buf := make([]byte, 4096)
+	var window []byte // the end of what the device sent, to match triggers across chunks
 	for {
 		n, err := port.Read(buf)
 		if n > 0 {
-			text := codec.FromDevice(buf[:n])
+			at := time.Now()
+			raw := append([]byte(nil), buf[:n]...)
+			text := codec.FromDevice(raw)
+			t.rx.Add(int64(n))
 			t.logger().Write(dirRx, text)
-			if t.c.Write(t.ctx, websocket.MessageBinary, text) != nil {
+			t.stopLogOnError()
+			if t.c.Write(t.ctx, websocket.MessageBinary, frame(at, raw, text)) != nil {
 				return
 			}
+			window = t.match(ctx, triggers, window, text)
 		}
 		if err != nil || n == 0 {
 			t.mu.Lock()
@@ -195,6 +182,25 @@ func (t *termSession) read(gen int, port serial.Port, codec *Codec) {
 			return
 		}
 	}
+}
+
+// stopLogOnError closes a log that cannot be written any more and says so, once.
+func (t *termSession) stopLogOnError() {
+	log := t.logger()
+	err := log.Err()
+	if err == nil {
+		return
+	}
+	t.mu.Lock()
+	if t.log != log { // already stopped
+		t.mu.Unlock()
+		return
+	}
+	t.log = nil
+	t.mu.Unlock()
+	log.Close()
+	t.sendJSON(map[string]any{"type": "logging", "on": false})
+	t.sendJSON(map[string]string{"type": "notice", "text": "log stopped: " + err.Error()})
 }
 
 func (t *termSession) logger() *Logger {
@@ -244,14 +250,17 @@ func (t *termSession) setLogging(on bool) {
 // close stops any script and closes the port and the log. It is safe to call when nothing is open.
 func (t *termSession) close() bool {
 	t.mu.Lock()
-	port, log, stop, device := t.port, t.log, t.stopRun, t.profile.Device
-	t.port, t.log, t.stopRun = nil, nil, nil
+	port, log, stop, device, runStop := t.port, t.log, t.stopRun, t.profile.Device, t.runStop
+	t.port, t.log, t.stopRun, t.runStop = nil, nil, nil, nil
 	if port != nil {
 		t.gen++
 	}
 	t.mu.Unlock()
 	if stop != nil {
 		stop()
+	}
+	if runStop != nil {
+		runStop()
 	}
 	if port != nil {
 		port.Close()
@@ -261,103 +270,34 @@ func (t *termSession) close() bool {
 	return port != nil
 }
 
-// write sends data to the device and records it as sent.
-func (t *termSession) write(data []byte) {
+// write sends text to the device, in its character set, and records it as sent.
+func (t *termSession) write(data []byte) { t.send(data, false) }
+
+// writeRaw sends bytes to the device as they are.
+func (t *termSession) writeRaw(data []byte) { t.send(data, true) }
+
+func (t *termSession) send(data []byte, raw bool) {
 	t.mu.Lock()
 	port, log, codec := t.port, t.log, t.codec
 	t.mu.Unlock()
 	if port == nil {
 		return
 	}
+	out := data
+	if !raw {
+		out = codec.ToDevice(data)
+	}
 	t.writeMu.Lock()
 	defer t.writeMu.Unlock()
-	if _, err := port.Write(codec.ToDevice(data)); err == nil {
+	if n, err := port.Write(out); err == nil {
+		t.tx.Add(int64(n))
 		log.Write(dirTx, data)
 	}
 }
 
-func (t *termSession) sendBreak() {
-	t.mu.Lock()
-	port := t.port
-	t.mu.Unlock()
-	reply := map[string]any{"type": "break", "ok": port != nil}
-	if port == nil {
-		reply["message"] = "the port is closed"
-	} else if err := port.Break(250 * time.Millisecond); err != nil {
-		reply["ok"], reply["message"] = false, err.Error()
-	}
-	t.sendJSON(reply)
-}
-
-// runScript sends the commands of the named script, pausing after each, in the background.
-func (t *termSession) runScript(name string) {
-	script, err := t.srv.scripts.Get(name)
-	t.mu.Lock()
-	open := t.port != nil
-	if err == nil && open && t.stopRun != nil {
-		t.stopRun()
-	}
-	var ctx context.Context
-	if err == nil && open {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithCancel(t.ctx)
-		t.stopRun = cancel
-	}
-	enter := enterBytes[t.profile.Enter]
-	t.mu.Unlock()
-	switch {
-	case err != nil:
-		t.sendJSON(map[string]string{"type": "script", "state": "error", "name": name, "message": err.Error()})
-		return
-	case !open:
-		t.sendJSON(map[string]string{"type": "script", "state": "error", "name": name, "message": "the port is closed"})
-		return
-	}
-	t.sendJSON(map[string]string{"type": "script", "state": "running", "name": name})
-	go func() {
-		defer func() {
-			state := "done"
-			if ctx.Err() != nil {
-				state = "stopped"
-			}
-			t.sendJSON(map[string]string{"type": "script", "state": state, "name": name})
-		}()
-		pause := func() bool {
-			select {
-			case <-ctx.Done():
-				return false
-			case <-time.After(time.Duration(script.DelayMs) * time.Millisecond):
-				return true
-			}
-		}
-		for round := 1; ; round++ {
-			for i, command := range script.Commands {
-				if ctx.Err() != nil {
-					return
-				}
-				t.write([]byte(command + enter))
-				t.sendJSON(map[string]string{"type": "tx", "data": command})
-				last := i == len(script.Commands)-1 && (!script.Loop || (script.Count > 0 && round >= script.Count))
-				if last || !pause() {
-					return
-				}
-			}
-		}
-	}()
-}
-
-func (t *termSession) stopScript() {
-	t.mu.Lock()
-	stop := t.stopRun
-	t.mu.Unlock()
-	if stop != nil {
-		stop()
-	}
-}
-
-// terminal serves one tab. The client sends JSON: open, close, input, break, script (by name), stop.
-// The server sends binary frames of port output and JSON: state (connecting, connected, failed,
-// closed, ended), tx (a line a script sent), script (running, done, stopped, error), break, notice.
+// terminal serves one tab. The client sends JSON: open, close, input, raw, steps, break, script (by name), stop.
+// The server sends binary frames of port output (see frame) and JSON: state (connecting, connected, failed,
+// closed, ended), tx (a line a script sent), script (running, done, stopped, error), break, notice, counters, trigger.
 // The port can be closed and opened again over the same connection, so the tab keeps its screen.
 func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{wsProtocol}})
@@ -365,6 +305,7 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer c.CloseNow()
+	c.SetReadLimit(maxMessage) // an "open" message carries the whole profile, with a custom bell sound
 	t := &termSession{srv: s, c: c, ctx: r.Context(), answers: make(chan string, 1)}
 	defer t.close()
 
@@ -394,6 +335,12 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			t.sendState("closed", "port closed")
 		case "input":
 			t.write([]byte(m.Data))
+		case "raw":
+			t.writeRaw(m.Bytes)
+		case "steps":
+			t.runCmd(m.Data)
+		case "resetcounters":
+			t.resetCounters()
 		case "break":
 			t.sendBreak()
 		case "script":

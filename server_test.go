@@ -5,12 +5,15 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -488,14 +491,24 @@ func TestLoggingCanBeStartedAndStoppedWhileConnected(t *testing.T) {
 	}
 }
 
-// readBinary returns the next frame of port output, skipping the text messages.
-func readBinary(c *websocket.Conn, ctx context.Context) ([]byte, error) {
+// readFrame returns the raw bytes and the text of the next frame of port output, skipping the text messages.
+func readFrame(c *websocket.Conn, ctx context.Context) (raw, text []byte, err error) {
 	for {
 		kind, data, err := c.Read(ctx)
-		if err != nil || kind == websocket.MessageBinary {
-			return data, err
+		if err != nil {
+			return nil, nil, err
+		}
+		if kind == websocket.MessageBinary {
+			n := int(binary.BigEndian.Uint32(data[8:12]))
+			return data[12 : 12+n], data[12+n:], nil
 		}
 	}
+}
+
+// readBinary returns the text of the next frame of port output.
+func readBinary(c *websocket.Conn, ctx context.Context) ([]byte, error) {
+	_, text, err := readFrame(c, ctx)
+	return text, err
 }
 
 // Every script, style sheet and file the page names must be served, or the page breaks in a real browser.
@@ -510,5 +523,299 @@ func TestEveryFileTheIndexPageUsesIsServed(t *testing.T) {
 		if code, _ := ts.do(t, "GET", ref[1], "", ""); code != 200 {
 			t.Errorf("%s: got %d, want 200", ref[1], code)
 		}
+	}
+}
+
+func TestFramesCarryTheRawBytesAndTheTime(t *testing.T) {
+	ts := newTestServer(t)
+	master, slave := newPty(t)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "charset": "iso-8859-1"}})
+	waitFor(t, c, ctx, "state", "connected")
+	master.Write([]byte{'a', 0xe9})
+	raw, text, err := readFrame(c, ctx)
+	if err != nil || !bytes.Equal(raw, []byte{'a', 0xe9}) || string(text) != "aé" {
+		t.Fatalf("raw %x text %q %v", raw, text, err)
+	}
+}
+
+func readDevice(t *testing.T, master *os.File, want int) []byte {
+	t.Helper()
+	var got []byte
+	buf := make([]byte, 64)
+	master.SetReadDeadline(time.Now().Add(3 * time.Second))
+	for len(got) < want {
+		n, err := master.Read(buf)
+		if err != nil {
+			t.Fatalf("read %q: %v", got, err)
+		}
+		got = append(got, buf[:n]...)
+	}
+	return got
+}
+
+func TestRawBytesGoOutUnconverted(t *testing.T) {
+	ts := newTestServer(t)
+	master, slave := newPty(t)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "charset": "iso-8859-1"}})
+	waitFor(t, c, ctx, "state", "connected")
+	sendJSON(t, c, ctx, map[string]any{"type": "raw", "bytes": []byte{0x00, 0xe9, 0xff}})
+	if got := readDevice(t, master, 3); !bytes.Equal(got, []byte{0x00, 0xe9, 0xff}) {
+		t.Errorf("sent %x", got)
+	}
+}
+
+func TestCountersFollowTheBytes(t *testing.T) {
+	ts := newTestServer(t)
+	master, slave := newPty(t)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave}})
+	waitFor(t, c, ctx, "state", "connected")
+	master.Write([]byte("12345"))
+	sendJSON(t, c, ctx, map[string]any{"type": "raw", "bytes": []byte("ab")})
+	for {
+		m := waitFor(t, c, ctx, "counters", "")
+		if m["rx"] == float64(5) && m["tx"] == float64(2) {
+			break
+		}
+	}
+	sendJSON(t, c, ctx, map[string]any{"type": "resetcounters"})
+	for {
+		if m := waitFor(t, c, ctx, "counters", ""); m["rx"] == float64(0) && m["tx"] == float64(0) {
+			return
+		}
+	}
+}
+
+func TestCmdAndScriptStepsDriveLinesWaitAndSendBytes(t *testing.T) {
+	ts := newTestServer(t)
+	master, slave := newPty(t)
+	if code, body := ts.do(t, "POST", "/api/scripts",
+		`{"name":"s","commands":["@hex=41 42; wait=20","@@at","go"],"delayMs":0}`, ts.secret); code != 200 {
+		t.Fatalf("save script: %d %s", code, body)
+	}
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "enter": "lf"}})
+	waitFor(t, c, ctx, "state", "connected")
+	sendJSON(t, c, ctx, map[string]any{"type": "script", "name": "s"})
+	waitFor(t, c, ctx, "script", "done")
+	if got := readDevice(t, master, len("AB@at\ngo\n")); string(got) != "AB@at\ngo\n" {
+		t.Errorf("sent %q", got)
+	}
+	sendJSON(t, c, ctx, map[string]any{"type": "steps", "data": "dtr=0; rts=0; hex=0d"})
+	if got := readDevice(t, master, 1); string(got) != "\r" {
+		t.Errorf("sent %q", got)
+	}
+	sendJSON(t, c, ctx, map[string]any{"type": "steps", "data": "nonsense"})
+	waitFor(t, c, ctx, "notice", "")
+}
+
+func TestTriggerAnswersWhatTheDeviceSends(t *testing.T) {
+	ts := newTestServer(t)
+	master, slave := newPty(t)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "enter": "lf",
+		"triggers": "login: => admin\n/Pass(word)?:/ => @hex=31 32; wait=1"}})
+	waitFor(t, c, ctx, "state", "connected")
+	master.Write([]byte("lo"))
+	time.Sleep(50 * time.Millisecond)
+	master.Write([]byte("gin: "))
+	if got := readDevice(t, master, 6); string(got) != "admin\n" {
+		t.Fatalf("sent %q", got)
+	}
+	master.Write([]byte("Password:"))
+	if got := readDevice(t, master, 2); string(got) != "12" {
+		t.Errorf("sent %q", got)
+	}
+}
+
+func TestOpeningWithACustomBellSoundIsNotCutByTheMessageLimit(t *testing.T) {
+	ts := newTestServer(t)
+	_, slave := newPty(t)
+	c, ctx := dialTerminal(t, ts)
+	sound := "data:audio/wav;base64," + strings.Repeat("A", 300_000)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "bellSound": sound}})
+	waitFor(t, c, ctx, "state", "connected")
+}
+
+func TestCmdNeedsAnOpenPortAndStopsWhenItCloses(t *testing.T) {
+	ts := newTestServer(t)
+	master, slave := newPty(t)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "steps", "data": "hex=41"})
+	if m := waitFor(t, c, ctx, "notice", ""); !strings.Contains(m["text"].(string), "open the port") {
+		t.Errorf("notice %v", m)
+	}
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave}})
+	waitFor(t, c, ctx, "state", "connected")
+	sendJSON(t, c, ctx, map[string]any{"type": "steps", "data": "wait=300; hex=42"})
+	sendJSON(t, c, ctx, map[string]any{"type": "close"})
+	waitFor(t, c, ctx, "state", "closed")
+	master.SetReadDeadline(time.Now().Add(600 * time.Millisecond))
+	if n, _ := master.Read(make([]byte, 4)); n != 0 {
+		t.Error("a step ran after the port was closed")
+	}
+}
+
+// The pure helpers of the page have their own tests, run with Node when it is installed.
+func TestWebFormatHelpers(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is not installed")
+	}
+	if out, err := exec.Command(node, "--test", "web/format_test.js").CombinedOutput(); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+}
+
+// The checks that need a DOM (lint and a run of the page in jsdom) run when `npm install` was done in tools/webtest.
+func TestWebPageInJsdom(t *testing.T) {
+	npm, err := exec.LookPath("npm")
+	if err != nil {
+		t.Skip("npm is not installed")
+	}
+	if _, err := os.Stat("tools/webtest/node_modules"); err != nil {
+		t.Skip("run npm install in tools/webtest to include this test")
+	}
+	cmd := exec.Command(npm, "test")
+	cmd.Dir = "tools/webtest"
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+}
+
+func TestScriptsAreListedAndDeletedOverHTTP(t *testing.T) {
+	ts := newTestServer(t)
+	if code, _ := ts.do(t, "POST", "/api/scripts", `{"name":"s","commands":["a"]}`, ts.secret); code != 200 {
+		t.Fatal("save")
+	}
+	if code, _ := ts.do(t, "POST", "/api/scripts", `{"name":"bad","commands":[]}`, ts.secret); code != 400 {
+		t.Errorf("a script without commands: got %d, want 400", code)
+	}
+	if _, body := ts.do(t, "GET", "/api/scripts", "", ts.secret); !strings.Contains(body, `"name":"s"`) {
+		t.Errorf("listed: %s", body)
+	}
+	if code, _ := ts.do(t, "DELETE", "/api/scripts/s", "", ts.secret); code != 200 {
+		t.Error("delete")
+	}
+	if code, _ := ts.do(t, "DELETE", "/api/scripts/s", "", ts.secret); code != 404 {
+		t.Errorf("delete twice: got %d, want 404", code)
+	}
+	if code, _ := ts.do(t, "DELETE", "/api/profiles/none", "", ts.secret); code != 404 {
+		t.Errorf("delete a missing profile: got %d, want 404", code)
+	}
+	if code, _ := ts.do(t, "POST", "/api/profiles", `{not json`, ts.secret); code != 400 {
+		t.Errorf("broken JSON: got %d, want 400", code)
+	}
+}
+
+func TestVirtualPortsAreListedApartOverHTTP(t *testing.T) {
+	ts := newTestServer(t)
+	_, virtual := ts.do(t, "GET", "/api/virtual", "", ts.secret)
+	_, real := ts.do(t, "GET", "/api/ports", "", ts.secret)
+	if !strings.Contains(virtual, "fake:shell") || strings.Contains(real, "fake:") {
+		t.Errorf("virtual %s real %s", virtual, real)
+	}
+}
+
+func TestLinesAndBreakWorkOnAVirtualPort(t *testing.T) {
+	ts := newTestServer(t)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:link-a"}})
+	waitFor(t, c, ctx, "state", "connected")
+	sendJSON(t, c, ctx, map[string]any{"type": "line", "line": "rts", "value": false})
+	for {
+		if m := waitFor(t, c, ctx, "lines", ""); m["rts"] == false {
+			break
+		}
+	}
+	sendJSON(t, c, ctx, map[string]any{"type": "break"})
+	if m := waitFor(t, c, ctx, "break", ""); m["ok"] != true {
+		t.Errorf("break %v", m)
+	}
+	sendJSON(t, c, ctx, map[string]any{"type": "close"})
+	waitFor(t, c, ctx, "state", "closed")
+	sendJSON(t, c, ctx, map[string]any{"type": "break"})
+	if m := waitFor(t, c, ctx, "break", ""); m["ok"] != false {
+		t.Errorf("break on a closed port %v", m)
+	}
+}
+
+// The program in a real browser (Chromium through Playwright), when its browser is installed:
+// npm install in tools/webtest, then npx playwright install chromium.
+func TestWebPageInChromium(t *testing.T) {
+	npm, err := exec.LookPath("npm")
+	if err != nil {
+		t.Skip("npm is not installed")
+	}
+	cache, _ := os.UserCacheDir()
+	if _, err := os.Stat("tools/webtest/node_modules/playwright"); err != nil {
+		t.Skip("run npm install in tools/webtest to include this test")
+	}
+	if matches, _ := filepath.Glob(filepath.Join(cache, "ms-playwright", "chromium*")); len(matches) == 0 {
+		t.Skip("run npx playwright install chromium in tools/webtest to include this test")
+	}
+	cmd := exec.Command(npm, "run", "e2e")
+	cmd.Dir = "tools/webtest"
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+}
+
+func TestOpeningAndClosingPortsManyTimesLeavesNoGoroutinesBehind(t *testing.T) {
+	ts := newTestServer(t)
+	c, ctx := dialTerminal(t, ts)
+	time.Sleep(100 * time.Millisecond)
+	before := runtime.NumGoroutine()
+	for i := 0; i < 40; i++ {
+		sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:counter", "triggers": "x => y"}})
+		waitFor(t, c, ctx, "state", "connected")
+		sendJSON(t, c, ctx, map[string]any{"type": "close"})
+		waitFor(t, c, ctx, "state", "closed")
+	}
+	var after int
+	for wait := 0; wait < 30; wait++ { // the pollers notice that the port is gone within a poll interval
+		time.Sleep(100 * time.Millisecond)
+		if after = runtime.NumGoroutine(); after <= before+2 {
+			return
+		}
+	}
+	t.Errorf("goroutines: %d before, %d after 40 open and close cycles", before, after)
+}
+
+func TestAPortClosedWithTheConnectionCanBeOpenedAgain(t *testing.T) {
+	ts := newTestServer(t)
+	for i := 0; i < 3; i++ {
+		c, ctx := dialTerminal(t, ts)
+		sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:link-a"}})
+		waitFor(t, c, ctx, "state", "connected")
+		c.Close(websocket.StatusNormalClosure, "page closed")
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func TestALogThatFailsStopsAndTellsThePage(t *testing.T) {
+	if _, err := os.Stat("/dev/full"); err != nil {
+		t.Skip("no /dev/full")
+	}
+	ts := newTestServer(t)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo", "logPath": "/dev/full"}})
+	waitFor(t, c, ctx, "state", "connected")
+	sendJSON(t, c, ctx, map[string]any{"type": "raw", "bytes": []byte("hello\n")})
+	if m := waitFor(t, c, ctx, "notice", ""); !strings.Contains(m["text"].(string), "log stopped") {
+		t.Errorf("notice %v", m)
+	}
+}
+
+func TestATriggerThatTriggersItselfIsPaused(t *testing.T) {
+	ts := newTestServer(t)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo", "enter": "lf", "triggers": "a => a"}})
+	waitFor(t, c, ctx, "state", "connected")
+	sendJSON(t, c, ctx, map[string]any{"type": "raw", "bytes": []byte("a")})
+	if m := waitFor(t, c, ctx, "notice", ""); !strings.Contains(m["text"].(string), "triggers paused") {
+		t.Errorf("notice %v", m)
 	}
 }

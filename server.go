@@ -173,10 +173,7 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("Cache-Control", "no-cache")
 		files.ServeHTTP(w, r)
 	})
-	mux.Handle("GET /vendor/", files)
-	mux.Handle("GET /app.js", files)
-	mux.Handle("GET /keys.js", files)
-	mux.Handle("GET /app.css", files)
+	mux.Handle("GET /", files) // the page, its scripts, style sheet and vendor files
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("POST /api/link", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"url": "/#token=" + s.auth.NewLink()})
@@ -191,6 +188,9 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, ports)
+	})
+	mux.HandleFunc("GET /api/virtual", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, virtualPorts())
 	})
 	mux.HandleFunc("GET /api/profiles", s.listProfiles)
 	mux.HandleFunc("POST /api/profiles", s.saveProfile)

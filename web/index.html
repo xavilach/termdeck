@@ -51,8 +51,50 @@
       <button data-action="font-down" title="Smaller text" aria-label="Smaller text">A-</button>
       <button data-action="font-up" title="Larger text" aria-label="Larger text">A+</button>
     </div>
+    <div class="viewbar" hidden>
+      <span class="bar-title" title="Settings of what the device sends">Receive</span>
+      <label title="How received data is shown. Text: as the device sends it. Hex, Decimal, Binary: each byte as a number, in rows, with the text next to it. Changing it redraws what is on screen from the data kept (the last 8 MB), so nothing is lost by switching back and forth.">
+        <select data-view aria-label="View"><option value="text">Text</option><option value="hex">Hex</option><option value="dec">Decimal</option><option value="bin">Binary</option></select></label>
+      <label title="What ends a line in the received text. Terminal: the way a terminal does it (CR returns to the start of the line, LF goes down). CR, LF, CR LF or Custom: that sequence ends the line and any other CR or LF is dropped (shown as &lt;CR&gt; or &lt;LF&gt; with Control chars). None: only a pause ends lines. Custom is written like in the send bar: \r \n \t \xNN.">New line at
+        <select data-nl><option value="terminal">Terminal</option><option value="cr">CR</option><option value="lf">LF</option><option value="crlf">CR LF</option><option value="custom">Custom</option><option value="none">None</option></select>
+        <input data-nl-custom hidden spellcheck="false" placeholder="\r\n" aria-label="Custom new line"></label>
+      <label class="check" title="Start each line with the time it was received, with milliseconds."><input type="checkbox" data-stamps> Time</label>
+      <label class="check" title="Show CR, LF and the other control characters as &lt;CR&gt;, &lt;LF&gt;, &lt;ESC&gt;... instead of acting on them. LF still ends the line (unless a pause does it). Escape sequences, such as colours, are shown as text too."><input type="checkbox" data-ctrl> Control chars</label>
+      <label title="Start a new line when nothing was received for this long, in milliseconds. For data that has no line ends. 0 turns it off. While it is on, CR and LF from the device are shown as &lt;CR&gt; and &lt;LF&gt; and do not end lines. Turning it off again shows the lines as the device sent them.">New line after
+        <input type="number" data-pause min="0" max="60000" step="10" value="0"> ms</label>
+      <button data-view-reset title="The view was changed here and is not what the session settings say. Click to go back to them." hidden>Reset view</button>
+      <span class="spacer"></span>
+      <span class="counters" title="Bytes received since the port opened. Clear resets it.">Rx <b data-count="rx">0</b></span>
+      <button data-action="find" title="Search the lines on screen (Ctrl+Shift+F)">Find</button>
+    </div>
     <div class="workspace">
+      <div class="findbar" hidden>
+        <input data-find type="search" placeholder="Find" spellcheck="false" aria-label="Find">
+        <button data-find-case aria-pressed="false" title="Match case">Aa</button>
+        <button data-find-regex aria-pressed="false" title="Regular expression">.*</button>
+        <button data-find-prev title="Previous match (Shift+Enter)">↑</button>
+        <button data-find-next title="Next match (Enter)">↓</button>
+        <span class="muted" data-find-count></span>
+        <span class="spacer"></span>
+        <button data-find-close title="Close (Esc)" aria-label="Close the search">✕</button>
+      </div>
       <div class="terminals"><p class="empty muted">Open a session from the list on the left, or a port from Serial ports.</p></div>
+    </div>
+    <div class="sendbar" hidden>
+      <span class="bar-title" title="What you send to the device">Send</span>
+      <select data-send-type title="What you type is: Text (with \r \n \t \xNN \\ escapes); Hex bytes like 0D 0A; Decimal numbers 0 to 255; Binary groups like 01000001; Cmd, steps such as dtr=1; wait=500; dtr=0 (also hex=0D 0A). Alt+T, Alt+D, Alt+H and Alt+B choose the type while typing.">
+        <option value="text">Text</option><option value="hex">Hex</option><option value="dec">Decimal</option><option value="bin">Binary</option><option value="cmd">Cmd</option></select>
+      <input data-send-text spellcheck="false" autocomplete="off" aria-label="Data to send" placeholder="Data to send (Enter sends, Up and Down recall)">
+      <label class="end-hint" title="What is added after the data, for Text, Hex, Decimal and Binary. None sends the data alone. Custom is written like \r \n \t \xNN. It starts as the Enter key of the session.">End
+        <select data-send-end><option value="none">None</option><option value="cr">CR</option><option value="lf">LF</option><option value="crlf">CR LF</option><option value="custom">Custom</option></select>
+        <input data-send-end-custom hidden spellcheck="false" placeholder="\r\n" aria-label="Custom end"></label>
+      <label class="check auto" title="Send the data again and again, every so many milliseconds, until you untick it, change tab or the port closes. The input is kept while it runs."><input type="checkbox" data-auto> Auto</label>
+      <input type="number" data-auto-ms min="10" max="3600000" step="100" value="1000" title="Milliseconds between two automatic sends" aria-label="Milliseconds between automatic sends"><span class="muted">ms</span>
+      <button data-send class="primary">Send</button>
+      <button data-send-file title="Send the content of a file to the device, as it is">File…</button>
+      <input type="file" data-file hidden>
+      <span class="counters" title="Bytes sent since the port opened. Clear resets it.">Tx <b data-count="tx">0</b></span>
+      <span class="file-status" hidden><span data-file-text></span> <button data-file-cancel>Cancel</button></span>
     </div>
   </section>
 </template>
@@ -69,20 +111,34 @@
             <label title="A simple error check added to each character. None is by far the most common (with 8 data bits). Use Even, Odd, Mark or Space only if the device requires it.">Parity <select name="parity"><option value="none">None</option><option value="even">Even</option><option value="odd">Odd</option><option value="mark">Mark</option><option value="space">Space</option></select></label>
             <label title="Number of stop bits marking the end of each character. 1 is the usual value; use 2 (or 1.5) only if the device&#x27;s manual says so.">Stop bits <select name="stopBits"><option>1</option><option>1.5</option><option>2</option></select></label>
             <label title="How the two sides slow each other down to avoid losing data. None: no control (the usual case). RTS/CTS: uses two wires of the cable and needs a cable with them. XON/XOFF: uses two special characters inside the data, so binary data should not be sent. DSR/DTR: uses two other wires; available on Windows only.">Flow control <select name="flow"><option value="none">None</option><option value="rtscts">RTS/CTS</option><option value="xonxoff">XON/XOFF</option><option value="dsrdtr">DSR/DTR (Windows only)</option></select></label>
-            <label title="What the Enter key sends to the device to end a command. Most devices expect CR (the default). Try CR LF for DOS-style devices, or LF for Unix-style ones, if commands are not accepted.">Enter sends <select name="enter"><option value="cr">CR</option><option value="lf">LF</option><option value="crlf">CR LF</option></select></label>
+            <label title="The line end that scripts and trigger replies add after each command, and the one the End box of the send bar starts with. Most devices expect CR (the default). Try CR LF for DOS-style devices, or LF for Unix-style ones, if commands are not accepted. The lines themselves are read-only: you type in the send bar.">Line end <select name="enter"><option value="cr">CR</option><option value="lf">LF</option><option value="crlf">CR LF</option></select></label>
             <label title="Character set the device uses. Leave it on UTF-8 unless the device prints wrong characters for accents or symbols; many older devices use ISO-8859-1 (Latin-1), Windows-1252 or CP437/CP850 (the old DOS sets, which also hold box-drawing characters). What you type is converted the same way.">Character set <select name="charset"><option value="utf-8">UTF-8</option><option value="iso-8859-1">ISO-8859-1 (Latin-1)</option><option value="iso-8859-2">ISO-8859-2 (Central Europe)</option><option value="iso-8859-15">ISO-8859-15 (Latin-9)</option><option value="windows-1250">Windows-1250</option><option value="windows-1251">Windows-1251 (Cyrillic)</option><option value="windows-1252">Windows-1252</option><option value="cp437">CP437 (DOS)</option><option value="cp850">CP850 (DOS Europe)</option><option value="cp866">CP866 (DOS Cyrillic)</option><option value="koi8-r">KOI8-R</option><option value="koi8-u">KOI8-U</option><option value="macintosh">Macintosh</option></select></label>
           </div>
           <div class="checks">
             <label class="check" title="DTR (Data Terminal Ready) is a control wire. Keep it ticked unless you know better. Some boards, such as Arduino and ESP32, reset when it changes, so untick it to open the port without resetting them. You can also toggle it later from the toolbar."><input name="dtr" type="checkbox"> DTR</label>
             <label class="check" title="RTS (Request To Send) is a control wire, often used for flow control. Some boards (ESP32 for example) use it to reset or to enter their boot loader. You can also toggle it later from the toolbar."><input name="rts" type="checkbox"> RTS</label>
-            <label class="check" title="For devices that have no line editor of their own. You type and correct the line here (Backspace, Ctrl+U to erase the line, Ctrl+W to erase a word, Up and Down for the history) and it is sent only when you press Enter. Turn the device&#x27;s own echo off, or you will see every line twice."><input name="lineEdit" type="checkbox"> Line editing</label>
-            <label class="check" title="Shows on screen what you type, as the device does not send it back. Tick it if you type but see nothing; untick it if every character appears twice."><input name="localEcho" type="checkbox"> Local echo</label>
+            <label class="check" title="Show what termdeck sends (the send bar, scripts, trigger replies) in the lines, with the Tx marker. Untick it when you do not want to see it, or when the device echoes it back (then you see it once, as received)."><input name="localEcho" type="checkbox"> Local echo</label>
           </div>
+          <fieldset>
+            <legend>Received data</legend>
+            <div class="grid">
+              <label title="How received data is shown when the session opens. Hex, Decimal and Binary show each byte as a number, for binary data. You can change it later from the bar above the lines.">View <select name="view"><option value="text">Text</option><option value="hex">Hex</option><option value="dec">Decimal</option><option value="bin">Binary</option></select></label>
+              <label title="Start a new line when nothing was received for this long (milliseconds), for data without line ends. CR and LF are then shown as &lt;CR&gt; and &lt;LF&gt; instead of ending lines. 0 means never.">New line after pause (ms) <input name="linePauseMs" type="number" min="0" max="60000" value="0"></label>
+            </div>
+            <div class="grid">
+              <label title="What ends a line in the received text: Terminal (as a terminal does it), CR, LF, CR LF, Custom (below) or None (only a pause ends lines). Any other CR or LF is then dropped (shown as &lt;CR&gt; or &lt;LF&gt; with Show control characters).">New line at <select name="newLine"><option value="terminal">Terminal</option><option value="cr">CR</option><option value="lf">LF</option><option value="crlf">CR LF</option><option value="custom">Custom</option><option value="none">None</option></select></label>
+              <label title="The sequence for Custom, written like \r \n \t \xNN.">Custom new line <input name="newLineCustom" spellcheck="false" placeholder="\r\n"></label>
+            </div>
+            <div class="checks">
+              <label class="check" title="Start each received line with the time, with milliseconds."><input name="timestamps" type="checkbox"> Time at the start of each line</label>
+              <label class="check" title="Show CR, LF and the other control characters as &lt;CR&gt;, &lt;LF&gt;, &lt;ESC&gt;... instead of acting on them."><input name="showControl" type="checkbox"> Show control characters</label>
+            </div>
+          </fieldset>
           <fieldset>
             <legend>Markers</legend>
             <div class="grid">
               <label title="Text added at the start of each line received from the device, to tell it apart from what you sent. For example &quot;RX&gt; &quot; (keep the trailing space if you want one). Leave empty for nothing.">Received <input name="rxMarker" spellcheck="false"></label>
-              <label title="Text added at the start of each line you send, to tell it apart from what the device sent. For example &quot;TX&gt; &quot;. It appears for lines termdeck shows itself: line editing, local echo and scripts. A device that echoes your typing shows it as received text. Leave empty for nothing.">Sent <input name="txMarker" spellcheck="false"></label>
+              <label title="Text added at the start of each line you send, to tell it apart from what the device sent. For example &quot;TX&gt; &quot;. It appears for lines termdeck shows itself: local echo, the send bar and scripts. A device that echoes your typing shows it as received text. Leave empty for nothing.">Sent <input name="txMarker" spellcheck="false"></label>
             </div>
           </fieldset>
           <fieldset>
@@ -109,7 +165,6 @@
               <label class="check" title="When ticked, closing a tab (or the browser page) while its port is open asks first: click the tab&#x27;s close button a second time to confirm."><input name="warnClose" type="checkbox"> Ask before closing</label>
             </div>
             <div class="grid">
-              <label title="The code sent when you press Backspace. DEL (the default) suits most devices; choose BS if Backspace does not erase, or shows ^? or ^H.">Backspace sends <select name="backspace"><option value="del">DEL (^?)</option><option value="bs">BS (^H)</option></select></label>
               <label title="What happens when the device sends the bell character (Ctrl+G), for example after a mistyped command. Flash: the lines flash briefly. Beep: a short sound. Both, or Nothing.">Bell <select name="bell"><option value="visual">Flash</option><option value="sound">Beep</option><option value="both">Both</option><option value="none">Nothing</option></select></label>
               <label title="Colours of the lines. System follows the light or dark setting of your computer.">Theme <select name="theme"><option value="auto">System</option><option value="dark">Dark</option><option value="light">Light</option></select></label>
               <label title="Size of the text in the lines, from 6 to 72. You can also change it while connected with the A+ and A- buttons.">Font size <input name="fontSize" type="number" min="6" max="72" value="14"></label>
@@ -117,19 +172,6 @@
               <label title="Shape of the cursor in the lines.">Cursor <select name="cursor"><option value="block">Block</option><option value="bar">Bar</option><option value="underline">Underline</option></select></label>
               <label title="How many lines you can scroll back to. A bigger number uses more memory.">Scrollback <input name="scrollback" type="number" min="100" max="1000000" value="10000"></label>
             </div>
-                      <fieldset>
-              <legend>Keyboard</legend>
-              <div class="grid">
-                <label title="The codes sent by Home and End. xterm: what the browser terminal normally sends. Standard: ESC[1~ and ESC[4~ (PuTTY&#x27;s default). rxvt: ESC[H and ESC Ow. Choose another one if Home and End do nothing, or print odd characters, on the device.">Home and End <select name="homeEnd"><option value="xterm">xterm</option><option value="standard">Standard</option><option value="rxvt">rxvt</option></select></label>
-                <label title="The codes sent by F1 to F12 (and the edit keys for VT400 and SCO). xterm is what the browser terminal normally sends. ESC[n~ is the VT220 style; Linux console, VT400, VT100+ and SCO are for devices that expect exactly those. Use the one in the device&#x27;s manual.">Function keys <select name="funcKeys"><option value="xterm">xterm</option><option value="tilde">ESC[n~</option><option value="linux">Linux console</option><option value="vt400">VT400</option><option value="vt100p">VT100+</option><option value="sco">SCO</option></select></label>
-              </div>
-              <div class="checks">
-                <label class="check" title="The arrow keys send ESC O A instead of ESC [ A from the start. Some devices expect it without switching it on themselves."><input name="appCursor" type="checkbox"> App cursor keys</label>
-                <label class="check" title="Ignore the device when it asks for application cursor keys: the arrow keys always send the normal codes."><input name="noAppCursor" type="checkbox"> Block app cursor keys</label>
-                <label class="check" title="The numeric keypad sends escape codes (ESC O p...) instead of digits from the start. Rarely needed."><input name="appKeypad" type="checkbox"> App keypad</label>
-                <label class="check" title="Ignore the device when it asks for the application keypad: the numeric keypad always types digits."><input name="noAppKeypad" type="checkbox"> Block app keypad</label>
-              </div>
-            </fieldset>
             <fieldset>
               <legend>Terminal</legend>
               <label title="Text sent back when the device sends ENQ (Ctrl+E), so it can ask what terminal it talks to. Leave empty to send nothing.">Answerback <input name="answerback" spellcheck="false"></label>
@@ -141,14 +183,17 @@
               </div>
             </fieldset>
             <fieldset>
-              <legend>Mouse and paste</legend>
+              <legend>Mouse</legend>
               <div class="grid">
-                <label title="What a right click does. Copy or paste: copies the selected text, or pastes when nothing is selected. Paste: always pastes. Nothing: the browser&#x27;s own menu.">Right click <select name="rightClick"><option value="copypaste">Copy or paste</option><option value="paste">Paste</option><option value="none">Nothing</option></select></label>
+                <label title="What a right click does. Copy or paste: copies the selected text, or pastes into the send bar when nothing is selected. Paste: always pastes into the send bar. Nothing: the browser&#x27;s own menu.">Right click <select name="rightClick"><option value="copypaste">Copy or paste</option><option value="paste">Paste</option><option value="none">Nothing</option></select></label>
               </div>
               <div class="checks">
                 <label class="check" title="Whatever you select with the mouse is copied to the clipboard at once."><input name="copyOnSelect" type="checkbox"> Copy on select</label>
-                <label class="check" title="Pasted text normally loses control characters (except line breaks and tabs), so pasting cannot send escape codes to the device. Tick this to paste them as they are."><input name="pasteControls" type="checkbox"> Paste control chars</label>
               </div>
+            </fieldset>
+            <fieldset>
+              <legend>Triggers</legend>
+              <label title="Answer what the device sends, one rule per line: text =&gt; reply. The text is looked for in the received data; write /regex/ for a regular expression. The reply is sent with the Enter key of the session; start it with @ for steps such as @dtr=1; wait=500; hex=0D. Lines starting with # are notes. Example: login: =&gt; admin">Rules <textarea name="triggers" rows="3" spellcheck="false" placeholder="login: => admin&#10;/Password:?/ => secret"></textarea></label>
             </fieldset>
             <fieldset>
               <legend>Colours</legend>
@@ -181,7 +226,7 @@
             <label title="The name this session has in the list on the left, for example &quot;Router console&quot; or &quot;Dev board&quot;.">Name <input name="name" required spellcheck="false"></label>
             <label title="Sessions and scripts are organised in groups, like folders. A script is offered only for sessions of its group. Leave empty (or type General) to keep it in the General group.">Group <input name="group" list="groups" spellcheck="false" placeholder="General"></label>
           </div>
-          <label title="The commands to send, one per line. The Enter key chosen in the session is added to each one, so write only the text, for example &quot;help&quot;. Empty lines at the end are ignored.">Commands
+          <label title="The commands to send, one per line. The Enter key chosen in the session is added to each one, so write only the text, for example &quot;help&quot;. A line starting with @ is made of steps instead, separated by semicolons: dtr=0 or 1, rts=0 or 1, wait=milliseconds, hex=bytes. Example: @dtr=1; wait=500; dtr=0. To send text that starts with @, write @@. Empty lines at the end are ignored.">Commands
             <textarea name="commands" rows="10" spellcheck="false" required></textarea></label>
           <div class="grid">
             <label title="Waiting time after each command before the next one is sent, in milliseconds (1000 = 1 second). Give the device time to answer.">Pause (ms) <input name="delayMs" type="number" min="0" max="3600000" value="1000"></label>
@@ -213,7 +258,12 @@
 
 <script src="/vendor/xterm.js"></script>
 <script src="/vendor/addon-fit.js"></script>
-<script src="/keys.js"></script>
-<script src="/app.js"></script>
+<script src="/format.js"></script>
+<script src="/base.js"></script>
+<script src="/tree.js"></script>
+<script src="/forms.js"></script>
+<script src="/view.js"></script>
+<script src="/bars.js"></script>
+<script src="/tabs.js"></script>
 </body>
 </html>

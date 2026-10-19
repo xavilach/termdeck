@@ -100,3 +100,20 @@ func TestLogOptionsOverwriteHeaderAndPrintable(t *testing.T) {
 		t.Error("answer none means no log")
 	}
 }
+
+func TestALogThatCannotBeWrittenReportsItsFirstError(t *testing.T) {
+	l, err := OpenLog(Profile{LogPath: filepath.Join(t.TempDir(), "x.log")}, "overwrite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.f.Close() // as if the disk went away
+	l.Write(dirRx, []byte("lost\n"))
+	if l.Err() == nil {
+		t.Error("the write error was not kept")
+	}
+	l.f = nil
+	var none *Logger
+	if none.Err() != nil {
+		t.Error("a nil logger has no error")
+	}
+}
