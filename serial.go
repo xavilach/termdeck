@@ -1,9 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
+	"runtime"
 	"sort"
 	"strconv"
+	"strings"
 
 	"termdeck/internal/serial"
 )
@@ -80,7 +84,32 @@ func openPort(p Profile) (serial.Port, error) {
 	}
 	port, err := serial.Open(p.Device, mode)
 	if err != nil {
-		return nil, fmt.Errorf("cannot open %s: %w", p.Device, err)
+		return nil, fmt.Errorf("cannot open %s: %s", p.Device, openAdvice(err, runtime.GOOS))
 	}
 	return port, nil
+}
+
+// openAdvice says what a failure to open a port probably means, and what to do about it.
+func openAdvice(err error, goos string) string {
+	text := err.Error()
+	lower := strings.ToLower(text)
+	var portErr *serial.PortError
+	code := serial.PortErrorCode(-1)
+	if errors.As(err, &portErr) {
+		code = portErr.Code()
+	}
+	switch {
+	case code == serial.PortBusy || strings.Contains(lower, "busy"):
+		return text + ": another program has the port open; close it there first"
+	case code == serial.PortNotFound || errors.Is(err, fs.ErrNotExist) || strings.Contains(lower, "cannot find"):
+		return text + ": there is no such port; is the adapter plugged in? (the list on the left shows what exists)"
+	case goos == "windows" && strings.Contains(lower, "access is denied"):
+		return text + ": the port is open in another program, or you have no permission"
+	case code == serial.PermissionDenied || errors.Is(err, fs.ErrPermission):
+		if goos == "linux" {
+			return text + ": no permission; add your user to the group that owns the port (often dialout or uucp) and log in again"
+		}
+		return text + ": no permission to open the port"
+	}
+	return text
 }

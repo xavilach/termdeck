@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"io/fs"
 	"math/rand"
 	"path/filepath"
 	"sort"
@@ -272,5 +274,33 @@ func TestNaturalOrderIsAConsistentOrder(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestOpeningAMissingOrBusyPortGivesAdvice(t *testing.T) {
+	_, err := openPort(Profile{Device: "/dev/nothing-here-at-all"})
+	if err == nil || !strings.Contains(err.Error(), "cannot open /dev/nothing-here-at-all") {
+		t.Fatalf("%v", err)
+	}
+	if !strings.Contains(err.Error(), "no such port") && !strings.Contains(err.Error(), "No such file") {
+		t.Errorf("no advice: %v", err)
+	}
+	for _, c := range []struct {
+		err  error
+		goos string
+		want string
+	}{
+		{fs.ErrPermission, "linux", "dialout"},
+		{fs.ErrPermission, "darwin", "no permission to open"},
+		{errors.New("open COM3: Access is denied."), "windows", "open in another program"},
+		{errors.New("device or resource busy"), "linux", "another program has the port open"},
+		{errors.New("The system cannot find the file specified."), "windows", "no such port"},
+	} {
+		if got := openAdvice(c.err, c.goos); !strings.Contains(got, c.want) {
+			t.Errorf("%v on %s: %q lacks %q", c.err, c.goos, got, c.want)
+		}
+	}
+	if got := openAdvice(errors.New("plain"), "linux"); got != "plain" {
+		t.Errorf("an error without a code is left as it is: %q", got)
 	}
 }
