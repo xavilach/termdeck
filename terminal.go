@@ -25,6 +25,8 @@ type clientMessage struct {
 	Value   bool    `json:"value"`  // asserted or not
 	Name    string  `json:"name"`   // script to run
 	Bytes   []byte  `json:"bytes"`  // raw bytes to send, as they are
+	Action  string  `json:"action"` // xmodem: send, receive or cancel
+	OneK    bool    `json:"oneK"`   // xmodem: blocks of 1024 bytes instead of 128
 }
 
 // termSession is one tab: a WebSocket that can open and close its port as often as the user wants.
@@ -53,6 +55,7 @@ type termSession struct {
 	pending       atomic.Int32    // trigger replies waiting or running
 	runCtx        context.Context // ends when the port closes: for steps typed in Cmd and trigger replies
 	runStop       context.CancelFunc
+	xfer          *xfer              // the file transfer that is running, if any
 	reconnectStop context.CancelFunc // ends the loop that opens the port again
 	outQ          chan outItem       // set when the profile has send delays: what the writer sends
 	flushed       atomic.Int64       // changes when the waiting data is dropped
@@ -64,7 +67,7 @@ type termSession struct {
 
 const (
 	maxPendingReplies = 32
-	maxMessage        = 1 << 20
+	maxMessage        = 16 << 20 // an XMODEM file travels in one message
 )
 
 // frame is what the page gets for data from the device: the time in milliseconds (8 bytes), the
@@ -174,7 +177,9 @@ func (t *termSession) read(gen int, port serial.Port, codec *Codec, triggers []t
 	var window []byte      // the end of what the device sent, to match triggers across chunks
 	for {
 		n, err := port.Read(buf)
-		if n > 0 {
+		if n > 0 && t.feedTransfer(buf[:n]) {
+			t.rx.Add(int64(n)) // a file transfer is reading: the data is not for the page
+		} else if n > 0 {
 			at := time.Now()
 			raw := append([]byte(nil), buf[:n]...)
 			text := codec.FromDevice(raw)
@@ -338,7 +343,7 @@ func (t *termSession) send(data []byte, raw bool) {
 	}
 }
 
-// terminal serves one tab. The client sends JSON: open, close, input, raw, steps, flush, mark, break, script (by name), stop.
+// terminal serves one tab. The client sends JSON: open, close, input, raw, steps, flush, mark, xmodem, break, script (by name), stop.
 // The server sends binary frames of port output (see frame) and JSON: state (connecting, connected, failed,
 // closed, ended), tx (a line a script sent), script (running, done, stopped, error), break, notice, counters, trigger.
 // The port can be closed and opened again over the same connection, so the tab keeps its screen.
@@ -392,6 +397,12 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			t.stopScript()
 		case "flush":
 			t.flushOut()
+		case "xmodem":
+			if m.Action == "cancel" {
+				t.cancelTransfer()
+			} else {
+				t.startXmodem(m, xmodemTimesInUse)
+			}
 		case "mark":
 			t.logger().Mark(m.Data)
 		case "log":

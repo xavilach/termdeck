@@ -466,6 +466,7 @@ function wireSendBar(pane) {
     }
   });
   send("[data-send-file]").addEventListener("click", () => send("[data-file]").click());
+  send("[data-xmodem]").addEventListener("click", () => { if (pane.active) openXmodem(pane.active); });
   send("[data-file]").addEventListener("change", () => {
     const file = send("[data-file]").files[0];
     send("[data-file]").value = "";

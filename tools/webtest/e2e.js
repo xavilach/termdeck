@@ -384,6 +384,30 @@ async function startServer() {
   s = await waitScreen(/over the cable/, b);
   check("link-a to link-b through a null-modem cable", /over the cable/.test(s), { tabNames, s });
   await shot("06-link");
+  // XMODEM through the null-modem cable: link-b receives what link-a sends
+  await page.locator(".tab", { hasText: "fake:link-b" }).click();
+  await page.click("[data-xmodem]");
+  await page.check("#xmodem [name=xdir][value=receive]");
+  await page.click("#xmodem-start");
+  check("a receive is started from the dialog and says it is asking", /asking the device/.test(await page.locator("#xmodem-status").textContent()), await page.locator("#xmodem-status").textContent());
+  await page.click("#xmodem-close");
+  await page.locator(".tab", { hasText: "fake:link-a" }).click();
+  const payload = Buffer.from("XMODEM payload ".repeat(60));
+  const xfile = path.join(server.dir, "payload.bin");
+  fs.writeFileSync(xfile, payload);
+  await page.click("[data-xmodem]");
+  await page.check("#xmodem [name=xdir][value=send]");
+  await page.setInputFiles("#xmodem-file", xfile);
+  const [xmodemDownload] = await Promise.all([page.waitForEvent("download", { timeout: 25000 }), page.click("#xmodem-start")]);
+  const xmodemSaved = path.join(server.dir, "received.bin");
+  await xmodemDownload.saveAs(xmodemSaved);
+  const gotX = fs.readFileSync(xmodemSaved);
+  check("XMODEM: the file sent from one end is received at the other and saved", gotX.subarray(0, payload.length).equals(payload) && gotX.length % 128 === 0, { got: gotX.length });
+  await page.waitForFunction(() => /Sent payload\.bin/.test(document.querySelector("#xmodem-status").textContent), null, { timeout: 5000 });
+  check("and the sending end says it is done", true);
+  await shot("15-xmodem");
+  await page.click("#xmodem-close");
+
   // the line changes the device drives show as notes: DTR of one end is DSR of the other
   await page.evaluate((i) => { tabs[i].profile.noteLines = true; }, a);
   await page.locator(".tab", { hasText: "fake:link-b" }).click();

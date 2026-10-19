@@ -388,6 +388,7 @@ const MESSAGES = {
   },
   tx: (tab, m) => echoTx(tab, m.data, undefined, m.data.length + 16),
   points: receivePoints,
+  xfer: receiveTransfer,
   counters(tab, m) { tab.counters = m; updateCounters(tab); },
   trigger: (tab, m) => note(tab, `trigger: ${m.match}`),
   notice: (tab, m) => note(tab, m.text),

@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"termdeck/internal/serial"
 	"testing"
 	"time"
 
@@ -971,4 +973,115 @@ func TestTheServerSendsTheGraphPoints(t *testing.T) {
 	if v := m["values"].([]any)[0].(map[string]any); v["name"] != "T" || v["value"] != 22.5 {
 		t.Errorf("the line cut in two gave %v", v)
 	}
+}
+
+// portLink lets the XMODEM engine talk through a port that the test opened itself.
+type portLink struct {
+	port serial.Port
+	in   chan byte
+}
+
+func newPortLink(port serial.Port) *portLink {
+	l := &portLink{port: port, in: make(chan byte, 1<<16)}
+	go func() {
+		buf := make([]byte, 256)
+		for {
+			n, err := port.Read(buf)
+			for _, b := range buf[:n] {
+				l.in <- b
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	return l
+}
+
+func (l *portLink) write(data []byte) error { _, err := l.port.Write(data); return err }
+func (l *portLink) read(ctx context.Context, timeout time.Duration) (byte, error) {
+	select {
+	case b := <-l.in:
+		return b, nil
+	case <-time.After(timeout):
+		return 0, errXTimeout
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+}
+
+func shortXmodemTimes(t *testing.T) {
+	t.Helper()
+	old := xmodemTimesInUse
+	xmodemTimesInUse = fastTimes
+	t.Cleanup(func() { xmodemTimesInUse = old })
+}
+
+func TestAFileIsSentWithXmodemThroughTheCable(t *testing.T) {
+	shortXmodemTimes(t)
+	ts := newTestServer(t)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:link-a"}})
+	waitFor(t, c, ctx, "state", "connected")
+	other, err := openFake("fake:link-b", true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	data := bytes.Repeat([]byte("firmware "), 300)
+	received := make(chan []byte, 1)
+	go func() {
+		got, _ := xmodemReceive(context.Background(), newPortLink(other), fastTimes, func(int) {})
+		received <- got
+	}()
+	sendJSON(t, c, ctx, map[string]any{"type": "xmodem", "action": "send", "name": "fw.bin", "bytes": data, "oneK": true})
+	done := waitFor(t, c, ctx, "xfer", "done")
+	if done["dir"] != "send" || done["done"] != float64(len(data)) {
+		t.Errorf("done %v", done)
+	}
+	if got := <-received; !bytes.HasPrefix(got, data) {
+		t.Errorf("the device received %d bytes that are not the file", len(got))
+	}
+}
+
+func TestAFileIsReceivedWithXmodemAndGivenToThePage(t *testing.T) {
+	shortXmodemTimes(t)
+	ts := newTestServer(t)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:link-a"}})
+	waitFor(t, c, ctx, "state", "connected")
+	other, err := openFake("fake:link-b", true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	data := []byte("log of the device\n" + strings.Repeat("x", 500))
+	sendJSON(t, c, ctx, map[string]any{"type": "xmodem", "action": "receive", "name": "log"})
+	go xmodemSend(context.Background(), newPortLink(other), data, false, fastTimes, func(int) {})
+	done := waitFor(t, c, ctx, "xfer", "done")
+	got, _ := base64.StdEncoding.DecodeString(done["data"].(string))
+	if !bytes.HasPrefix(got, data) || done["dir"] != "receive" {
+		t.Errorf("received %d bytes: %v", len(got), done["dir"])
+	}
+	// the transfer's bytes did not reach the screen
+	if text := readFor(t, c, ctx, 200*time.Millisecond); strings.Contains(text, "log of the device") {
+		t.Errorf("the page saw the file: %q", text)
+	}
+}
+
+func TestATransferCanBeCancelledAndNeedsAnOpenPort(t *testing.T) {
+	shortXmodemTimes(t)
+	xmodemTimesInUse.invite = 300 * time.Millisecond // it asks for ten times: a few seconds to cancel in
+	ts := newTestServer(t)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "xmodem", "action": "send", "bytes": []byte("x")})
+	if m := waitFor(t, c, ctx, "notice", ""); !strings.Contains(m["text"].(string), "open the port") {
+		t.Errorf("notice %v", m)
+	}
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo"}})
+	waitFor(t, c, ctx, "state", "connected")
+	sendJSON(t, c, ctx, map[string]any{"type": "xmodem", "action": "receive", "name": "never"})
+	waitFor(t, c, ctx, "xfer", "running")
+	sendJSON(t, c, ctx, map[string]any{"type": "xmodem", "action": "cancel"})
+	waitFor(t, c, ctx, "xfer", "cancelled")
 }

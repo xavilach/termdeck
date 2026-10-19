@@ -250,3 +250,11 @@ dialog#help p, dialog#help li { margin: 4px 0; }
 dialog#help code, dialog#help kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; }
 .brand { flex-wrap: wrap; gap: 4px 8px; }
 .backup button { padding: 1px 6px; font-size: 12px; }
+
+dialog#xmodem { padding: 0; border: 1px solid var(--control); border-radius: 6px; background: var(--panel); color: var(--text); width: min(520px, 95vw); }
+dialog#xmodem::backdrop { background: rgba(0, 0, 0, .55); }
+dialog#xmodem article { padding: 12px 20px 16px; }
+dialog#xmodem h2 { margin: 0 0 8px; font-size: 16px; }
+dialog#xmodem label { display: block; margin: 6px 0; }
+dialog#xmodem progress { width: 100%; }
+dialog#xmodem label.check { display: flex; align-items: center; gap: 6px; margin: 0; }
