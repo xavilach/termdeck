@@ -204,3 +204,14 @@ function runScript(tab, name) {
 function stopScript(tab) {
   sendMessage(tab, { type: "stop" });
 }
+
+// Desktop notifications need the browser's permission, asked on a click.
+function showNotificationState() {
+  const state = typeof Notification === "undefined" ? "not available in this browser" : { granted: "allowed", denied: "blocked in the browser settings", default: "not asked yet" }[Notification.permission];
+  $("#notification-state").textContent = state;
+}
+showNotificationState();
+$("#allow-notifications").addEventListener("click", async () => {
+  if (typeof Notification !== "undefined") await Notification.requestPermission();
+  showNotificationState();
+});

@@ -10,7 +10,7 @@ import (
 // page, with JavaScript regular expressions, which can run away on some patterns; a pattern that nests
 // repeats, such as (a+)+, is refused here.
 
-var highlightStyles = []string{"red", "green", "yellow", "blue", "magenta", "cyan", "white", "grey", "orange", "bold", "dim", "underline", "inverse"}
+var highlightStyles = []string{"red", "green", "yellow", "blue", "magenta", "cyan", "white", "grey", "orange", "bold", "dim", "underline", "inverse", "notify"}
 
 var nestedRepeat = regexp.MustCompile(`\([^()]*[+*][^()]*\)[+*{]`)
 

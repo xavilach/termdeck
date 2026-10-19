@@ -3,7 +3,7 @@ package main
 import "testing"
 
 func TestHighlightsAndFiltersAreChecked(t *testing.T) {
-	good := "# colours\nERROR = red+bold\n/warn(ing)?/ = orange\nOK = green\na=b = cyan"
+	good := "# colours\nERROR = red+bold\n/warn(ing)?/ = orange\nOK = green\na=b = cyan\nFAULT = red+notify\nreboot = notify"
 	if err := checkHighlights(good); err != nil {
 		t.Fatal(err)
 	}

@@ -355,6 +355,21 @@ const tab = () => run("tabs[0]", "x");
   check("and without it only to the shown one", allOne.ws.sent.some((m) => m.type === "input") && !allTwo.ws.sent.some((m) => m.type === "input"));
   run("closeTab(tabs.find((t) => t.profile.name === 'all one')); closeTab(tabs.find((t) => t.profile.name === 'all two'))", "x");
 
+  // notifications for lines that match a notify rule, only while the tab is not in sight
+  const sent = [];
+  w.Notification = class { constructor(title, options) { sent.push({ title, body: options.body }); } static get permission() { return "granted"; } };
+  run("openTab({ ...profiles[0], name: 'noisy', device: 'COM71', highlights: 'FAULT = red+notify' }); openTab({ ...profiles[0], name: 'quiet', device: 'COM72' })", "x");
+  const noisy = run("tabs.find((t) => t.profile.name === 'noisy')", "x");
+  await sleep(10);
+  run("activate(tabs.find((t) => t.profile.name === 'noisy'))", "x");
+  bin(noisy.ws, 9800, "a FAULT while shown\r\n");
+  check("no notification for a tab that is in sight", sent.length === 0, sent);
+  run("activate(tabs.find((t) => t.profile.name === 'quiet'))", "x");
+  bin(noisy.ws, 9801, "a FAULT in the background\r\n");
+  bin(noisy.ws, 9802, "another FAULT at once\r\n");
+  check("a notify rule gives one notification for a tab that is not in sight (not one per line)", sent.length === 1 && sent[0].title === "noisy" && /FAULT in the background/.test(sent[0].body), sent);
+  run("closeTab(tabs.find((t) => t.profile.name === 'noisy')); closeTab(tabs.find((t) => t.profile.name === 'quiet'))", "x");
+
   // a check is added after hex data
   const checkTab = run("tabs[0]", "x");
   const checkWs = checkTab.ws; json(checkWs, { type: "state", state: "connected", message: "" });

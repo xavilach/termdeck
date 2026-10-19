@@ -208,8 +208,10 @@ const Format = (() => {
       const at = line.lastIndexOf("=");
       if (!line || line.startsWith("#") || at < 1) continue;
       const re = compilePattern(line.slice(0, at).trim());
-      const sgr = line.slice(at + 1).split("+").map((s) => STYLES[s.trim()]).filter(Boolean).join(";");
-      if (re && sgr) rules.push({ re, sgr });
+      const styles = line.slice(at + 1).split("+").map((s) => s.trim());
+      const sgr = styles.map((s) => STYLES[s]).filter(Boolean).join(";");
+      const notify = styles.includes("notify");  // a desktop notification when such a line arrives
+      if (re && (sgr || notify)) rules.push({ re, sgr, notify });
     }
     return rules;
   }
@@ -220,7 +222,13 @@ const Format = (() => {
   // The style (a list of SGR codes) of the first rule the line matches, or "".
   function highlightOf(rules, line) {
     const text = plainLine(line);
-    return rules.find((r) => r.re.test(text))?.sgr || "";
+    return rules.find((r) => r.sgr && r.re.test(text))?.sgr || "";
+  }
+
+  // Whether a line matches a rule that asks for a notification.
+  function notifyOf(rules, line) {
+    const text = plainLine(line);
+    return rules.some((r) => r.notify && r.re.test(text));
   }
 
   // The filter: text or /regex/ shows the lines that match, with ! in front it hides them. Null: no filter.
@@ -394,7 +402,7 @@ const Format = (() => {
   }
 
   return { ENC, hex2, stamp, formatDelta, bufferText, controlName, NEWLINES, unescapeText, textBytes, newlineBytes, shapeText, NUMBERS,
-           parseNumbers, parseQuickSends, seriesNames, CHECKS, checksum, parseFrameSpec, makeFrameParser, frameLine, parseHighlights, highlightOf, compileFilter, passesFilter, plainLine, ALLOWED, clean, groupDigits, formatBytes, b64 };
+           parseNumbers, parseQuickSends, seriesNames, CHECKS, checksum, parseFrameSpec, makeFrameParser, frameLine, parseHighlights, highlightOf, notifyOf, compileFilter, passesFilter, plainLine, ALLOWED, clean, groupDigits, formatBytes, b64 };
 })();
 
 if (typeof module !== "undefined") module.exports = Format;

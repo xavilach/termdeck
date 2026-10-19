@@ -107,6 +107,16 @@ test("highlights pick a style for a line", () => {
   assert.equal(F.highlightOf(rules, "\x1b[1mERROR\x1b[0m"), "31;1");  // colours the device sent do not get in the way
 });
 
+test("a highlight rule can ask for a notification", () => {
+  const rules = F.parseHighlights("ERROR = red+notify\nreboot = notify\nok = green");
+  assert.equal(rules.length, 3);
+  assert.equal(F.highlightOf(rules, "reboot now"), "");   // notify alone does not colour
+  assert.equal(F.notifyOf(rules, "reboot now"), true);
+  assert.equal(F.notifyOf(rules, "an ERROR"), true);
+  assert.equal(F.highlightOf(rules, "an ERROR"), "31");
+  assert.equal(F.notifyOf(rules, "all ok"), false);
+});
+
 test("the filter shows or hides lines", () => {
   const show = F.compileFilter("tick");
   const hide = F.compileFilter("!heartbeat");

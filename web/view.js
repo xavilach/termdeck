@@ -80,7 +80,7 @@ function addImplicitLF(tab, bytes) {
 // screen and shows the events again, so a view can be left and come back with nothing lost.
 
 const KEEP_BYTES = 8 * 1024 * 1024;
-const { ENC, hex2, stamp, formatDelta, NEWLINES, shapeText, NUMBERS, unescapeText, textBytes, parseNumbers, parseQuickSends, seriesNames, CHECKS, checksum, parseFrameSpec, makeFrameParser, frameLine, parseHighlights, highlightOf, compileFilter, passesFilter, ALLOWED, clean, groupDigits, formatBytes, b64 } = Format;
+const { ENC, hex2, stamp, formatDelta, NEWLINES, shapeText, NUMBERS, unescapeText, textBytes, parseNumbers, parseQuickSends, seriesNames, CHECKS, checksum, parseFrameSpec, makeFrameParser, frameLine, parseHighlights, highlightOf, notifyOf, compileFilter, passesFilter, ALLOWED, clean, groupDigits, formatBytes, b64 } = Format;
 const viewOf = (p) => ({ mode: p.view || "text", stamps: !!p.timestamps, timeMode: p.timeMode || "clock", pause: p.linePauseMs || 0, ctrl: !!p.showControl, filter: p.filter || "",
                                     nl: p.newLine || "terminal", nlCustom: p.newLineCustom || "" });
 
@@ -295,6 +295,17 @@ function showFrames(tab, ev) {
   }
 }
 
+// A line that matches a rule with "notify" gives a desktop notification when the tab is not in sight (at most one per 5 s per tab).
+function notifyLine(tab, text) {
+  if (!notifyOf(tab.highlights, text)) return;
+  if (tab === tab.pane.active && !document.hidden) return;
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  if (Date.now() - (tab.notifiedAt || 0) < 5000) return;
+  tab.notifiedAt = Date.now();
+  const notification = new Notification(tab.profile.name, { body: Format.plainLine(text), tag: `termdeck-${tab.profile.name}` });
+  notification.onclick = () => { window.focus(); activate(tab); showLines(); notification.close(); };
+}
+
 // ---- highlights and the filter work on whole lines: what has no line end yet waits (a prompt is shown
 // after a short idle time), then each line is shown, coloured, or left out
 const LINE_IDLE_MS = 300;
@@ -330,6 +341,7 @@ function showLine(tab, line, at) {
     tab.filterCompiled = compileFilter(tab.view.filter);
   }
   if (!passesFilter(tab.filterCompiled, text)) return;
+  if (!tab.replaying) notifyLine(tab, text);
   const sgr = highlightOf(tab.highlights, text);
   if (!sgr) return writeLines(tab, line, markerOf(tab, tab.lastDir || "rx"), at);
   let body = line.length;  // the colour ends before the line end

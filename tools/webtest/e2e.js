@@ -757,6 +757,25 @@ async function startServer() {
     if (await page.locator(".tab .close.confirm").count()) await close.click();
   }
 
+  // a desktop notification for a line that matches a notify rule, while its tab is out of sight
+  await context.grantPermissions(["notifications"]);
+  await page.evaluate(async () => {
+    window.__notes = [];
+    window.Notification = class { constructor(title, options) { window.__notes.push({ title, body: options.body }); } static get permission() { return "granted"; } };
+    await api("/api/profiles", { method: "POST", body: { name: "Noti", device: "fake:counter", highlights: "tick 2 = bold+notify" } });
+    await loadProfiles();
+  });
+  await page.locator("#tree .item .name", { hasText: /^Noti$/ }).dblclick();
+  await page.locator("#port-tree .item.port", { hasText: "fake:echo" }).dblclick();   // Noti is now out of sight
+  await page.waitForFunction(() => window.__notes.length > 0, null, { timeout: 8000 });
+  const notes = await page.evaluate(() => window.__notes);
+  check("a notify rule gives a desktop notification for a tab that is out of sight", notes.length === 1 && notes[0].title === "Noti" && /tick 2/.test(notes[0].body), notes);
+  while ((await page.locator(".tab").count()) > 0) {
+    const close = page.locator(".tab .close").first();
+    await close.click();
+    if (await page.locator(".tab .close.confirm").count()) await close.click();
+  }
+
   // RS-485 direction control: RTS of link-a is high only while it sends, and link-b sees it as CTS
   await page.evaluate(async () => {
     await api("/api/profiles", { method: "POST", body: { name: "RS485 A", device: "fake:link-a", rtsMode: "high", rtsDelayMs: 1000 } });
