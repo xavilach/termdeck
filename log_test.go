@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -150,5 +151,32 @@ func TestLogLinesCanStartWithTheirTime(t *testing.T) {
 	re := regexp.MustCompile(`^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3} RX (one|two)?$`)
 	if len(lines) != 3 || !re.MatchString(lines[0]) || !re.MatchString(lines[1]) || !re.MatchString(lines[2]) {
 		t.Errorf("log %q", got)
+	}
+}
+
+func TestALogThatGetsBigStartsANewFileAndKeepsTheOldOnes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "r.log")
+	l, err := OpenLog(Profile{LogPath: path, LogKeep: 2}, "overwrite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.maxBytes = 30 // a few lines, not megabytes
+	for i := 1; i <= 12; i++ {
+		l.Write(dirRx, []byte(fmt.Sprintf("line %02d....\n", i))) // 11 bytes: three lines fill a file
+	}
+	l.Close()
+	read := func(name string) string { b, _ := os.ReadFile(name); return string(b) }
+	// three 12-byte lines fill a file (30 bytes): 12 lines make four full files, and two are kept
+	if got := read(path + ".1"); !strings.Contains(got, "line 10") || !strings.Contains(got, "line 12") || strings.Contains(got, "line 09") {
+		t.Errorf("the newest full file %q", got)
+	}
+	if got := read(path + ".2"); !strings.Contains(got, "line 07") || !strings.Contains(got, "line 09") {
+		t.Errorf("the one before %q", got)
+	}
+	if _, err := os.Stat(path + ".3"); err == nil {
+		t.Error("more files are kept than asked for")
+	}
+	if got := read(path); strings.Contains(got, "line 1") {
+		t.Errorf("the current file should be a fresh one: %q", got)
 	}
 }

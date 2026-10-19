@@ -30,7 +30,7 @@ GOOS=windows GOARCH=amd64 go build -o termdeck.exe .   # Windows
 - Highlights (Advanced): `ERROR = red+bold`, `/warn(ing)?/ = orange` colour matching lines. Filter (receive bar): show only lines matching text or /regex/, `!` hides them; the data is kept, so clearing the filter shows everything.
 - Rx/Tx counters, Find (Ctrl+Shift+F, regex), triggers (`login: => admin`, `/regex/ => @hex=0D`; paused when they loop, e.g. over an echo).
 - Export and Import (top of the left column): sessions, scripts and groups in one file; items with the same name are replaced, nothing is stored if one is invalid.
-- Log per session: optional date and time on each line, Rx/Tx line markers, append/overwrite/ask, printable only, start/stop while connected.
+- Log per session: optional date and time on each line, a new file when it gets big (`name.log.1` is the newest full one, a number of them kept), Rx/Tx line markers, append/overwrite/ask, printable only, start/stop while connected.
 - Rx/Tx line markers on screen.
 - The lines are read-only; everything is sent from the send bar (and scripts, triggers). Local echo shows what is sent.
 - Character sets.

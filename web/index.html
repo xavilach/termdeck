@@ -181,6 +181,8 @@
             <div class="checks">
               <label class="check" title="Leave escape sequences (colours, cursor moves) and control characters out of the log so it reads as plain text. A Backspace erases the character before it."><input name="logPrintable" type="checkbox"> Printable only</label>
               <label class="check" title="Start the log with a line saying when it was opened, the port and the speed."><input name="logHeader" type="checkbox"> Header line</label>
+              <label title="Start a new log file when it is this big, in megabytes: the full one is kept as name.log.1 (older ones move up). 0 means one file that grows.">Start a new file at (MB) <input name="logMaxMB" type="number" min="0" value="0"></label>
+              <label title="How many full files are kept besides the current one.">Files kept <input name="logKeep" type="number" min="1" max="1000" value="5"></label>
               <label class="check" title="Start each line of the log with the date and time it began, with milliseconds."><input name="logTimestamps" type="checkbox"> Time on each line</label>
             </div>
             <div class="grid">

@@ -41,6 +41,11 @@ type Logger struct {
 	stamps    bool         // start each line with the date and time it began
 	began     [2]time.Time // when the line in progress of each direction began
 	err       error        // the first error writing the file (the disk is full, say)
+
+	path     string // the file, to start a new one when it is full
+	size     int64  // bytes in it
+	maxBytes int64  // 0 means no limit
+	keep     int    // how many full files are kept: path.1 is the newest
 }
 
 // OpenLog opens the profile's log. It returns nil, nil when the profile has none or `existing` is "none".
@@ -65,7 +70,11 @@ func OpenLog(p Profile, existing string) (*Logger, error) {
 	if err != nil {
 		return nil, err
 	}
-	l := &Logger{f: f, markers: [2]string{p.LogRxMarker, p.LogTxMarker}, printable: p.LogPrintable, stamps: p.LogTimestamps}
+	l := &Logger{f: f, markers: [2]string{p.LogRxMarker, p.LogTxMarker}, printable: p.LogPrintable, stamps: p.LogTimestamps,
+		path: path, maxBytes: int64(p.LogMaxMB) * 1024 * 1024, keep: max(p.LogKeep, 1)}
+	if info, err := f.Stat(); err == nil {
+		l.size = info.Size()
+	}
 	if p.LogHeader {
 		fmt.Fprintf(f, "=~=~=~=~= termdeck log %s: %s %d baud =~=~=~=~=\n", time.Now().Format("2006.01.02 15:04:05"), p.Device, p.Baud)
 	}
@@ -181,10 +190,34 @@ func (l *Logger) endLine(dir int) {
 		text = printableOnly(text)
 	}
 	line := append([]byte(l.head(dir)), text...)
-	if _, err := l.f.Write(append(line, '\n')); err != nil && l.err == nil {
+	n, err := l.f.Write(append(line, '\n'))
+	if err != nil && l.err == nil {
 		l.err = err
 	}
+	l.size += int64(n)
 	l.lines[dir] = l.lines[dir][:0]
+	if l.maxBytes > 0 && l.size >= l.maxBytes {
+		l.rotate()
+	}
+}
+
+// rotate closes the full file, keeps it as path.1 (the older ones move up, the oldest goes) and starts a new one.
+func (l *Logger) rotate() {
+	l.f.Close()
+	os.Remove(fmt.Sprintf("%s.%d", l.path, l.keep))
+	for i := l.keep - 1; i >= 1; i-- {
+		os.Rename(fmt.Sprintf("%s.%d", l.path, i), fmt.Sprintf("%s.%d", l.path, i+1))
+	}
+	os.Rename(l.path, l.path+".1")
+	f, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		if l.err == nil {
+			l.err = err
+		}
+		l.f = nil
+		return
+	}
+	l.f, l.size = f, 0
 }
 
 // head is what starts a line of dir: the time when asked for, then the marker.

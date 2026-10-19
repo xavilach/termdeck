@@ -66,6 +66,8 @@ type Profile struct {
 	LogPrintable  bool   `json:"logPrintable"` // leave out escape sequences and control characters
 	LogHeader     bool   `json:"logHeader"`    // start the log with a line saying when and what
 	LogTxMarker   string `json:"logTxMarker"`
+	LogMaxMB      int    `json:"logMaxMB"`      // start a new file when the log is this big (megabytes); 0 means no limit
+	LogKeep       int    `json:"logKeep"`       // how many full files are kept
 	LogTimestamps bool   `json:"logTimestamps"` // start each line of the log with the date and time
 
 	// How received data is shown at first (the toolbar changes it for an open tab).
@@ -200,6 +202,9 @@ func (p *Profile) Normalize() error {
 	}
 	if _, err := parseQuickSends(p.QuickSends); err != nil {
 		return err
+	}
+	if p.LogMaxMB < 0 || p.LogMaxMB > 100_000 || p.LogKeep < 0 || p.LogKeep > 1000 {
+		return errors.New("log size is 0 to 100000 MB and the files kept 0 to 1000")
 	}
 	if p.LinePauseMs < 0 || p.LinePauseMs > 60_000 {
 		return fmt.Errorf("new line pause %d ms is out of range (0 to 60000)", p.LinePauseMs)
