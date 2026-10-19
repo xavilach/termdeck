@@ -65,22 +65,27 @@
       <label title="What ends a line in the received text. Terminal: the way a terminal does it (CR returns to the start of the line, LF goes down). CR, LF, CR LF or Custom: that sequence ends the line and any other CR or LF is dropped (shown as &lt;CR&gt; or &lt;LF&gt; with Control chars). None: only a pause ends lines. Custom is written like in the send bar: \r \n \t \xNN.">New line at
         <select data-nl><option value="terminal">Terminal</option><option value="cr">CR</option><option value="lf">LF</option><option value="crlf">CR LF</option><option value="custom">Custom</option><option value="none">None</option></select>
         <input data-nl-custom hidden spellcheck="false" placeholder="\r\n" aria-label="Custom new line"></label>
-      <label class="check" title="Start each received line with the time. Clock: the time of day, with milliseconds. Since last line: the time since the line before, to see how long a device takes to answer."><input type="checkbox" data-stamps> Time
-        <select data-time-mode aria-label="What the time shows"><option value="clock">Clock</option><option value="delta">Since last line</option></select></label>
-      <label class="check" title="Show CR, LF and the other control characters as &lt;CR&gt;, &lt;LF&gt;, &lt;ESC&gt;... instead of acting on them. LF still ends the line (unless a pause does it). Escape sequences, such as colours, are shown as text too."><input type="checkbox" data-ctrl> Control chars</label>
-      <label title="Start a new line when nothing was received for this long, in milliseconds. For data that has no line ends. 0 turns it off. While it is on, CR and LF from the device are shown as &lt;CR&gt; and &lt;LF&gt; and do not end lines. Turning it off again shows the lines as the device sent them.">New line after
-        <input type="number" data-pause min="0" max="60000" step="10" value="0"> ms</label>
       <label title="Show only the lines that contain this text, or match /regex/; put ! in front to hide those lines instead (!heartbeat). Empty shows everything. Changing it redraws the data kept, so a filtered-out line is not lost.">Filter
         <input data-filter spellcheck="false" placeholder="text, /regex/, !hide" aria-label="Filter lines"></label>
       <button data-view-reset title="The view was changed here and is not what the session settings say. Click to go back to them." hidden>Reset view</button>
+      <details class="more">
+        <summary title="More settings of the view, and copy or save the output">More</summary>
+        <div class="more-body">
+        <label class="check" title="Start each received line with the time. Clock: the time of day, with milliseconds. Since last line: the time since the line before, to see how long a device takes to answer."><input type="checkbox" data-stamps> Time
+          <select data-time-mode aria-label="What the time shows"><option value="clock">Clock</option><option value="delta">Since last line</option></select></label>
+        <label class="check" title="Show CR, LF and the other control characters as &lt;CR&gt;, &lt;LF&gt;, &lt;ESC&gt;... instead of acting on them. LF still ends the line (unless a pause does it). Escape sequences, such as colours, are shown as text too."><input type="checkbox" data-ctrl> Control chars</label>
+        <label title="Start a new line when nothing was received for this long, in milliseconds. For data that has no line ends. 0 turns it off. While it is on, CR and LF from the device are shown as &lt;CR&gt; and &lt;LF&gt; and do not end lines. Turning it off again shows the lines as the device sent them.">New line after
+          <input type="number" data-pause min="0" max="60000" step="10" value="0"> ms</label>
+        <button data-copy-all title="Copy everything on the screen and in its scrollback">Copy</button>
+        <button data-save-text title="Save everything on the screen and in its scrollback as a text file">Save text</button>
+        <button data-save-raw title="Save the bytes the device sent (the last 8 MB kept) as a file">Save raw</button>
+        </div>
+      </details>
       <span class="spacer"></span>
       <span class="counters" title="Bytes received since the port opened (in a tunnel: carried from A to B). Clear resets it.">Rx <b data-count="rx">0</b></span>
       <span class="marks" role="group" aria-label="Marks"><button data-mark title="Add a mark: a line of its own in the output and in the log, to find a moment again (Alt+Shift+M)">Mark</button><button data-mark-prev title="Go to the previous mark" aria-label="Previous mark">◀</button><button data-mark-next title="Go to the next mark" aria-label="Next mark">▶</button></span>
       <button data-graph aria-pressed="false" title="Draw numbers found in the received lines as a graph (set the series under Advanced in the session settings)">Graph</button>
       <button data-freeze aria-pressed="false" title="Keep the screen as it is while the device goes on sending. The data is still received, counted and kept; Resume shows it all.">Freeze</button>
-      <button data-copy-all title="Copy everything on the screen and in its scrollback">Copy</button>
-      <button data-save-text title="Save everything on the screen and in its scrollback as a text file">Save text</button>
-      <button data-save-raw title="Save the bytes the device sent (the last 8 MB kept) as a file">Save raw</button>
       <button data-action="find" title="Search the lines on screen (Ctrl+Shift+F)">Find</button>
     </div>
     <div class="graphbar" hidden>
@@ -373,7 +378,7 @@
     </ul>
     <p>A pattern is text (any case) or <code>/regex/</code>. Lines starting with <code>#</code> are notes.</p>
     <h3>Receive bar</h3>
-    <p>View (Text, Hex, Decimal, Binary), <b>New line at</b>, time (clock or since the last line), control characters, new line after a pause, filter. Changing them redraws the data kept (the last 8 MB), so nothing is lost. A changed setting is marked; <b>Reset view</b> goes back to the session's.</p>
+    <p>View (Text, Hex, Decimal, Binary, Frames), <b>New line at</b> and the filter are in the bar; <b>More</b> holds the time (clock or since the last line), control characters, new line after a pause, Copy and Save. Changing them redraws the data kept (the last 8 MB), so nothing is lost. A changed setting is marked; <b>Reset view</b> goes back to the session's.</p>
     <h3>Tunnel</h3>
     <p>The Tunnel button joins two ports: what one receives is written to the other, both directions are shown (green A→B, cyan B→A) and can be logged. Rx counts A to B, Tx counts B to A. Nothing is sent from the send bar into a tunnel.</p>
     <h3>Frames</h3>

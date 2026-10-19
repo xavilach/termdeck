@@ -24,7 +24,7 @@ Press Help (left column, Alt+Shift+H) for the keys and the syntax of the setting
 
 ## Receive (the bar above the lines)
 
-- View: Text, Hex, Decimal, Binary, Frames. New line at (Terminal, CR, LF, CR LF, Custom, None), control characters, time (clock or since the last line), new line after a pause, filter (text, `/regex/`, `!hide`). Changing them redraws the data kept (8 MB): nothing is lost.
+- View: Text, Hex, Decimal, Binary, Frames. New line at (Terminal, CR, LF, CR LF, Custom, None), filter (text, `/regex/`, `!hide`); under More: control characters, time (clock or since the last line), new line after a pause, Copy, Save. Changing them redraws the data kept (8 MB): nothing is lost.
 - Frames: bytes cut into frames by a description (`sync`, `size`, `end`, `header`, `check`), one line each, OK or BAD.
 - Highlights (`ERROR = red+bold`), Graph of numbers taken from lines (`Temp | Temperature: | degC`), Marks (Alt+Shift+M), Freeze, Copy, Save text / raw, Find (Ctrl+Shift+F), Rx counter.
 - The lines are read-only.

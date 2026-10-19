@@ -40,6 +40,8 @@ function markChanged(pane) {
     "[data-nl]": tab.view.nl !== saved.nl || (tab.view.nl === "custom" && tab.view.nlCustom !== saved.nlCustom) };
   for (const [selector, changed] of Object.entries(differs)) pane.viewbar.querySelector(selector).closest("label").classList.toggle("changed", changed);
   pane.viewbar.querySelector("[data-view-reset]").hidden = !Object.values(differs).some(Boolean);
+  const more = pane.viewbar.querySelector("details.more");  // a change inside the menu shows on its name
+  more.classList.toggle("changed", [...more.querySelectorAll("label.changed")].length > 0);
 }
 
 // Freeze keeps the screen as it is while the data is still received and kept; Resume shows it all.

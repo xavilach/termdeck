@@ -266,3 +266,14 @@ dialog#tunnel article { padding: 12px 20px 16px; }
 dialog#tunnel h2 { margin: 0 0 6px; font-size: 16px; }
 dialog#tunnel label { display: block; margin: 6px 0; }
 .viewbar [data-view][data-mode=frames] { color: var(--t-cmd); border-color: var(--t-cmd); }
+
+/* the less used settings of the receive bar and the copy / save buttons sit in a menu */
+.viewbar details.more { position: relative; }
+.viewbar details.more > summary { cursor: pointer; padding: 3px 8px; border: 1px solid var(--control); border-radius: 4px; background: var(--panel-2); list-style: none; user-select: none; }
+.viewbar details.more > summary::-webkit-details-marker { display: none; }
+.viewbar details.more > summary::after { content: " ▾"; }
+.viewbar details.more[open] > summary { background: var(--select); }
+.viewbar details.more.changed > summary { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+.viewbar details.more > .more-body { position: absolute; left: 0; top: calc(100% + 4px); z-index: 30; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 230px;
+  padding: 10px 12px; background: var(--panel); border: 1px solid var(--control); border-radius: 6px; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); }
+.viewbar details.more > .more-body label { white-space: nowrap; }

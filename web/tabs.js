@@ -604,7 +604,12 @@ const PAGE_SHORTCUTS = {
   ArrowRight: () => shiftTab(1),
 };
 
+document.addEventListener("click", (e) => {  // a click elsewhere closes the open "More" menus
+  for (const menu of document.querySelectorAll(".viewbar details.more[open]")) if (!menu.contains(e.target)) menu.open = false;
+});
+
 document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") document.querySelectorAll(".viewbar details.more[open]").forEach((menu) => { menu.open = false; });
   if (!(e.altKey && e.shiftKey)) return;
   if (PAGE_SHORTCUTS[e.code]?.() !== false && e.code in PAGE_SHORTCUTS) e.preventDefault();
 });

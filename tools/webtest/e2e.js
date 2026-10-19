@@ -43,6 +43,9 @@ async function startServer() {
 
   await page.goto(server.url);
   await page.waitForSelector("#port-tree .item.port", { state: "attached" });
+  // the "More" menu is checked on its own below; the other checks use what is in it as if it were always open
+  const openMore = () => page.evaluate(() => document.querySelectorAll(".viewbar details.more").forEach((d) => { d.open = true; }));
+  // (the other checks open the menu before they use what is in it)
   check("page loads with the start link and lists the ports", (await page.locator("#port-tree .node-head").first().textContent()).includes("Serial ports"));
   const virtualHead = page.locator("#port-tree .node-head", { hasText: "Virtual ports" });
   check("Virtual ports section is reduced at first", (await page.locator("#port-tree .item.port", { hasText: "fake:shell" }).count()) === 0 || !(await page.locator("#port-tree .item.port", { hasText: "fake:shell" }).first().isVisible()));
@@ -57,6 +60,16 @@ async function startServer() {
   check("the toolbar says Connected", (await page.locator(".pane .toolbar .status").first().textContent()) === "Connected");
 
   // the main output is read-only
+  // the "More" menu of the receive bar holds the less used settings; it opens on a click and closes on another
+  const moreBody = page.locator(".viewbar details.more > .more-body").first();
+  check("the More menu is closed at first", !(await moreBody.isVisible()));
+  await page.locator(".viewbar details.more > summary").first().click();
+  check("a click opens it, with Time, Control chars, New line after, Copy and Save", await moreBody.isVisible() && (await moreBody.locator("[data-stamps]").isVisible()) && (await moreBody.locator("[data-save-raw]").isVisible()));
+  await page.locator(".term").first().click();
+  check("a click elsewhere closes it", !(await moreBody.isVisible()));
+  await page.locator(".viewbar details.more > summary").first().click();
+  await page.keyboard.press("Escape");
+  check("Escape closes it too", !(await moreBody.isVisible()));
   await page.locator(".term .xterm").first().click();
   await page.keyboard.type("zzz");
   await sleep(300);
@@ -115,21 +128,26 @@ async function startServer() {
   await page.locator("#port-tree .item.port", { hasText: "fake:counter" }).dblclick();
   s = await waitScreen(/tick 2 /, 1);
   check("fake:counter streams", /tick 1 /.test(s) && /tick 2 /.test(s), s);
+  await openMore();
   await page.check(".pane .viewbar [data-stamps]");
   s = await waitScreen(/\[\d\d:\d\d:\d\d\.\d{3}\] tick 1/, 1);
   check("time at the start of each line", /\[\d\d:\d\d:\d\d\.\d{3}\] tick 1/.test(s), s);
   await shot("05-times");
+  await openMore();
   await page.selectOption(".viewbar [data-time-mode]", "delta");
   s = await waitScreen(/\[\+\d+(ms|\.\d{3}s)\] tick 2/, 1);
   check("time since the previous line (about half a second between ticks)", /\[\+(4\d\d|5\d\d)ms\] tick 2/.test(s) || /\[\+0\.[45]\d\ds\] tick 2/.test(s), s);
+  await openMore();
   await page.selectOption(".viewbar [data-time-mode]", "clock");
   await page.selectOption(".viewbar [data-nl]", "none");
   s = await waitScreen(/tick 1[^\n]*tick 2/, 1);
   check("New line at None joins the lines", /tick 1[^\n]*tick 2/.test(s), s);
   await page.selectOption(".viewbar [data-nl]", "terminal");
+  await openMore();
   await page.check(".viewbar [data-ctrl]");
   s = await waitScreen(/<LF>/, 1);
   check("control characters are shown", /<CR><LF>|<LF>/.test(s), s);
+  await openMore();
   await page.uncheck(".viewbar [data-ctrl]");
   check("a changed view is marked and can be reset", await page.locator(".viewbar [data-view-reset]").isVisible());
   await page.click(".viewbar [data-view-reset]");
@@ -168,15 +186,18 @@ async function startServer() {
   await page.click(".viewbar [data-freeze]");
   s = await waitScreen(/while-frozen/);
   check("resume shows it", /while-frozen/.test(s));
+  await openMore();
   const [textDownload] = await Promise.all([page.waitForEvent("download"), page.click(".viewbar [data-save-text]")]);
   const textFile = path.join(server.dir, "saved.txt");
   await textDownload.saveAs(textFile);
   check("Save text downloads the output", /while-frozen/.test(fs.readFileSync(textFile, "utf8")) && /^fake_shell-\d{8}-\d{6}\.txt$/.test(textDownload.suggestedFilename()), textDownload.suggestedFilename());
+  await openMore();
   const [rawDownload] = await Promise.all([page.waitForEvent("download"), page.click(".viewbar [data-save-raw]")]);
   const rawFile = path.join(server.dir, "saved.bin");
   await rawDownload.saveAs(rawFile);
   check("Save raw downloads the bytes the device sent", fs.readFileSync(rawFile).includes(Buffer.from("while-frozen")) && rawDownload.suggestedFilename().endsWith(".bin"));
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openMore();
   await page.click(".viewbar [data-copy-all]");
   check("Copy puts the output on the clipboard", /while-frozen/.test(await page.evaluate(() => navigator.clipboard.readText())));
 
