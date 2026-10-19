@@ -15,6 +15,7 @@
         <button id="export-settings" title="Save all sessions, scripts and groups in a file">Export</button>
         <button id="import-settings" title="Add the sessions, scripts and groups of a file saved with Export; items with the same name are replaced">Import</button>
         <input type="file" id="import-file" accept=".json,application/json" hidden>
+        <button id="open-tunnel" title="Join two ports: what one receives is written to the other, and you see both directions">Tunnel</button>
         <button id="open-help" title="Shortcuts and the little languages of the settings (Alt+Shift+H)">Help</button>
       </span></header>
     <div id="problem" class="problem" role="status" hidden></div>
@@ -73,7 +74,7 @@
         <input data-filter spellcheck="false" placeholder="text, /regex/, !hide" aria-label="Filter lines"></label>
       <button data-view-reset title="The view was changed here and is not what the session settings say. Click to go back to them." hidden>Reset view</button>
       <span class="spacer"></span>
-      <span class="counters" title="Bytes received since the port opened. Clear resets it.">Rx <b data-count="rx">0</b></span>
+      <span class="counters" title="Bytes received since the port opened (in a tunnel: carried from A to B). Clear resets it.">Rx <b data-count="rx">0</b></span>
       <span class="marks" role="group" aria-label="Marks"><button data-mark title="Add a mark: a line of its own in the output and in the log, to find a moment again (Alt+Shift+M)">Mark</button><button data-mark-prev title="Go to the previous mark" aria-label="Previous mark">◀</button><button data-mark-next title="Go to the next mark" aria-label="Next mark">▶</button></span>
       <button data-graph aria-pressed="false" title="Draw numbers found in the received lines as a graph (set the series under Advanced in the session settings)">Graph</button>
       <button data-freeze aria-pressed="false" title="Keep the screen as it is while the device goes on sending. The data is still received, counted and kept; Resume shows it all.">Freeze</button>
@@ -124,7 +125,7 @@
       <button data-send-file title="Send the content of a file to the device, as it is">File…</button>
       <button data-xmodem title="Send a file to the device, or receive one from it, with the XMODEM protocol">XMODEM…</button>
       <input type="file" data-file hidden>
-      <span class="counters" title="Bytes sent since the port opened. Clear resets it.">Tx <b data-count="tx">0</b></span>
+      <span class="counters" title="Bytes sent since the port opened (in a tunnel: carried from B to A). Clear resets it.">Tx <b data-count="tx">0</b></span>
       <span class="file-status" hidden><span data-file-text></span> <button data-file-cancel>Cancel</button></span>
     </div>
   </section>
@@ -318,6 +319,25 @@
     </div>
   </article>
 </dialog>
+<dialog id="tunnel" aria-label="Tunnel between two ports">
+  <article>
+    <header><h2>Tunnel between two ports</h2></header>
+    <p class="muted">What one port receives is written to the other. The tab shows both directions (green A→B, cyan B→A) and the log keeps them.</p>
+    <div class="grid">
+      <label>Port A <input name="portA" list="ports" spellcheck="false"></label>
+      <label>Baud A <input name="baudA" type="number" min="50" value="115200"></label>
+      <label>Port B <input name="portB" list="ports" spellcheck="false"></label>
+      <label>Baud B <input name="baudB" type="number" min="50" value="115200"></label>
+      <label>Data bits <select name="dataBits"><option>8</option><option>7</option><option>6</option><option>5</option></select></label>
+      <label>Parity <select name="parity"><option value="none">None</option><option value="even">Even</option><option value="odd">Odd</option><option value="mark">Mark</option><option value="space">Space</option></select></label>
+      <label>Stop bits <select name="stopBits"><option>1</option><option>1.5</option><option>2</option></select></label>
+      <label>Flow control <select name="flow"><option value="none">None</option><option value="rtscts">RTS/CTS</option><option value="xonxoff">XON/XOFF</option></select></label>
+    </div>
+    <label title="Where to save both directions, one line each, marked A&gt;B and B&gt;A. Leave empty for no log. {name}, {date} and {time} are replaced.">Log file <input name="logPath" spellcheck="false" placeholder="logs/tunnel-{date}.log"></label>
+    <p id="tunnel-error" class="problem" hidden></p>
+    <div class="buttons"><span class="spacer"></span><button type="button" id="tunnel-close">Cancel</button><button type="button" id="tunnel-start" class="primary">Start</button></div>
+  </article>
+</dialog>
 <dialog id="help" aria-label="Help">
   <article>
     <header><h2>termdeck help</h2><button type="button" data-close-help>Close</button></header>
@@ -339,6 +359,8 @@
     <p>A pattern is text (any case) or <code>/regex/</code>. Lines starting with <code>#</code> are notes.</p>
     <h3>Receive bar</h3>
     <p>View (Text, Hex, Decimal, Binary), <b>New line at</b>, time (clock or since the last line), control characters, new line after a pause, filter. Changing them redraws the data kept (the last 8 MB), so nothing is lost. A changed setting is marked; <b>Reset view</b> goes back to the session's.</p>
+    <h3>Tunnel</h3>
+    <p>The Tunnel button joins two ports: what one receives is written to the other, both directions are shown (green A→B, cyan B→A) and can be logged. Rx counts A to B, Tx counts B to A. Nothing is sent from the send bar into a tunnel.</p>
     <h3>Virtual ports</h3>
     <p><code>fake:echo</code>, <code>fake:shell</code> (admin/admin), <code>fake:counter</code>, <code>fake:binary</code>, <code>fake:flaky</code> (drops and returns), <code>fake:link-a</code> and <code>fake:link-b</code> (a null-modem cable).</p>
   </article>
@@ -368,6 +390,7 @@
 <script src="/bars.js"></script>
 <script src="/backup.js"></script>
 <script src="/transfer.js"></script>
+<script src="/tunnel.js"></script>
 <script src="/tabs.js"></script>
 </body>
 </html>

@@ -116,8 +116,9 @@ const portName = (device) => device.replace(/^\\\\\.\\/, "").toLowerCase();
 // The same session, or the same port, is never opened twice: its tab is shown instead.
 // The session or the port is already open in a tab: the tab, or null.
 function openElsewhere(profile) {
+  const portsOf = (p) => [p.device, p.peer?.device].filter(Boolean).map(portName);
   const sameSession = tabs.find((t) => t.profile.name === profile.name);
-  const samePort = tabs.find((t) => (t.state === "connected" || t.state === "connecting") && portName(t.profile.device) === portName(profile.device));
+  const samePort = tabs.find((t) => (t.state === "connected" || t.state === "connecting") && portsOf(t.profile).some((port) => portsOf(profile).includes(port)));
   const existing = sameSession || samePort;
   if (!existing) return null;
   const why = sameSession ? `${profile.name} is already open` : `${profile.device} is already open in the tab ${existing.profile.name}`;
@@ -388,6 +389,10 @@ const MESSAGES = {
   },
   tx: (tab, m) => echoTx(tab, m.data, undefined, m.data.length + 16),
   points: receivePoints,
+  tunnel(tab, m) {  // data that went through the tunnel, one way or the other
+    const bytes = Uint8Array.from(atob(m.data), (c) => c.charCodeAt(0));
+    emit(tab, { k: "rx", t: m.t, raw: bytes, text: bytes, dir: m.dir }, bytes.length + 32);
+  },
   xfer: receiveTransfer,
   counters(tab, m) { tab.counters = m; updateCounters(tab); },
   trigger: (tab, m) => note(tab, `trigger: ${m.match}`),
@@ -481,7 +486,7 @@ function renderToolbar(pane) {
   portButton.textContent = { connected: "Close port", reconnecting: "Stop reconnecting" }[tab.state] || "Open port";
   portButton.disabled = tab.state === "connecting";
   pane.viewbar.hidden = pane.sendbar.hidden = false;
-  const off = tab.state !== "connected";
+  const off = tab.state !== "connected" || !!tab.profile.peer;  // nothing is sent into a tunnel
   for (const field of pane.sendbar.querySelectorAll("select, input:not([data-file]), button:not([data-file-cancel])")) field.disabled = off;
   showQuick(pane);
   if (off) stopAuto(pane);

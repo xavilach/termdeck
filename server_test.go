@@ -1085,3 +1085,63 @@ func TestATransferCanBeCancelledAndNeedsAnOpenPort(t *testing.T) {
 	sendJSON(t, c, ctx, map[string]any{"type": "xmodem", "action": "cancel"})
 	waitFor(t, c, ctx, "xfer", "cancelled")
 }
+
+func TestATunnelCarriesDataBothWaysAndShowsIt(t *testing.T) {
+	ts := newTestServer(t)
+	masterA, slaveA := newPty(t)
+	masterB, slaveB := newPty(t)
+	logFile := filepath.Join(t.TempDir(), "tunnel.log")
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{
+		"name": "tun", "device": slaveA, "logPath": logFile, "peer": map[string]any{"device": slaveB, "baud": 9600}}})
+	waitFor(t, c, ctx, "state", "connected")
+
+	masterA.Write([]byte("from A\n"))
+	if got := readDevice(t, masterB, 7); string(got) != "from A\n" {
+		t.Fatalf("B got %q", got)
+	}
+	masterB.Write([]byte("from B\n"))
+	if got := readDevice(t, masterA, 7); string(got) != "from B\n" {
+		t.Fatalf("A got %q", got)
+	}
+	seen := map[string]string{}
+	for len(seen) < 2 {
+		m := waitFor(t, c, ctx, "tunnel", "")
+		data, _ := base64.StdEncoding.DecodeString(m["data"].(string))
+		seen[m["dir"].(string)] = string(data)
+	}
+	if seen["a2b"] != "from A\n" || seen["b2a"] != "from B\n" {
+		t.Errorf("the page saw %v", seen)
+	}
+	for {
+		if m := waitFor(t, c, ctx, "counters", ""); m["rx"] == float64(7) && m["tx"] == float64(7) {
+			break
+		}
+	}
+	sendJSON(t, c, ctx, map[string]any{"type": "close"})
+	waitFor(t, c, ctx, "state", "closed")
+	log, _ := os.ReadFile(logFile)
+	if !strings.Contains(string(log), "A>B from A") || !strings.Contains(string(log), "B>A from B") {
+		t.Errorf("log %q", log)
+	}
+	// both ports are free again
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t2", "device": slaveB}})
+	waitFor(t, c, ctx, "state", "connected")
+}
+
+func TestATunnelNeedsTwoDifferentPortsThatAreFree(t *testing.T) {
+	ts := newTestServer(t)
+	_, slave := newPty(t)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "peer": map[string]any{"device": slave}}})
+	if state := readState(t, c, ctx); !strings.Contains(state, "two different ports") {
+		t.Errorf("state %q", state)
+	}
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "peer": map[string]any{"device": "/dev/nothing-here"}}})
+	if state := readState(t, c, ctx); !strings.HasPrefix(state, "failed:") {
+		t.Errorf("state %q", state)
+	}
+	// the first port was released by the failed attempt
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave}})
+	waitFor(t, c, ctx, "state", "connected")
+}

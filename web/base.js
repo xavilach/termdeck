@@ -61,7 +61,7 @@ function showText(node, text) {
   node.hidden = !text;
 }
 
-const summary = (p) => `${p.device} ${p.baud} ${p.dataBits}${p.parity[0].toUpperCase()}${p.stopBits}` +
+const summary = (p) => `${p.device}${p.peer ? ` ⇄ ${p.peer.device}` : ""} ${p.baud} ${p.dataBits}${p.parity[0].toUpperCase()}${p.stopBits}` +
   (p.flow && p.flow !== "none" ? ` ${p.flow === "rtscts" ? "RTS/CTS" : "XON/XOFF"}` : "");
 
 // ---------------------------------------------------------------- views

@@ -258,3 +258,9 @@ dialog#xmodem h2 { margin: 0 0 8px; font-size: 16px; }
 dialog#xmodem label { display: block; margin: 6px 0; }
 dialog#xmodem progress { width: 100%; }
 dialog#xmodem label.check { display: flex; align-items: center; gap: 6px; margin: 0; }
+
+dialog#tunnel { padding: 0; border: 1px solid var(--control); border-radius: 6px; background: var(--panel); color: var(--text); width: min(560px, 95vw); }
+dialog#tunnel::backdrop { background: rgba(0, 0, 0, .55); }
+dialog#tunnel article { padding: 12px 20px 16px; }
+dialog#tunnel h2 { margin: 0 0 6px; font-size: 16px; }
+dialog#tunnel label { display: block; margin: 6px 0; }

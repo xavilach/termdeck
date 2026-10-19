@@ -55,6 +55,7 @@ type termSession struct {
 	pending       atomic.Int32    // trigger replies waiting or running
 	runCtx        context.Context // ends when the port closes: for steps typed in Cmd and trigger replies
 	runStop       context.CancelFunc
+	tun           *tunnel            // set while the session is a tunnel between two ports
 	xfer          *xfer              // the file transfer that is running, if any
 	reconnectStop context.CancelFunc // ends the loop that opens the port again
 	outQ          chan outItem       // set when the profile has send delays: what the writer sends
@@ -94,6 +95,9 @@ func (t *termSession) open(profile Profile) { t.openPort(profile, false) }
 // openPort opens the port of profile and says whether it did. A reconnecting attempt is quiet: it says
 // nothing while it fails, and does not stop the reconnecting loop it belongs to.
 func (t *termSession) openPort(profile Profile, reconnecting bool) bool {
+	if profile.Peer != nil {
+		return t.openTunnel(profile)
+	}
 	if !reconnecting {
 		t.close()
 	}
@@ -285,9 +289,9 @@ func (t *termSession) setLogging(on bool) {
 // close stops any script and closes the port and the log. It is safe to call when nothing is open.
 func (t *termSession) close() bool {
 	t.mu.Lock()
-	port, log, stop, device, runStop, reconnect := t.port, t.log, t.stopRun, t.profile.Device, t.runStop, t.reconnectStop
-	t.port, t.log, t.stopRun, t.runStop, t.reconnectStop = nil, nil, nil, nil, nil
-	if port != nil {
+	port, log, stop, device, runStop, reconnect, tun := t.port, t.log, t.stopRun, t.profile.Device, t.runStop, t.reconnectStop, t.tun
+	t.port, t.log, t.stopRun, t.runStop, t.reconnectStop, t.tun = nil, nil, nil, nil, nil, nil
+	if port != nil || tun != nil {
 		t.gen++
 	}
 	t.mu.Unlock()
@@ -304,8 +308,11 @@ func (t *termSession) close() bool {
 		port.Close()
 		t.srv.releasePort(device, t)
 	}
+	if tun != nil {
+		t.closeTunnel(tun)
+	}
 	log.Close()
-	return port != nil
+	return port != nil || tun != nil
 }
 
 // write sends text to the device, in its character set, and records it as sent.

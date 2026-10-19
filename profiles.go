@@ -14,18 +14,19 @@ import (
 
 // Profile is a saved serial connection.
 type Profile struct {
-	Name      string `json:"name"`
-	Device    string `json:"device"`
-	Baud      int    `json:"baud"`
-	DataBits  int    `json:"dataBits"`
-	Parity    string `json:"parity"`    // none, even, odd, mark, space
-	StopBits  string `json:"stopBits"`  // 1, 1.5, 2
-	Flow      string `json:"flow"`      // none, rtscts, xonxoff
-	Enter     string `json:"enter"`     // what the Enter key sends: cr, lf, crlf
-	Group     string `json:"group"`     // groups the profile in the list and picks its scripts
-	NoteLines bool   `json:"noteLines"` // write a note in the output when CTS, DSR, DCD or RI change
-	Reconnect bool   `json:"reconnect"` // open the port again when it comes back after it went away
-	LocalEcho bool   `json:"localEcho"`
+	Name      string   `json:"name"`
+	Device    string   `json:"device"`
+	Baud      int      `json:"baud"`
+	DataBits  int      `json:"dataBits"`
+	Parity    string   `json:"parity"`    // none, even, odd, mark, space
+	StopBits  string   `json:"stopBits"`  // 1, 1.5, 2
+	Flow      string   `json:"flow"`      // none, rtscts, xonxoff
+	Enter     string   `json:"enter"`     // what the Enter key sends: cr, lf, crlf
+	Group     string   `json:"group"`     // groups the profile in the list and picks its scripts
+	NoteLines bool     `json:"noteLines"` // write a note in the output when CTS, DSR, DCD or RI change
+	Peer      *Profile `json:"peer"`      // the second port of a tunnel: what one port receives is written to the other
+	Reconnect bool     `json:"reconnect"` // open the port again when it comes back after it went away
+	LocalEcho bool     `json:"localEcho"`
 
 	// Control lines at open: nil means asserted. Some boards reset when DTR changes.
 	DTR *bool `json:"dtr"`
@@ -188,6 +189,17 @@ func (p *Profile) Normalize() error {
 	}
 	if len(p.NewLineCustom) > 64 {
 		return errors.New("the custom new line is limited to 64 characters")
+	}
+	if p.Peer != nil {
+		if p.Peer.Peer != nil {
+			return errors.New("a tunnel joins two ports, not more")
+		}
+		if err := p.Peer.Normalize(); err != nil {
+			return fmt.Errorf("second port: %w", err)
+		}
+		if strings.EqualFold(p.Peer.Device, p.Device) {
+			return errors.New("a tunnel needs two different ports")
+		}
 	}
 	if p.CharDelayMs < 0 || p.CharDelayMs > 5000 || p.LineDelayMs < 0 || p.LineDelayMs > 5000 {
 		return errors.New("send delays are 0 to 5000 ms")

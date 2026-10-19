@@ -124,7 +124,7 @@ function redraw(tab) {
   tab.hold = true;  // events that arrive meanwhile are kept, and shown by the redraw itself
   tab.term.write("", () => {
     tab.term.reset();
-    Object.assign(tab, { lineStart: true, txOpen: false, afterCR: false, lastRx: 0, lastHead: 0, hex: null, held: [], pending: new Uint8Array(0), quiet: true, hold: false });
+    Object.assign(tab, { lineStart: true, txOpen: false, afterCR: false, lastRx: 0, lastHead: 0, lastDir: null, hex: null, held: [], pending: new Uint8Array(0), quiet: true, hold: false });
     applyModes(tab);
     tab.replaying = true;
     for (const ev of shownEvents(tab)) render(tab, ev);
@@ -172,6 +172,10 @@ function flushHex(tab) {
   tab.term.write(out.join(""));
 }
 
+// What starts the lines of a direction: the Rx or Tx marker, and for a tunnel the way the data went.
+const TUNNEL_MARKERS = { a2b: "\x1b[32mA→B \x1b[0m", b2a: "\x1b[36mB→A \x1b[0m" };
+const markerOf = (tab, dir) => TUNNEL_MARKERS[dir] || (dir === "rx" ? tab.profile.rxMarker : tab.profile.txMarker);
+
 function hexWrite(tab, data, dir, at) {
   const f = NUMBERS[tab.view.mode];
   const out = [];
@@ -179,7 +183,7 @@ function hexWrite(tab, data, dir, at) {
   for (const b of data) {
     if (!tab.hex) {
       if (!tab.lineStart) out.push("\r\n");
-      out.push(lineHead(tab, dir === "rx" ? tab.profile.rxMarker : tab.profile.txMarker, at));
+      out.push(lineHead(tab, markerOf(tab, dir), at));
       tab.hex = { dir, n: 0, chars: "", at };
       tab.lineStart = false;
     }
@@ -234,15 +238,20 @@ function writeLines(tab, bytes, marker, at) {
 function showRx(tab, ev) {
   const pause = tab.view.pause;
   if (tab.view.mode !== "text") {
-    hexWrite(tab, ev.raw, "rx", ev.t);
+    hexWrite(tab, ev.raw, ev.dir || "rx", ev.t);
   } else {
+    if (ev.dir && tab.lastDir && ev.dir !== tab.lastDir && !tab.lineStart) {  // the other way: a line of its own
+      tab.term.write("\r\n");
+      tab.lineStart = true;
+    }
+    tab.lastDir = ev.dir;
     const bytes = prepareRx(tab, ev.text);
     if (pause > 0 && !tab.lineStart && tab.lastRx && ev.t - tab.lastRx > pause) {
       tab.term.write("\r\n");  // nothing came for a while: a new line
       tab.lineStart = true;
     }
     if (lineMode(tab)) showByLines(tab, bytes, ev.t);
-    else writeLines(tab, bytes, tab.profile.rxMarker, ev.t);
+    else writeLines(tab, bytes, markerOf(tab, ev.dir || "rx"), ev.t);
   }
   tab.lastRx = ev.t;
 }
@@ -283,11 +292,11 @@ function showLine(tab, line, at) {
   }
   if (!passesFilter(tab.filterCompiled, text)) return;
   const sgr = highlightOf(tab.highlights, text);
-  if (!sgr) return writeLines(tab, line, tab.profile.rxMarker, at);
+  if (!sgr) return writeLines(tab, line, markerOf(tab, tab.lastDir || "rx"), at);
   let body = line.length;  // the colour ends before the line end
   while (body > 0 && (line[body - 1] === 10 || line[body - 1] === 13)) body--;
   const coloured = concatBytes(concatBytes(ENC.encode(`\x1b[${sgr}m`), line.slice(0, body)), concatBytes(ENC.encode("\x1b[0m"), line.slice(body)));
-  writeLines(tab, coloured, tab.profile.rxMarker, at);
+  writeLines(tab, coloured, markerOf(tab, tab.lastDir || "rx"), at);
 }
 
 // Text we send and show ourselves (typed lines, local echo, scripts), with the Tx marker.

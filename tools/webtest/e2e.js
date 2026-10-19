@@ -592,6 +592,28 @@ async function startServer() {
   check("a quick-send button in the other pane works on the first click", (await otherTx()) > txBefore2, { before: txBefore2, after: await otherTx() });
   await page.click(".layout [data-layout=single]");
 
+  // a tunnel: the counter port is joined to the echo port, so every tick goes A to B and comes back B to A
+  while ((await page.locator(".tab").count()) > 0) {
+    const close = page.locator(".tab .close").first();
+    await close.click();
+    if (await page.locator(".tab .close.confirm").count()) await close.click();
+  }
+  await page.click("#open-tunnel");
+  await page.fill("#tunnel [name=portA]", "fake:counter");
+  await page.fill("#tunnel [name=portB]", "fake:echo");
+  await page.fill("#tunnel [name=logPath]", path.join(server.dir, "tunnel.log"));
+  await page.click("#tunnel-start");
+  await page.waitForSelector(".tab:has-text('fake:counter ⇄ fake:echo')");
+  s = await waitScreen(/B→A tick 2/, 0, 8000);
+  check("a tunnel shows both directions with their marks", /A→B tick 1/.test(s) && /B→A tick 1/.test(s), s);
+  check("the send bar is off in a tunnel and the counters count both ways", (await page.locator(".sendbar [data-send-text]").first().isDisabled()) && Number(await page.locator("[data-count=rx]").first().textContent()) > 10);
+  await shot("16-tunnel");
+  await page.locator(".tab .close").first().click();
+  await page.locator(".tab .close").first().click();
+  await page.waitForFunction(() => tabs.length === 0);
+  const tunnelLog = fs.readFileSync(path.join(server.dir, "tunnel.log"), "utf8");
+  check("the tunnel log has both directions", /^A>B tick 1/m.test(tunnelLog) && /^B>A tick 1/m.test(tunnelLog), tunnelLog.slice(0, 120));
+
   check("no page errors or console errors", problems.length === 0, problems);
   check("the program reports no data race or panic", !/DATA RACE|panic:/.test(server.child.stderrText), server.child.stderrText.slice(0, 600));
   await browser.close();
