@@ -12,7 +12,8 @@ import (
 	"runtime"
 )
 
-const version = "1.1.0"
+// version is set when building a release: go build -ldflags "-X main.version=1.2.0"
+var version = "1.1.0"
 
 func openBrowser(url string) {
 	var cmd *exec.Cmd
@@ -31,7 +32,11 @@ func main() {
 	port := flag.Int("port", 0, "port on 127.0.0.1 (default: random)")
 	noBrowser := flag.Bool("no-browser", false, "only print the URL")
 	showVersion := flag.Bool("version", false, "print the version")
+	home := flag.String("home", "", "folder for the settings (default: the user's config folder; TERMDECK_HOME also sets it)")
 	flag.Parse()
+	if *home != "" {
+		os.Setenv("TERMDECK_HOME", *home)
+	}
 	if *showVersion {
 		fmt.Println("termdeck", version)
 		return

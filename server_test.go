@@ -712,6 +712,16 @@ func TestScriptsAreListedAndDeletedOverHTTP(t *testing.T) {
 	}
 }
 
+func TestTheVersionIsAvailableToTheLoggedInPage(t *testing.T) {
+	ts := newTestServer(t)
+	if code, body := ts.do(t, "GET", "/api/info", "", ts.secret); code != 200 || !strings.Contains(body, `"version"`) {
+		t.Errorf("%d %s", code, body)
+	}
+	if code, _ := ts.do(t, "GET", "/api/info", "", ""); code != 401 {
+		t.Errorf("without the login: got %d", code)
+	}
+}
+
 func TestVirtualPortsAreListedApartOverHTTP(t *testing.T) {
 	ts := newTestServer(t)
 	_, virtual := ts.do(t, "GET", "/api/virtual", "", ts.secret)

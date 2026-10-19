@@ -383,6 +383,8 @@
     <p>The Tunnel button joins two ports: what one receives is written to the other, both directions are shown (green A→B, cyan B→A) and can be logged. Rx counts A to B, Tx counts B to A. Nothing is sent from the send bar into a tunnel.</p>
     <h3>Frames</h3>
     <p>View: Frames cuts the received bytes into frames. Describe them in the session settings (Advanced, Frames), one setting per line: <code>sync = AA 55</code> · <code>size = u8@2 + 5</code> (the size of the frame: u8, u16be or u16le at an offset, plus a number; or a plain number) · <code>end = 0D 0A</code> (instead of size) · <code>header = 3</code> · <code>check = crc16modbus</code>. A bad check shows as BAD with what it should be.</p>
+    <h3>About</h3>
+    <p id="about" class="muted"></p>
     <h3>Virtual ports</h3>
     <p><code>fake:echo</code>, <code>fake:shell</code> (admin/admin), <code>fake:counter</code>, <code>fake:binary</code>, <code>fake:flaky</code> (drops and returns), <code>fake:stream</code> (600 KB/s for 5 s), <code>fake:link-a</code> and <code>fake:link-b</code> (a null-modem cable).</p>
   </article>

@@ -20,7 +20,13 @@ async function importSettings(file) {
 }
 
 const helpDialog = $("#help");
-$("#open-help").addEventListener("click", () => helpDialog.showModal());
+$("#open-help").addEventListener("click", async () => {
+  helpDialog.showModal();
+  try {
+    const info = await api("/api/info");
+    $("#about").textContent = `termdeck ${info.version} on ${info.os}. Settings are kept in ${info.home}.`;
+  } catch { /* the help is still there */ }
+});
 helpDialog.querySelector("[data-close-help]").addEventListener("click", () => helpDialog.close());
 helpDialog.addEventListener("click", (e) => { if (e.target === helpDialog) helpDialog.close(); });  // a click outside
 

@@ -207,6 +207,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/groups", s.listGroups)
 	mux.HandleFunc("POST /api/groups", s.addGroup)
 	mux.HandleFunc("DELETE /api/groups/{name}", s.deleteGroup)
+	mux.HandleFunc("GET /api/info", func(w http.ResponseWriter, r *http.Request) {
+		home, _ := configDir()
+		writeJSON(w, http.StatusOK, map[string]string{"version": version, "os": runtime.GOOS, "home": home})
+	})
 	mux.HandleFunc("GET /api/export", s.export)
 	mux.HandleFunc("POST /api/import", s.importSettings)
 	mux.HandleFunc("GET /api/terminal", s.terminal)

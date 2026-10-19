@@ -42,7 +42,7 @@ Press Help (left column, Alt+Shift+H) for the keys and the syntax of the setting
 
 ## Data
 
-`profiles.json`, `scripts.json`, `groups.json` in `%APPDATA%\termdeck` or `~/.config/termdeck` (`TERMDECK_HOME` overrides).
+`profiles.json`, `scripts.json`, `groups.json` in `%APPDATA%\termdeck` or `~/.config/termdeck` (`--home DIR` or `TERMDECK_HOME` override). `tools/release.sh VERSION` builds for Linux, Windows and macOS.
 The server listens on 127.0.0.1 only; the start link works once, and the login is kept for the life of the browser tab.
 
 ## Tests
