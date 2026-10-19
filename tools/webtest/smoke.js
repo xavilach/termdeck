@@ -92,6 +92,10 @@ const tab = () => run("tabs[0]", "x");
   // stamps
   const stamps = q("[data-stamps]"); stamps.checked = true; fire(stamps, "change");
   check("timestamps", /\[\d\d:\d\d:\d\d\.\d{3}\] hello/.test(t.term.text()), t.term.text());
+  const mode = q("[data-time-mode]"); mode.value = "delta"; fire(mode, "change");
+  check("time since the previous line", /\[\+\d+(ms|\.\d{3}s)\] hello/.test(t.term.text()), t.term.text());
+  check("choosing what the time shows turns it on and marks the change", stamps.checked && q("[data-view-reset]").hidden === false);
+  mode.value = "clock"; fire(mode, "change");
   stamps.checked = false; fire(stamps, "change");
 
   // control chars

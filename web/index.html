@@ -58,7 +58,8 @@
       <label title="What ends a line in the received text. Terminal: the way a terminal does it (CR returns to the start of the line, LF goes down). CR, LF, CR LF or Custom: that sequence ends the line and any other CR or LF is dropped (shown as &lt;CR&gt; or &lt;LF&gt; with Control chars). None: only a pause ends lines. Custom is written like in the send bar: \r \n \t \xNN.">New line at
         <select data-nl><option value="terminal">Terminal</option><option value="cr">CR</option><option value="lf">LF</option><option value="crlf">CR LF</option><option value="custom">Custom</option><option value="none">None</option></select>
         <input data-nl-custom hidden spellcheck="false" placeholder="\r\n" aria-label="Custom new line"></label>
-      <label class="check" title="Start each line with the time it was received, with milliseconds."><input type="checkbox" data-stamps> Time</label>
+      <label class="check" title="Start each received line with the time. Clock: the time of day, with milliseconds. Since last line: the time since the line before, to see how long a device takes to answer."><input type="checkbox" data-stamps> Time
+        <select data-time-mode aria-label="What the time shows"><option value="clock">Clock</option><option value="delta">Since last line</option></select></label>
       <label class="check" title="Show CR, LF and the other control characters as &lt;CR&gt;, &lt;LF&gt;, &lt;ESC&gt;... instead of acting on them. LF still ends the line (unless a pause does it). Escape sequences, such as colours, are shown as text too."><input type="checkbox" data-ctrl> Control chars</label>
       <label title="Start a new line when nothing was received for this long, in milliseconds. For data that has no line ends. 0 turns it off. While it is on, CR and LF from the device are shown as &lt;CR&gt; and &lt;LF&gt; and do not end lines. Turning it off again shows the lines as the device sent them.">New line after
         <input type="number" data-pause min="0" max="60000" step="10" value="0"> ms</label>
@@ -130,7 +131,8 @@
               <label title="The sequence for Custom, written like \r \n \t \xNN.">Custom new line <input name="newLineCustom" spellcheck="false" placeholder="\r\n"></label>
             </div>
             <div class="checks">
-              <label class="check" title="Start each received line with the time, with milliseconds."><input name="timestamps" type="checkbox"> Time at the start of each line</label>
+              <label class="check" title="Start each received line with the time."><input name="timestamps" type="checkbox"> Time at the start of each line</label>
+              <label title="What the time shows: the clock (time of day with milliseconds) or the time since the line before.">Time shows <select name="timeMode"><option value="clock">Clock</option><option value="delta">Since last line</option></select></label>
               <label class="check" title="Show CR, LF and the other control characters as &lt;CR&gt;, &lt;LF&gt;, &lt;ESC&gt;... instead of acting on them."><input name="showControl" type="checkbox"> Show control characters</label>
             </div>
           </fieldset>

@@ -155,6 +155,9 @@ func TestStepsAndTriggersAreValidated(t *testing.T) {
 	if err := p.Normalize(); err != nil {
 		t.Error(err)
 	}
+	if (&Profile{Device: "x", TimeMode: "never"}).Normalize() == nil {
+		t.Error("a bad time mode was accepted")
+	}
 	if (&Profile{Device: "x", View: "octal"}).Normalize() == nil || (&Profile{Device: "x", LinePauseMs: -1}).Normalize() == nil {
 		t.Error("bad view or pause accepted")
 	}

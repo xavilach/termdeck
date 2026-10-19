@@ -69,6 +69,7 @@ type Profile struct {
 	// How received data is shown at first (the toolbar changes it for an open tab).
 	View          string `json:"view"`          // text, hex, dec or bin
 	Timestamps    bool   `json:"timestamps"`    // start each line with the time
+	TimeMode      string `json:"timeMode"`      // what the time shows: clock or delta (since the line before)
 	NewLine       string `json:"newLine"`       // what ends a received line: terminal, cr, lf, crlf, custom or none
 	NewLineCustom string `json:"newLineCustom"` // the sequence for custom, with \r \n \t \xNN written out
 	ShowControl   bool   `json:"showControl"`   // show CR, LF and other control characters as <CR>, <LF>, <ESC>...
@@ -89,6 +90,7 @@ var (
 	cursors     = []string{"block", "bar", "underline"}
 	views       = []string{"text", "hex", "dec", "bin"}
 	newLines    = []string{"terminal", "cr", "lf", "crlf", "custom", "none"}
+	timeModes   = []string{"clock", "delta"}
 	dataBitsS   = []int{5, 6, 7, 8}
 )
 
@@ -145,6 +147,7 @@ func (p *Profile) Normalize() error {
 		{&p.Cursor, "block", cursors, "cursor"},
 		{&p.View, "text", views, "view"},
 		{&p.NewLine, "terminal", newLines, "new line"},
+		{&p.TimeMode, "clock", timeModes, "time"},
 	} {
 		if *f.field == "" {
 			*f.field = f.def

@@ -13,6 +13,14 @@ const Format = (() => {
     return `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3, "0")}`;
   }
 
+  // The time since the previous line, short: +87ms, +1.250s, +2m03.4s
+  function formatDelta(ms) {
+    if (ms < 1000) return `+${Math.round(ms)}ms`;
+    if (ms < 60000) return `+${(ms / 1000).toFixed(3)}s`;
+    const minutes = Math.floor(ms / 60000);
+    return `+${minutes}m${((ms - minutes * 60000) / 1000).toFixed(1).padStart(4, "0")}s`;
+  }
+
   // ---- received text
 
   const CONTROL_NAMES = ["NUL", "SOH", "STX", "ETX", "EOT", "ENQ", "ACK", "BEL", "BS", "TAB", "LF", "VT", "FF", "CR", "SO", "SI",
@@ -146,7 +154,7 @@ const Format = (() => {
     return btoa(text);
   }
 
-  return { ENC, hex2, stamp, controlName, NEWLINES, unescapeText, textBytes, newlineBytes, shapeText, NUMBERS,
+  return { ENC, hex2, stamp, formatDelta, controlName, NEWLINES, unescapeText, textBytes, newlineBytes, shapeText, NUMBERS,
            parseNumbers, ALLOWED, clean, groupDigits, formatBytes, b64 };
 })();
 

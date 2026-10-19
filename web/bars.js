@@ -14,6 +14,7 @@ function syncBars(pane) {
   q("[data-view]").value = tab.view.mode;
   q("[data-view]").dataset.mode = tab.view.mode;
   q("[data-stamps]").checked = tab.view.stamps;
+  q("[data-time-mode]").value = tab.view.timeMode;
   q("[data-pause]").value = tab.view.pause;
   q("[data-ctrl]").checked = tab.view.ctrl;
   q("[data-nl]").value = tab.view.nl;
@@ -59,7 +60,7 @@ function markChanged(pane) {
   const tab = pane.active;
   if (!tab) return;
   const saved = viewOf(tab.profile);
-  const differs = { "[data-view]": tab.view.mode !== saved.mode, "[data-stamps]": tab.view.stamps !== saved.stamps, "[data-ctrl]": tab.view.ctrl !== saved.ctrl, "[data-pause]": tab.view.pause !== saved.pause,
+  const differs = { "[data-view]": tab.view.mode !== saved.mode, "[data-stamps]": tab.view.stamps !== saved.stamps || tab.view.timeMode !== saved.timeMode, "[data-ctrl]": tab.view.ctrl !== saved.ctrl, "[data-pause]": tab.view.pause !== saved.pause,
     "[data-nl]": tab.view.nl !== saved.nl || (tab.view.nl === "custom" && tab.view.nlCustom !== saved.nlCustom) };
   for (const [selector, changed] of Object.entries(differs)) pane.viewbar.querySelector(selector).closest("label").classList.toggle("changed", changed);
   pane.viewbar.querySelector("[data-view-reset]").hidden = !Object.values(differs).some(Boolean);
@@ -253,6 +254,10 @@ function wireViewBar(pane) {
     view("[data-view]").dataset.mode = tab.view.mode;
   }));
   view("[data-stamps]").addEventListener("change", change((tab) => { tab.view.stamps = view("[data-stamps]").checked; }));
+  view("[data-time-mode]").addEventListener("change", change((tab) => {
+    tab.view.timeMode = view("[data-time-mode]").value;
+    tab.view.stamps = view("[data-stamps]").checked = true;  // choosing what the time shows turns it on
+  }));
   view("[data-nl]").addEventListener("change", change((tab) => {
     tab.view.nl = view("[data-nl]").value;
     view("[data-nl-custom]").hidden = tab.view.nl !== "custom";

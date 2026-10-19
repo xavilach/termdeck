@@ -80,8 +80,8 @@ function addImplicitLF(tab, bytes) {
 // screen and shows the events again, so a view can be left and come back with nothing lost.
 
 const KEEP_BYTES = 8 * 1024 * 1024;
-const { ENC, hex2, stamp, NEWLINES, shapeText, NUMBERS, unescapeText, textBytes, parseNumbers, ALLOWED, clean, groupDigits, formatBytes, b64 } = Format;
-const viewOf = (p) => ({ mode: p.view || "text", stamps: !!p.timestamps, pause: p.linePauseMs || 0, ctrl: !!p.showControl,
+const { ENC, hex2, stamp, formatDelta, NEWLINES, shapeText, NUMBERS, unescapeText, textBytes, parseNumbers, ALLOWED, clean, groupDigits, formatBytes, b64 } = Format;
+const viewOf = (p) => ({ mode: p.view || "text", stamps: !!p.timestamps, timeMode: p.timeMode || "clock", pause: p.linePauseMs || 0, ctrl: !!p.showControl,
                                     nl: p.newLine || "terminal", nlCustom: p.newLineCustom || "" });
 
 function record(tab, ev, size) {
@@ -113,7 +113,7 @@ function redraw(tab) {
   tab.hold = true;  // events that arrive meanwhile are kept, and shown by the redraw itself
   tab.term.write("", () => {
     tab.term.reset();
-    Object.assign(tab, { lineStart: true, txOpen: false, afterCR: false, lastRx: 0, hex: null, held: [], quiet: true, hold: false });
+    Object.assign(tab, { lineStart: true, txOpen: false, afterCR: false, lastRx: 0, lastHead: 0, hex: null, held: [], quiet: true, hold: false });
     applyModes(tab);
     tab.replaying = true;
     for (const ev of tab.events) render(tab, ev);
@@ -134,7 +134,15 @@ function clearTab(tab) {
 }
 
 // What starts a line: the time when asked for, then the marker.
-const lineHead = (tab, marker, at) => (tab.view.stamps ? `\x1b[2m[${stamp(at)}]\x1b[22m ` : "") + (marker || "");
+function lineHead(tab, marker, at) {
+  let head = "";
+  if (tab.view.stamps) {
+    const text = tab.view.timeMode === "delta" ? formatDelta(tab.lastHead ? at - tab.lastHead : 0) : stamp(at);
+    head = `\x1b[2m[${text}]\x1b[22m `;
+    tab.lastHead = at;
+  }
+  return head + (marker || "");
+}
 
 // ---- hex, decimal and binary rows: each byte as a number, then the text of the row
 function endRow(tab, out) {

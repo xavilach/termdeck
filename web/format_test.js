@@ -54,6 +54,14 @@ test("stamp is hh:mm:ss.mmm", () => {
   assert.match(F.stamp(Date.now()), /^\d\d:\d\d:\d\d\.\d{3}$/);
 });
 
+test("formatDelta", () => {
+  assert.equal(F.formatDelta(0), "+0ms");
+  assert.equal(F.formatDelta(87.4), "+87ms");
+  assert.equal(F.formatDelta(1250), "+1.250s");
+  assert.equal(F.formatDelta(59999), "+59.999s");
+  assert.equal(F.formatDelta(123400), "+2m03.4s");
+});
+
 test("b64", () => {
   assert.equal(F.b64(Uint8Array.from([0, 255, 65])), "AP9B");
   assert.equal(F.b64(new Uint8Array(20000).fill(65)).length, Math.ceil(20000 / 3) * 4);

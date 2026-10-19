@@ -118,6 +118,10 @@ async function startServer() {
   s = await waitScreen(/\[\d\d:\d\d:\d\d\.\d{3}\] tick 1/, 1);
   check("time at the start of each line", /\[\d\d:\d\d:\d\d\.\d{3}\] tick 1/.test(s), s);
   await shot("05-times");
+  await page.selectOption(".viewbar [data-time-mode]", "delta");
+  s = await waitScreen(/\[\+\d+(ms|\.\d{3}s)\] tick 2/, 1);
+  check("time since the previous line (about half a second between ticks)", /\[\+(4\d\d|5\d\d)ms\] tick 2/.test(s) || /\[\+0\.[45]\d\ds\] tick 2/.test(s), s);
+  await page.selectOption(".viewbar [data-time-mode]", "clock");
   await page.selectOption(".viewbar [data-nl]", "none");
   s = await waitScreen(/tick 1[^\n]*tick 2/, 1);
   check("New line at None joins the lines", /tick 1[^\n]*tick 2/.test(s), s);
