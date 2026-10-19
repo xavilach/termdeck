@@ -1,0 +1,134 @@
+package main
+
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestNormalizeDefaultsAndErrors(t *testing.T) {
+	p := Profile{Name: "board", Device: "COM3"}
+	if err := p.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	if p.Baud != 115200 || p.DataBits != 8 || p.Parity != "none" || p.StopBits != "1" || p.Flow != "none" || p.Enter != "cr" {
+		t.Fatalf("defaults not applied: %+v", p)
+	}
+	if p.Backspace != "del" || p.Bell != "visual" || p.Theme != "auto" || p.Cursor != "block" || p.FontSize != 14 || p.Scrollback != 10000 {
+		t.Fatalf("display defaults not applied: %+v", p)
+	}
+	if !asserted(p.DTR) || !asserted(p.RTS) {
+		t.Error("DTR and RTS should be asserted unless turned off")
+	}
+	off := false
+	if asserted(&off) {
+		t.Error("a line set to false is not asserted")
+	}
+	for _, bad := range []Profile{
+		{Device: "x", Backspace: "tab"}, {Device: "x", Charset: "klingon"}, {Device: "x", LogExisting: "maybe"}, {Device: "x", Bell: "loud"}, {Device: "x", Theme: "pink"}, {Device: "x", Cursor: "star"},
+		{Device: "x", FontSize: 3}, {Device: "x", FontSize: 200}, {Device: "x", Scrollback: 5},
+		{Device: ""}, {Device: "x", Baud: 1}, {Device: "x", DataBits: 9},
+		{Device: "x", Parity: "weird"}, {Device: "x", Flow: "dtr"}, {Device: "x", Enter: "tab"},
+	} {
+		if err := bad.Normalize(); err == nil {
+			t.Errorf("%+v should be refused", bad)
+		}
+	}
+}
+
+func TestStoreAddRenameDelete(t *testing.T) {
+	s := NewStore(filepath.Join(t.TempDir(), "sub", "profiles.json"))
+	if err := s.Put("", Profile{Name: "b", Device: "COM2", Flow: "rtscts"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Put("", Profile{Name: "A", Device: "COM1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Put("", Profile{Name: "a", Device: "COM9"}); err == nil {
+		t.Error("a name differing only by case should be refused")
+	}
+	if err := s.Put("b", Profile{Name: "c", Device: "COM2", Flow: "rtscts"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Put("missing", Profile{Name: "z", Device: "COM2"}); err == nil {
+		t.Error("editing a missing profile should fail")
+	}
+	list, _ := s.List()
+	if len(list) != 2 || list[0].Name != "A" || list[1].Name != "c" || list[1].Flow != "rtscts" {
+		t.Fatalf("unexpected list: %+v", list)
+	}
+	if err := s.Delete("A"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Delete("A"); err == nil {
+		t.Error("deleting twice should fail")
+	}
+}
+
+func TestScriptNormalizeAndStore(t *testing.T) {
+	for _, bad := range []Script{
+		{Name: "x"}, {Name: "x", Commands: []string{"", " "}},
+		{Name: "x", Commands: []string{"a"}, DelayMs: -1}, {Name: "x", Commands: []string{"a"}, Count: -1},
+	} {
+		if err := bad.Normalize(); err == nil {
+			t.Errorf("%+v should be refused", bad)
+		}
+	}
+	s := NewScriptStore(filepath.Join(t.TempDir(), "scripts.json"))
+	if err := s.Put("", Script{Name: "boot", Group: "Lab", Commands: []string{"help", "", "ver", ""}, DelayMs: 200, Loop: true}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Get("boot")
+	if err != nil || len(got.Commands) != 3 || got.Group != "Lab" || !got.Loop {
+		t.Fatalf("unexpected script: %+v %v", got, err)
+	}
+	if _, err := s.Get("nope"); err == nil {
+		t.Error("a missing script should be an error")
+	}
+	if err := s.Delete("boot"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGeneralIsTheEmptyGroup(t *testing.T) {
+	p := Profile{Name: "a", Device: "COM1", Group: " general "}
+	if err := p.Normalize(); err != nil || p.Group != "" {
+		t.Errorf("group %q, err %v", p.Group, err)
+	}
+	s := Script{Name: "a", Group: "General", Commands: []string{"x"}}
+	if err := s.Normalize(); err != nil || s.Group != "" {
+		t.Errorf("group %q, err %v", s.Group, err)
+	}
+	if err := NewGroupStore(filepath.Join(t.TempDir(), "g.json")).Put("", "General"); err == nil {
+		t.Error("a group called General should be refused")
+	}
+}
+
+func TestPuttyStyleOptionsAreValidated(t *testing.T) {
+	good := Profile{Device: "x", HomeEnd: "rxvt", FuncKeys: "sco", Bold: "font", RightClick: "paste", Answerback: "termdeck",
+		Colours: "background=#101820\n\nforeground = #AABBCC\nbrightRed=#ff0000"}
+	if err := good.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	def := Profile{Device: "x"}
+	def.Normalize()
+	if def.HomeEnd != "xterm" || def.FuncKeys != "xterm" || def.Bold != "colour" || def.RightClick != "copypaste" {
+		t.Errorf("defaults: %+v", def)
+	}
+	if !asserted(def.AutoWrap) {
+		t.Error("auto wrap is on unless turned off")
+	}
+	for _, bad := range []Profile{
+		{Device: "x", HomeEnd: "vt"}, {Device: "x", FuncKeys: "f"}, {Device: "x", Bold: "huge"}, {Device: "x", RightClick: "menu"},
+		{Device: "x", Colours: "background=blue"}, {Device: "x", Colours: "sky=#112233"}, {Device: "x", Colours: "background"},
+		{Device: "x", Answerback: strings.Repeat("a", 300)}, {Device: "x", BellSound: "http://example.invalid/a.mp3"},
+	} {
+		if err := bad.Normalize(); err == nil {
+			t.Errorf("%+v should be refused", bad)
+		}
+	}
+	okSound := Profile{Device: "x", BellSound: "data:audio/wav;base64,AAAA"}
+	if err := okSound.Normalize(); err != nil {
+		t.Error(err)
+	}
+}
