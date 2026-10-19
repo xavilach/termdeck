@@ -38,7 +38,9 @@ type Logger struct {
 	printable bool // leave out escape sequences and control characters
 	lines     [2][]byte
 	timers    [2]*time.Timer
-	err       error // the first error writing the file (the disk is full, say)
+	stamps    bool         // start each line with the date and time it began
+	began     [2]time.Time // when the line in progress of each direction began
+	err       error        // the first error writing the file (the disk is full, say)
 }
 
 // OpenLog opens the profile's log. It returns nil, nil when the profile has none or `existing` is "none".
@@ -63,7 +65,7 @@ func OpenLog(p Profile, existing string) (*Logger, error) {
 	if err != nil {
 		return nil, err
 	}
-	l := &Logger{f: f, markers: [2]string{p.LogRxMarker, p.LogTxMarker}, printable: p.LogPrintable}
+	l := &Logger{f: f, markers: [2]string{p.LogRxMarker, p.LogTxMarker}, printable: p.LogPrintable, stamps: p.LogTimestamps}
 	if p.LogHeader {
 		fmt.Fprintf(f, "=~=~=~=~= termdeck log %s: %s %d baud =~=~=~=~=\n", time.Now().Format("2006.01.02 15:04:05"), p.Device, p.Baud)
 	}
@@ -133,6 +135,9 @@ func (l *Logger) Write(dir int, data []byte) {
 		case b == '\n' || b == '\r':
 			// the CR of a received CR LF, or the LF of a sent CR LF
 		default:
+			if len(l.lines[dir]) == 0 {
+				l.began[dir] = time.Now()
+			}
 			l.lines[dir] = append(l.lines[dir], b)
 		}
 	}
@@ -175,11 +180,24 @@ func (l *Logger) endLine(dir int) {
 	if l.printable {
 		text = printableOnly(text)
 	}
-	line := append([]byte(l.markers[dir]), text...)
+	line := append([]byte(l.head(dir)), text...)
 	if _, err := l.f.Write(append(line, '\n')); err != nil && l.err == nil {
 		l.err = err
 	}
 	l.lines[dir] = l.lines[dir][:0]
+}
+
+// head is what starts a line of dir: the time when asked for, then the marker.
+func (l *Logger) head(dir int) string {
+	at := l.began[dir]
+	l.began[dir] = time.Time{}
+	if !l.stamps {
+		return l.markers[dir]
+	}
+	if at.IsZero() {
+		at = time.Now() // an empty line
+	}
+	return at.Format("2006-01-02 15:04:05.000 ") + l.markers[dir]
 }
 
 // flushPartial writes a line that was not finished, if there is one.

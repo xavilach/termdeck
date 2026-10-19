@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -134,4 +135,20 @@ func TestAMarkIsWrittenBetweenTheLines(t *testing.T) {
 	}
 	var none *Logger
 	none.Mark("x") // safe
+}
+
+func TestLogLinesCanStartWithTheirTime(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "t.log")
+	l, err := OpenLog(Profile{LogPath: path, LogTimestamps: true, LogRxMarker: "RX "}, "overwrite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.Write(dirRx, []byte("one\n\ntwo\n"))
+	l.Close()
+	got, _ := os.ReadFile(path)
+	lines := strings.Split(strings.TrimRight(string(got), "\n"), "\n")
+	re := regexp.MustCompile(`^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3} RX (one|two)?$`)
+	if len(lines) != 3 || !re.MatchString(lines[0]) || !re.MatchString(lines[1]) || !re.MatchString(lines[2]) {
+		t.Errorf("log %q", got)
+	}
 }

@@ -58,14 +58,15 @@ type Profile struct {
 
 	// Markers put at the start of each received (Rx) or sent (Tx) line, on screen and in the log.
 	// Empty means no marker.
-	RxMarker     string `json:"rxMarker"`
-	TxMarker     string `json:"txMarker"`
-	LogPath      string `json:"logPath"` // empty means no log; {name}, {date} and {time} are replaced
-	LogRxMarker  string `json:"logRxMarker"`
-	LogExisting  string `json:"logExisting"`  // when the file exists: append, overwrite, ask
-	LogPrintable bool   `json:"logPrintable"` // leave out escape sequences and control characters
-	LogHeader    bool   `json:"logHeader"`    // start the log with a line saying when and what
-	LogTxMarker  string `json:"logTxMarker"`
+	RxMarker      string `json:"rxMarker"`
+	TxMarker      string `json:"txMarker"`
+	LogPath       string `json:"logPath"` // empty means no log; {name}, {date} and {time} are replaced
+	LogRxMarker   string `json:"logRxMarker"`
+	LogExisting   string `json:"logExisting"`  // when the file exists: append, overwrite, ask
+	LogPrintable  bool   `json:"logPrintable"` // leave out escape sequences and control characters
+	LogHeader     bool   `json:"logHeader"`    // start the log with a line saying when and what
+	LogTxMarker   string `json:"logTxMarker"`
+	LogTimestamps bool   `json:"logTimestamps"` // start each line of the log with the date and time
 
 	// How received data is shown at first (the toolbar changes it for an open tab).
 	View          string `json:"view"`          // text, hex, dec or bin
