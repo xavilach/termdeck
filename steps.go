@@ -9,15 +9,19 @@ import (
 
 // step is one action of a script line starting with "@", of a Cmd input or of a trigger reply.
 type step struct {
-	kind  string // dtr, rts, wait or hex
-	on    bool   // dtr and rts
-	ms    int    // wait
-	bytes []byte // hex
+	kind    string         // dtr, rts, wait, hex, expect or timeout
+	on      bool           // dtr and rts
+	ms      int            // wait and timeout
+	bytes   []byte         // hex
+	pattern *regexp.Regexp // expect
+	label   string         // expect: the pattern as written
 }
 
 const maxWaitMs = 3_600_000
 
-// parseSteps reads "dtr=1; wait=500; dtr=0; hex=0D 0A". Items are separated by semicolons.
+// parseSteps reads "dtr=1; wait=500; dtr=0; hex=0D 0A; timeout=3000; expect=login:". Items are separated
+// by semicolons. expect waits until the device has sent the text (or /regex/), for as long as the last
+// timeout says (10 seconds at first), and fails the script when it does not come.
 func parseSteps(text string) ([]step, error) {
 	var steps []step
 	for _, item := range strings.Split(text, ";") {
@@ -48,8 +52,20 @@ func parseSteps(text string) ([]step, error) {
 				return nil, fmt.Errorf("%q: %w", item, err)
 			}
 			steps = append(steps, step{kind: key, bytes: data})
+		case "timeout":
+			ms, err := strconv.Atoi(value)
+			if err != nil || ms < 1 || ms > maxWaitMs {
+				return nil, fmt.Errorf("%q: timeout is a number of milliseconds (1 to %d)", item, maxWaitMs)
+			}
+			steps = append(steps, step{kind: key, ms: ms})
+		case "expect":
+			re, err := expectPattern(value)
+			if err != nil {
+				return nil, fmt.Errorf("%q: %w", item, err)
+			}
+			steps = append(steps, step{kind: key, pattern: re, label: value})
 		default:
-			return nil, fmt.Errorf("%q: unknown step %q (dtr, rts, wait, hex)", item, key)
+			return nil, fmt.Errorf("%q: unknown step %q (dtr, rts, wait, hex, timeout, expect)", item, key)
 		}
 	}
 	if len(steps) == 0 {
@@ -214,4 +230,15 @@ func checkQuickData(q quickSend) error {
 		return err
 	}
 	return nil
+}
+
+// expectPattern compiles what expect waits for: text, or /regex/.
+func expectPattern(value string) (*regexp.Regexp, error) {
+	if value == "" {
+		return nil, fmt.Errorf("expect needs the text to wait for")
+	}
+	if len(value) > 2 && strings.HasPrefix(value, "/") && strings.HasSuffix(value, "/") {
+		return regexp.Compile(value[1 : len(value)-1])
+	}
+	return regexp.Compile(regexp.QuoteMeta(value))
 }

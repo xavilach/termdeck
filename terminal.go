@@ -62,6 +62,9 @@ type termSession struct {
 	outQ          chan outItem       // set when the profile has send delays: what the writer sends
 	flushed       atomic.Int64       // changes when the waiting data is dropped
 
+	expMu  sync.Mutex // guards expBuf
+	expBuf []byte     // what the device sent since a script last sent a line, for the expect step
+
 	trigMu         sync.Mutex // guards the two below: the replies of the last second, and whether they are paused
 	replyTimes     []time.Time
 	triggersPaused bool
@@ -147,6 +150,7 @@ func (t *termSession) openPort(profile Profile, reconnecting bool) bool {
 	t.trigMu.Unlock()
 	t.rx.Store(0)
 	t.tx.Store(0)
+	t.expectClear()
 	t.dtr, t.rts = asserted(profile.DTR), asserted(profile.RTS)
 	t.mu.Unlock()
 	t.sendState("connected", "")
@@ -192,6 +196,7 @@ func (t *termSession) read(gen int, port serial.Port, codec *Codec, triggers []t
 			raw := append([]byte(nil), buf[:n]...)
 			text := codec.FromDevice(raw)
 			t.rx.Add(int64(n))
+			t.expectFeed(text)
 			t.logger().Write(dirRx, text)
 			t.stopLogOnError()
 			if t.c.Write(t.ctx, websocket.MessageBinary, frame(at, raw, text)) != nil {

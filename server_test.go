@@ -1211,3 +1211,62 @@ func TestWebPageAccessibility(t *testing.T) {
 		t.Fatalf("%v\n%s", err, out)
 	}
 }
+
+// collectUntil gathers the text of the frames, and returns it with the first JSON message that has the type and state.
+func collectUntil(t *testing.T, c *websocket.Conn, ctx context.Context, kind, state string) (string, map[string]any) {
+	t.Helper()
+	var text []byte
+	for {
+		mt, data, err := c.Read(ctx)
+		if err != nil {
+			t.Fatalf("waiting for %s/%s: %v (text so far %q)", kind, state, err, text)
+		}
+		if mt == websocket.MessageBinary {
+			n := int(binary.BigEndian.Uint32(data[8:12]))
+			text = append(text, data[12+n:]...)
+			continue
+		}
+		var m map[string]any
+		json.Unmarshal(data, &m)
+		if m["type"] == kind && (state == "" || m["state"] == state) {
+			return string(text), m
+		}
+	}
+}
+
+func TestAScriptCanWaitForWhatTheDeviceSays(t *testing.T) {
+	ts := newTestServer(t)
+	if code, body := ts.do(t, "POST", "/api/scripts", `{"name":"login","commands":["@expect=login: ","admin","@expect=Password:","admin","@expect=/admin# /","echo done-by-script"],"delayMs":0}`, ts.secret); code != 200 {
+		t.Fatalf("save: %d %s", code, body)
+	}
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:shell", "enter": "cr"}})
+	waitFor(t, c, ctx, "state", "connected")
+	sendJSON(t, c, ctx, map[string]any{"type": "script", "name": "login"})
+	text, _ := collectUntil(t, c, ctx, "script", "done")
+	time.Sleep(100 * time.Millisecond)
+	more := readFor(t, c, ctx, 300*time.Millisecond)
+	if !strings.Contains(text+more, "done-by-script") || !strings.Contains(text+more, "admin# ") {
+		t.Errorf("the shell did not run the last line: %q", text+more)
+	}
+}
+
+func TestAnExpectThatDoesNotComeStopsTheScriptWithAnError(t *testing.T) {
+	ts := newTestServer(t)
+	ts.do(t, "POST", "/api/scripts", `{"name":"wait","commands":["@timeout=100; expect=never-comes","after"],"delayMs":0}`, ts.secret)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo"}})
+	waitFor(t, c, ctx, "state", "connected")
+	sendJSON(t, c, ctx, map[string]any{"type": "script", "name": "wait"})
+	text, m := collectUntil(t, c, ctx, "script", "error")
+	if !strings.Contains(m["message"].(string), "never-comes") || strings.Contains(text, "after") {
+		t.Errorf("message %v, echoed %q", m, text)
+	}
+	sendJSON(t, c, ctx, map[string]any{"type": "steps", "data": "timeout=50; expect=zzz"})
+	if n := waitFor(t, c, ctx, "notice", ""); !strings.Contains(n["text"].(string), "zzz") {
+		t.Errorf("notice %v", n)
+	}
+	if text := readFor(t, c, ctx, 200*time.Millisecond); strings.Contains(text, "after") {
+		t.Error("the line after the failed expect was sent")
+	}
+}

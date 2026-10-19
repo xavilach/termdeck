@@ -367,7 +367,7 @@
     <h3>Sending</h3>
     <p>Only the send bar sends; the output is read-only. Text accepts <code>\r \n \t \0 \\ \xNN</code>. Hex, Decimal and Binary refuse wrong characters and group the digits. <b>Cmd</b> takes steps (below). <b>End</b> is added after the data (None, CR, LF, CR LF, Custom); <b>Check</b> adds a sum, XOR or CRC after byte data. <b>Auto</b> sends again every N ms. <b>File…</b> sends a file as it is.</p>
     <h3>Steps (Cmd, scripts, trigger replies)</h3>
-    <p><code>dtr=1; wait=500; dtr=0; rts=1; hex=0D 0A</code>. In a script, a line that starts with <code>@</code> is steps; <code>@@</code> sends a literal <code>@</code>.</p>
+    <p><code>dtr=1; wait=500; dtr=0; rts=1; hex=0D 0A</code>. <code>expect=login:</code> (or <code>/regex/</code>) waits until the device has sent it, for up to 10 s, or as long as the last <code>timeout=3000</code> says; the script stops with an error if it does not come. The device's answer to the line a script sent is what expect looks at. In a script, a line that starts with <code>@</code> is steps; <code>@@</code> sends a literal <code>@</code>.</p>
     <h3>Settings with one rule per line</h3>
     <ul>
       <li><b>Triggers</b>: <code>login: =&gt; admin</code> · <code>/Password:/ =&gt; @hex=31 32</code></li>

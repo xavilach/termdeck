@@ -614,6 +614,15 @@ async function startServer() {
   check("5000 lines are kept and a view switch takes under 3 s", Date.now() - t0 < 3000, Date.now() - t0);
   await page.selectOption(".viewbar [data-view]", "text");
 
+  // a script that waits for what the device says (expect): log out, then log in again step by step
+  await page.evaluate(async () => {
+    await api("/api/scripts", { method: "POST", body: { name: "relogin", group: "", commands: ["logout", "@expect=login: ", "admin", "@expect=Password:", "admin", "@expect=/admin# /", "echo scripted-ok"], delayMs: 0 } });
+    await loadScripts();
+  });
+  await page.locator("#tree .item .name", { hasText: /^relogin$/ }).dblclick();
+  s = await waitScreen(/scripted-ok/, shellTab, 8000);
+  check("a script with expect steps logs in by waiting for the prompts", /login: admin/.test(s.split("logout").pop() || "") && /scripted-ok/.test(s), s.slice(-200));
+
   // marks: add one in the middle of a flood and go back to it
   await page.click(".viewbar [data-mark]");
   await input.fill("flood 300");

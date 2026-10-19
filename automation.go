@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"regexp"
 	"time"
 )
 
@@ -9,26 +12,37 @@ const maxRepliesPerSecond = 20
 
 // What a session sends on its own: script lines, steps typed in Cmd and replies to triggers.
 
-// runSteps does the steps in order; it stops early when ctx ends and says whether it did them all.
-func (t *termSession) runSteps(ctx context.Context, steps []step) bool {
+// runSteps does the steps in order. It returns nil when all were done, the error of the context when
+// it ended, or what went wrong (an expect that did not come in time).
+func (t *termSession) runSteps(ctx context.Context, steps []step) error {
+	timeout := defaultExpectTimeout
 	for _, s := range steps {
 		switch s.kind {
 		case "dtr", "rts":
 			t.setLine(s.kind, s.on)
 		case "hex":
 			t.writeRaw(s.bytes)
+		case "timeout":
+			timeout = time.Duration(s.ms) * time.Millisecond
+		case "expect":
+			if err := t.expect(ctx, s.pattern, timeout); err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return fmt.Errorf("waited %v for %q: %w", timeout, s.label, err)
+			}
 		case "wait":
 			select {
 			case <-ctx.Done():
-				return false
+				return ctx.Err()
 			case <-time.After(time.Duration(s.ms) * time.Millisecond):
 			}
 		}
 		if ctx.Err() != nil {
-			return false
+			return ctx.Err()
 		}
 	}
-	return true
+	return nil
 }
 
 // match looks for the triggers in what the device sent and answers them. It returns the end of the data, to
@@ -77,7 +91,7 @@ func (t *termSession) answer(ctx context.Context, tr trigger, enter string) {
 		}
 		t.sendJSON(map[string]string{"type": "trigger", "match": tr.label})
 		if tr.steps != nil {
-			t.runSteps(ctx, tr.steps)
+			t.reportSteps(ctx, t.runSteps(ctx, tr.steps))
 			return
 		}
 		t.write([]byte(tr.reply + enter))
@@ -111,12 +125,16 @@ func (t *termSession) runScript(name string) {
 	}
 	t.sendJSON(map[string]string{"type": "script", "state": "running", "name": name})
 	go func() {
+		var failure error // what stopped the script, besides a Stop
 		defer func() {
-			state := "done"
-			if ctx.Err() != nil {
-				state = "stopped"
+			switch {
+			case failure != nil:
+				t.sendJSON(map[string]string{"type": "script", "state": "error", "name": name, "message": failure.Error()})
+			case ctx.Err() != nil:
+				t.sendJSON(map[string]string{"type": "script", "state": "stopped", "name": name})
+			default:
+				t.sendJSON(map[string]string{"type": "script", "state": "done", "name": name})
 			}
-			t.sendJSON(map[string]string{"type": "script", "state": state, "name": name})
 		}()
 		pause := func() bool {
 			select {
@@ -132,11 +150,15 @@ func (t *termSession) runScript(name string) {
 					return
 				}
 				if steps, isSteps, _ := scriptSteps(command); isSteps {
-					if !t.runSteps(ctx, steps) {
+					if err := t.runSteps(ctx, steps); err != nil {
+						if ctx.Err() == nil {
+							failure = err
+						}
 						return
 					}
 				} else {
 					command = scriptText(command)
+					t.expectClear() // an expect after this line sees the answer to it
 					t.write([]byte(command + enter))
 					t.sendJSON(map[string]string{"type": "tx", "data": command})
 				}
@@ -163,7 +185,7 @@ func (t *termSession) runCmd(text string) {
 		t.sendJSON(map[string]string{"type": "notice", "text": "open the port first"})
 		return
 	}
-	go t.runSteps(ctx, steps)
+	go func() { t.reportSteps(ctx, t.runSteps(ctx, steps)) }()
 }
 
 func (t *termSession) stopScript() {
@@ -199,4 +221,52 @@ func (t *termSession) looping() bool {
 	t.triggersPaused = true
 	t.sendJSON(map[string]string{"type": "notice", "text": "triggers paused: more than 20 replies in a second, a loop? Open the port again to resume."})
 	return true
+}
+
+// reportSteps tells the page why steps typed in Cmd or run by a trigger stopped, unless the port closed.
+func (t *termSession) reportSteps(ctx context.Context, err error) {
+	if err != nil && ctx.Err() == nil {
+		t.sendJSON(map[string]string{"type": "notice", "text": err.Error()})
+	}
+}
+
+const defaultExpectTimeout = 10 * time.Second
+
+// expect waits until the data received since the last line a script sent (or since the port opened) has the
+// pattern in it; what came up to the match is used up.
+func (t *termSession) expect(ctx context.Context, re *regexp.Regexp, timeout time.Duration) error {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for {
+		t.expMu.Lock()
+		if loc := re.FindIndex(t.expBuf); loc != nil {
+			t.expBuf = t.expBuf[loc[1]:]
+			t.expMu.Unlock()
+			return nil
+		}
+		t.expMu.Unlock()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			return errors.New("it did not come")
+		case <-time.After(15 * time.Millisecond):
+		}
+	}
+}
+
+// expectFeed keeps the end of what the device sent, for expect.
+func (t *termSession) expectFeed(text []byte) {
+	t.expMu.Lock()
+	t.expBuf = append(t.expBuf, text...)
+	if len(t.expBuf) > 16384 {
+		t.expBuf = t.expBuf[len(t.expBuf)-16384:]
+	}
+	t.expMu.Unlock()
+}
+
+func (t *termSession) expectClear() {
+	t.expMu.Lock()
+	t.expBuf = nil
+	t.expMu.Unlock()
 }

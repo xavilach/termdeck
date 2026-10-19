@@ -233,3 +233,19 @@ func TestQuickSendsAreParsedAndValidated(t *testing.T) {
 		t.Error("a profile with a bad quick send was accepted")
 	}
 }
+
+func TestExpectAndTimeoutSteps(t *testing.T) {
+	steps, err := parseSteps("timeout=3000; expect=login: ; expect=/pass(word)?:/; dtr=1")
+	if err != nil || len(steps) != 4 || steps[0].ms != 3000 || steps[1].label != "login:" || !steps[2].pattern.MatchString("password:") || steps[1].pattern.MatchString("LOGIN:") {
+		t.Fatalf("%v %+v", err, steps)
+	}
+	for _, bad := range []string{"expect=", "expect=/(/", "timeout=0", "timeout=x", "timeout=99999999"} {
+		if _, err := parseSteps(bad); err == nil {
+			t.Errorf("%q should be refused", bad)
+		}
+	}
+	sc := Script{Name: "s", Commands: []string{"@expect=login:", "admin"}}
+	if err := sc.Normalize(); err != nil {
+		t.Error(err)
+	}
+}
