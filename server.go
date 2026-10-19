@@ -193,6 +193,10 @@ func (s *Server) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, ports)
 	})
+	mux.HandleFunc("GET /api/portinfo", func(w http.ResponseWriter, r *http.Request) {
+		ports, _ := listPorts()
+		writeJSON(w, http.StatusOK, portDetails(ports))
+	})
 	mux.HandleFunc("GET /api/virtual", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, virtualPorts())
 	})

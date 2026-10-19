@@ -8,6 +8,7 @@
 let storedGroups = [];
 let portNames = [];
 let virtualPortList = [];
+let portDetails = {};  // what each port is (the USB product), by port name
 let selectedGroup = null;     // the group "+ Session" and "+ Script" create in
 let selectedSession = null;
 let selectedScript = null;
@@ -274,8 +275,11 @@ function renderTree() {
   const ports = node("ports", `Serial ports (${portNames.length})`, "group",
     [toolButton("⟳", "List the ports again (this also happens every few seconds)", () => loadPorts())], (body) => {
       for (const port of portNames) {
-        const row = el("div", "item port", port);
-        row.title = "Double-click to open with default settings; drag onto a group to make a session";
+        const row = el("div", "item port");
+        row.append(el("span", "name", port));
+        const detail = portDetails[port];
+        if (detail) row.append(el("span", "detail", detail.info));
+        row.title = `${detail ? detail.info + ". " : ""}Double-click to open with default settings; drag onto a group to make a session`;
         makeDraggable(row, { kind: "port", name: port });
         row.addEventListener("click", () => selectRow(row, () => {}));
         row.addEventListener("dblclick", () => openTab(quickProfile(port, 115200)));
@@ -330,6 +334,7 @@ async function loadPorts(quiet = false) {
   }
   if (quiet && JSON.stringify(names) === JSON.stringify(portNames)) return;
   portNames = names;
+  try { portDetails = await api("/api/portinfo"); } catch { portDetails = {}; }
   try { virtualPortList = await api("/api/virtual"); } catch { virtualPortList = []; }
   $("#ports").replaceChildren(...[...portNames, ...virtualPortList.map((v) => v.name)].map((port) => { const o = el("option"); o.value = port; return o; }));
   renderTree();

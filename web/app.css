@@ -289,3 +289,5 @@ dialog#tunnel label { display: block; margin: 6px 0; }
 .backup { flex-wrap: wrap; }
 .empty .try { margin-top: 10px; }
 .empty .try button { margin-right: 6px; font-family: ui-monospace, Consolas, monospace; }
+.item.port { flex-direction: column; align-items: flex-start; gap: 0; }
+.item.port .detail { font-family: var(--font); font-size: 11px; color: var(--muted); white-space: normal; }
