@@ -82,7 +82,9 @@ function activate(tab) {
   focusPane = pane;
   active = tab;
   tab.belled = false;
-  tab.tabEl.classList.remove("belled");
+  tab.tabEl.classList.remove("belled", "activity");
+  tab.unread = false;
+  showUnread();
   refreshPane(pane);
   for (const p of panes) p.el.classList.toggle("focused", p === pane);
   syncBars(pane);
@@ -231,6 +233,7 @@ function restoreTabs() {
 }
 
 addEventListener("pagehide", saveTabs);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && active) { active.unread = false; active.tabEl.classList.remove("activity"); showUnread(); } });
 
 function openTab(profile, { connect: doConnect = true } = {}) {
   if (openElsewhere(profile)) return;

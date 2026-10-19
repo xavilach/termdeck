@@ -105,11 +105,27 @@ function render(tab, ev) {
 
 function emit(tab, ev, size) {
   record(tab, ev, size);
+  if (ev.k === "rx" && !tab.replaying) markActivity(tab);
   if (tab.paused) {
     tab.paused.bytes += size;
     if (tab === tab.pane.active) showFreeze(tab.pane);
   }
   render(tab, ev);
+}
+
+// A tab that is not shown and receives data gets a mark, and the page title counts such tabs.
+function markActivity(tab) {
+  if (tab === tab.pane.active && !document.hidden) return;
+  if (!tab.unread) {
+    tab.unread = true;
+    tab.tabEl.classList.add("activity");
+    showUnread();
+  }
+}
+
+function showUnread() {
+  const count = tabs.filter((t) => t.unread).length;
+  document.title = count ? `(${count}) termdeck` : "termdeck";
 }
 
 // The kept events a redraw shows: all of them, or up to the moment the screen was frozen.

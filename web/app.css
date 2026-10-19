@@ -284,3 +284,5 @@ dialog#tunnel label { display: block; margin: 6px 0; }
 
 #sidebar-resize { touch-action: none; user-select: none; position: absolute; top: 0; right: -3px; bottom: 0; width: 6px; cursor: col-resize; z-index: 20; }
 #sidebar-resize:hover, #sidebar-resize:focus-visible, #sidebar-resize.dragging { background: var(--accent); opacity: .6; outline: none; }
+.tab.activity .dot { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
+.tab.activity .label { font-weight: 600; }

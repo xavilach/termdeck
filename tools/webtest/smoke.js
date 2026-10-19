@@ -356,6 +356,16 @@ const tab = () => run("tabs[0]", "x");
   q("[data-send-text]").value = "go"; q("[data-send]").click();
   check("a send scrolls the output to the bottom", (bottomTab.term.bottomed || 0) === bottomBefore + 1, bottomTab.term.bottomed);
 
+  // a tab that is not shown gets an activity mark when data arrives, and the title counts them
+  run("openTab({ ...profiles[0], name: 'bg one', device: 'COM91' }); openTab({ ...profiles[0], name: 'bg two', device: 'COM92' })", "x");
+  const bgTwo = run("tabs.find((t) => t.profile.name === 'bg two')", "x");
+  run("activate(tabs.find((t) => t.profile.name === 'bg one'))", "x");
+  bin(bgTwo.ws, 9900, "background data");
+  check("data in a tab that is not shown marks it and the page title", bgTwo.tabEl.classList.contains("activity") && w.document.title === "(1) termdeck", w.document.title);
+  run("activate(tabs.find((t) => t.profile.name === 'bg two'))", "x");
+  check("showing the tab clears the mark", !bgTwo.tabEl.classList.contains("activity") && w.document.title === "termdeck", w.document.title);
+  run("closeTab(tabs.find((t) => t.profile.name === 'bg two')); closeTab(tabs.find((t) => t.profile.name === 'bg one'))", "x");
+
   // marks
   const mws = run("tabs[0].ws", "x");
   mws.sent.length = 0;

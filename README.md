@@ -19,6 +19,7 @@ Press Help (left column, Alt+Shift+H) for the keys and the syntax of the setting
 - Saved as JSON, in groups, with scripts per group. Tabs, or two panes. The left column can be resized (drag its edge). Export / Import (left column) move them between computers.
 - Baud, data bits, parity, stop bits, flow control (RTS/CTS, XON/XOFF, DSR/DTR on Windows), DTR/RTS, live CTS/DSR/DCD/RI, character sets.
 - Reconnect when the port comes back. RS-485 direction by RTS. Slow send (pause per character and per line end). Note line changes. Duplicate (❐).
+- A tab that gets data while another is shown is marked, and the browser tab title counts them: `(2) termdeck`.
 - The port list follows plugging and unplugging. A reload brings the tabs back (the connected ones connect again).
 - Virtual ports, to try things without hardware: `fake:echo`, `fake:shell` (admin/admin), `fake:counter`, `fake:binary`, `fake:stream` (600 KB/s), `fake:flaky` (drops and returns), `fake:link-a` / `fake:link-b` (a null-modem cable).
 

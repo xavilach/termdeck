@@ -706,6 +706,19 @@ async function startServer() {
   await page.locator(".tab .close").first().click();
   await page.locator(".tab .close").first().click();
 
+  // a tab that is not shown and receives data is marked, and the browser tab title counts such tabs
+  await page.locator("#port-tree .item.port", { hasText: "fake:counter" }).dblclick();
+  await page.locator("#port-tree .item.port", { hasText: "fake:echo" }).dblclick();   // the echo tab is now the one shown
+  await page.waitForSelector(".tab.activity:has-text('fake:counter')", { timeout: 6000 });
+  check("a tab that gets data in the background is marked and the title counts it", (await page.title()) === "(1) termdeck", await page.title());
+  await page.locator(".tab", { hasText: "fake:counter" }).click();
+  check("showing it clears the mark and the title", (await page.locator(".tab.activity").count()) === 0 && (await page.title()) === "termdeck");
+  while ((await page.locator(".tab").count()) > 0) {
+    const close = page.locator(".tab .close").first();
+    await close.click();
+    if (await page.locator(".tab .close.confirm").count()) await close.click();
+  }
+
   // RS-485 direction control: RTS of link-a is high only while it sends, and link-b sees it as CTS
   await page.evaluate(async () => {
     await api("/api/profiles", { method: "POST", body: { name: "RS485 A", device: "fake:link-a", rtsMode: "high", rtsDelayMs: 1000 } });
