@@ -97,7 +97,7 @@ function record(tab, ev, size) {
 }
 
 function render(tab, ev) {
-  if (tab.hold) return;
+  if (tab.hold || (tab.paused && !tab.replaying)) return;  // a frozen screen shows nothing new
   if (ev.k === "rx") showRx(tab, ev);
   else if (ev.k === "tx") showTx(tab, ev.text, true, ev.t, ev.bytes);
   else writeNote(tab, ev.text);
@@ -105,7 +105,18 @@ function render(tab, ev) {
 
 function emit(tab, ev, size) {
   record(tab, ev, size);
+  if (tab.paused) {
+    tab.paused.bytes += size;
+    if (tab === tab.pane.active) showFreeze(tab.pane);
+  }
   render(tab, ev);
+}
+
+// The kept events a redraw shows: all of them, or up to the moment the screen was frozen.
+function shownEvents(tab) {
+  if (!tab.paused) return tab.events;
+  const at = tab.paused.upTo ? tab.events.indexOf(tab.paused.upTo) + 1 : 0;
+  return tab.events.slice(0, at);
 }
 
 // Clear the screen and show the kept events again with the tab's view.
@@ -116,7 +127,7 @@ function redraw(tab) {
     Object.assign(tab, { lineStart: true, txOpen: false, afterCR: false, lastRx: 0, lastHead: 0, hex: null, held: [], quiet: true, hold: false });
     applyModes(tab);
     tab.replaying = true;
-    for (const ev of tab.events) render(tab, ev);
+    for (const ev of shownEvents(tab)) render(tab, ev);
     tab.replaying = false;
     tab.term.write("", () => { tab.quiet = false; });  // the old bells and titles are not news
   });

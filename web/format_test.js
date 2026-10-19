@@ -62,6 +62,12 @@ test("formatDelta", () => {
   assert.equal(F.formatDelta(123400), "+2m03.4s");
 });
 
+test("bufferText joins wrapped rows and drops the empty rows at the end", () => {
+  const rows = [["abc", false], ["def", true], ["", false], ["ghi", false], ["", false], ["", false]];
+  const buffer = { length: rows.length, getLine: (i) => ({ translateToString: () => rows[i][0], isWrapped: rows[i][1] }) };
+  assert.equal(F.bufferText(buffer), "abcdef\n\nghi");
+});
+
 test("b64", () => {
   assert.equal(F.b64(Uint8Array.from([0, 255, 65])), "AP9B");
   assert.equal(F.b64(new Uint8Array(20000).fill(65)).length, Math.ceil(20000 / 3) * 4);

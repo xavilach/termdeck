@@ -21,6 +21,20 @@ const Format = (() => {
     return `+${minutes}m${((ms - minutes * 60000) / 1000).toFixed(1).padStart(4, "0")}s`;
   }
 
+  // The text of a terminal buffer (xterm.js), a row per line; a row that continues the one before joins it.
+  function bufferText(buffer) {
+    const lines = [];
+    for (let row = 0; row < buffer.length; row++) {
+      const line = buffer.getLine(row);
+      if (!line) continue;
+      const text = line.translateToString(true);
+      if (line.isWrapped && lines.length) lines[lines.length - 1] += text;
+      else lines.push(text);
+    }
+    while (lines.length && lines[lines.length - 1] === "") lines.pop();
+    return lines.join("\n");
+  }
+
   // ---- received text
 
   const CONTROL_NAMES = ["NUL", "SOH", "STX", "ETX", "EOT", "ENQ", "ACK", "BEL", "BS", "TAB", "LF", "VT", "FF", "CR", "SO", "SI",
@@ -154,7 +168,7 @@ const Format = (() => {
     return btoa(text);
   }
 
-  return { ENC, hex2, stamp, formatDelta, controlName, NEWLINES, unescapeText, textBytes, newlineBytes, shapeText, NUMBERS,
+  return { ENC, hex2, stamp, formatDelta, bufferText, controlName, NEWLINES, unescapeText, textBytes, newlineBytes, shapeText, NUMBERS,
            parseNumbers, ALLOWED, clean, groupDigits, formatBytes, b64 };
 })();
 

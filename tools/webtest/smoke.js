@@ -187,6 +187,19 @@ const tab = () => run("tabs[0]", "x");
   check("applyProfile resets the view to the profile", q("[data-view]").value === "bin" && q("[data-pause]").value === "5");
 
 
+  // freeze, copy
+  const freeze = q("[data-freeze]");
+  freeze.click();
+  bin(ws, 3000, "while frozen\r\n");
+  check("freeze keeps the screen as it is and counts what comes", !t.term.text().includes("while frozen") && /Resume \(\d+ B new\)/.test(freeze.textContent), freeze.textContent);
+  view.value = "hex"; fire(view, "change"); view.value = "text"; fire(view, "change");
+  check("a view change while frozen does not show the new data", !t.term.text().includes("while frozen"));
+  freeze.click();
+  check("resume shows everything", t.term.text().includes("while frozen") && freeze.textContent === "Freeze", t.term.text().slice(-60));
+  let copied = null; w.navigator.clipboard.writeText = (x) => { copied = x; return Promise.resolve(); };
+  t.term.buffer.active = { length: 2, getLine: (i) => ({ translateToString: () => ["one", "two"][i], isWrapped: false }) };
+  q("[data-copy-all]").click();
+  check("Copy copies the whole output", copied === "one\ntwo", copied);
   // toolbar buttons and shortcuts
   const act = (a) => q(`[data-action=${a}]`).click();
   const nsent = () => ws.sent.length;

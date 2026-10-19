@@ -32,7 +32,8 @@ async function startServer() {
 (async () => {
   const server = await startServer();
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, acceptDownloads: true });
+  const page = await context.newPage();
   const problems = [];
   page.on("pageerror", (e) => problems.push("pageerror: " + e.message));
   page.on("console", (m) => { if (m.type() === "error") problems.push("console: " + m.text()); });
@@ -153,6 +154,31 @@ async function startServer() {
   await page.setInputFiles(".sendbar [data-file]", file);
   s = await waitScreen(/from-file/);
   check("a file is sent", /from-file/.test(s), s.slice(-200));
+
+  // freeze, copy and save
+  await page.locator(".tab", { hasText: "fake:shell" }).click();
+  await input.fill("echo before-freeze"); await input.press("Enter");
+  await waitScreen(/before-freeze/);
+  await page.click(".viewbar [data-freeze]");
+  await input.fill("echo while-frozen"); await input.press("Enter");
+  await page.waitForFunction(() => tabs[0].events.some((e) => e.k === "rx" && new TextDecoder().decode(e.text).includes("while-frozen")));
+  s = await screen(0);
+  check("freeze: new output is kept but not shown", /before-freeze/.test(s) && !/while-frozen/.test(s), s.slice(-120));
+  check("the button counts what came meanwhile", /Resume \(\d+ B new\)/.test(await page.locator(".viewbar [data-freeze]").textContent()));
+  await page.click(".viewbar [data-freeze]");
+  s = await waitScreen(/while-frozen/);
+  check("resume shows it", /while-frozen/.test(s));
+  const [textDownload] = await Promise.all([page.waitForEvent("download"), page.click(".viewbar [data-save-text]")]);
+  const textFile = path.join(server.dir, "saved.txt");
+  await textDownload.saveAs(textFile);
+  check("Save text downloads the output", /while-frozen/.test(fs.readFileSync(textFile, "utf8")) && /^fake_shell-\d{8}-\d{6}\.txt$/.test(textDownload.suggestedFilename()), textDownload.suggestedFilename());
+  const [rawDownload] = await Promise.all([page.waitForEvent("download"), page.click(".viewbar [data-save-raw]")]);
+  const rawFile = path.join(server.dir, "saved.bin");
+  await rawDownload.saveAs(rawFile);
+  check("Save raw downloads the bytes the device sent", fs.readFileSync(rawFile).includes(Buffer.from("while-frozen")) && rawDownload.suggestedFilename().endsWith(".bin"));
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.click(".viewbar [data-copy-all]");
+  check("Copy puts the output on the clipboard", /while-frozen/.test(await page.evaluate(() => navigator.clipboard.readText())));
 
   // find
   await page.click(".viewbar [data-action=find]");

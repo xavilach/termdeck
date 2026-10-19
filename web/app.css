@@ -210,3 +210,4 @@ option[value=cmd] { color: var(--t-cmd); }
 .toolbar .vsep { margin: 3px 2px; }
 .toolbar .lines { margin-left: 2px; }
 .lines { flex-wrap: wrap; max-width: 100%; }
+.viewbar button[data-freeze][aria-pressed=true] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }

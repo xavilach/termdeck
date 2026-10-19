@@ -17,6 +17,7 @@ function syncBars(pane) {
   q("[data-time-mode]").value = tab.view.timeMode;
   q("[data-pause]").value = tab.view.pause;
   q("[data-ctrl]").checked = tab.view.ctrl;
+  showFreeze(pane);
   q("[data-nl]").value = tab.view.nl;
   q("[data-nl-custom]").value = tab.view.nlCustom;
   q("[data-nl-custom]").hidden = tab.view.nl !== "custom";
@@ -70,6 +71,49 @@ function markChanged(pane) {
     "[data-nl]": tab.view.nl !== saved.nl || (tab.view.nl === "custom" && tab.view.nlCustom !== saved.nlCustom) };
   for (const [selector, changed] of Object.entries(differs)) pane.viewbar.querySelector(selector).closest("label").classList.toggle("changed", changed);
   pane.viewbar.querySelector("[data-view-reset]").hidden = !Object.values(differs).some(Boolean);
+}
+
+// Freeze keeps the screen as it is while the data is still received and kept; Resume shows it all.
+function showFreeze(pane) {
+  const tab = pane.active;
+  const button = pane.viewbar.querySelector("[data-freeze]");
+  button.setAttribute("aria-pressed", String(!!tab?.paused));
+  button.textContent = tab?.paused ? `Resume (${tab.paused.bytes.toLocaleString()} B new)` : "Freeze";
+}
+
+function toggleFreeze(pane) {
+  const tab = pane.active;
+  if (!tab) return;
+  if (tab.paused) {
+    tab.paused = null;
+    redraw(tab);
+  } else {
+    tab.paused = { upTo: tab.events[tab.events.length - 1] || null, bytes: 0 };
+  }
+  showFreeze(pane);
+}
+
+// Everything on the screen and in its scrollback, as text.
+const outputText = (tab) => Format.bufferText(tab.term.buffer.active);
+
+function download(name, blob) {
+  const link = el("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+const fileStamp = () => new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
+const fileName = (tab, ext) => `${tab.profile.name.replace(/[^\w.-]+/g, "_")}-${fileStamp()}.${ext}`;
+
+// What the device sent, as the bytes it sent (the kept data only: the last 8 MB).
+function rawOutput(tab) {
+  const parts = tab.events.filter((ev) => ev.k === "rx").map((ev) => ev.raw);
+  const all = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let at = 0;
+  for (const p of parts) { all.set(p, at); at += p.length; }
+  return all;
 }
 
 function updateCounters(tab) {
@@ -296,6 +340,16 @@ function wireViewBar(pane) {
     redraw(tab);
   });
   view("[data-action=find]").addEventListener("click", () => openFind(pane));
+  view("[data-freeze]").addEventListener("click", () => toggleFreeze(pane));
+  view("[data-copy-all]").addEventListener("click", () => {
+    if (pane.active) navigator.clipboard.writeText(outputText(pane.active)).then(() => tell("Output copied."), (e) => tell(`Cannot copy: ${e.message}`));
+  });
+  view("[data-save-text]").addEventListener("click", () => {
+    if (pane.active) download(fileName(pane.active, "txt"), new Blob([outputText(pane.active)], { type: "text/plain" }));
+  });
+  view("[data-save-raw]").addEventListener("click", () => {
+    if (pane.active) download(fileName(pane.active, "bin"), new Blob([rawOutput(pane.active)], { type: "application/octet-stream" }));
+  });
 }
 
 // The send bar: the type, the input, End, Auto send and files.

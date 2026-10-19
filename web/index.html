@@ -66,6 +66,10 @@
       <button data-view-reset title="The view was changed here and is not what the session settings say. Click to go back to them." hidden>Reset view</button>
       <span class="spacer"></span>
       <span class="counters" title="Bytes received since the port opened. Clear resets it.">Rx <b data-count="rx">0</b></span>
+      <button data-freeze aria-pressed="false" title="Keep the screen as it is while the device goes on sending. The data is still received, counted and kept; Resume shows it all.">Freeze</button>
+      <button data-copy-all title="Copy everything on the screen and in its scrollback">Copy</button>
+      <button data-save-text title="Save everything on the screen and in its scrollback as a text file">Save text</button>
+      <button data-save-raw title="Save the bytes the device sent (the last 8 MB kept) as a file">Save raw</button>
       <button data-action="find" title="Search the lines on screen (Ctrl+Shift+F)">Find</button>
     </div>
     <div class="workspace">
