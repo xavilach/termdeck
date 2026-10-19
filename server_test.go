@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1268,5 +1269,91 @@ func TestAnExpectThatDoesNotComeStopsTheScriptWithAnError(t *testing.T) {
 	}
 	if text := readFor(t, c, ctx, 200*time.Millisecond); strings.Contains(text, "after") {
 		t.Error("the line after the failed expect was sent")
+	}
+}
+
+// Messages of every kind with odd contents, in any order: the server must neither panic nor hang.
+func TestRandomMessagesDoNotCrashTheServer(t *testing.T) {
+	for seed := int64(1); seed <= 4; seed++ {
+		t.Run(itoa(int(seed)), func(t *testing.T) { randomMessages(t, seed) })
+	}
+}
+
+func randomMessages(t *testing.T, seed int64) {
+	ts := newTestServer(t)
+	rng := rand.New(rand.NewSource(seed))
+	pick := func(list ...any) any { return list[rng.Intn(len(list))] }
+	devices := []any{"fake:echo", "fake:shell", "fake:counter", "fake:binary", "fake:link-a", "fake:link-b", "fake:flaky", "nothing", "", "COM99"}
+	profile := func() map[string]any {
+		p := map[string]any{"name": "r", "device": pick(devices...), "baud": pick(9600, 0, -5, 115200, 99999999),
+			"triggers": pick("", "a => b", "/(/ => x", "x => @wait=1; hex=41"), "graphSeries": pick("", "A | a=", "bad"), "charDelayMs": pick(0, 1, 5, -1),
+			"rtsMode": pick("", "off", "high", "low", "sideways"), "reconnect": pick(true, false), "charset": pick("utf-8", "cp437", "nope"),
+			"view": pick("text", "hex", "frames", "x"), "frameSpec": pick("", "size = 4", "bad"), "logPath": pick("", "/dev/null")}
+		if rng.Intn(4) == 0 {
+			p["peer"] = map[string]any{"device": pick(devices...)}
+		}
+		return p
+	}
+	messages := []func() map[string]any{
+		func() map[string]any { return map[string]any{"type": "open", "profile": profile()} },
+		func() map[string]any { return map[string]any{"type": "close"} },
+		func() map[string]any { return map[string]any{"type": "input", "data": pick("", "hello\r", "\x00\xff")} },
+		func() map[string]any {
+			return map[string]any{"type": "raw", "bytes": []byte(pick("", "abc", "\x00\x01\x02").(string))}
+		},
+		func() map[string]any {
+			return map[string]any{"type": "steps", "data": pick("dtr=1", "wait=5", "hex=zz", "expect=x; timeout=20", "", "rts=0;;")}
+		},
+		func() map[string]any { return map[string]any{"type": "break"} },
+		func() map[string]any { return map[string]any{"type": "flush"} },
+		func() map[string]any { return map[string]any{"type": "stop"} },
+		func() map[string]any { return map[string]any{"type": "mark", "data": "m"} },
+		func() map[string]any { return map[string]any{"type": "resetcounters"} },
+		func() map[string]any { return map[string]any{"type": "script", "name": pick("none", "")} },
+		func() map[string]any {
+			return map[string]any{"type": "line", "line": pick("dtr", "rts", "x"), "value": rng.Intn(2) == 0}
+		},
+		func() map[string]any { return map[string]any{"type": "log", "value": rng.Intn(2) == 0} },
+		func() map[string]any {
+			return map[string]any{"type": "xmodem", "action": pick("send", "receive", "cancel", "x"), "proto": pick("xmodem", "ymodem", ""), "bytes": []byte("data")}
+		},
+		func() map[string]any {
+			return map[string]any{"type": "loganswer", "answer": pick("append", "overwrite", "none", "x")}
+		},
+		func() map[string]any { return map[string]any{"type": pick("unknown", "", "tunnel", "points")} },
+	}
+	c, ctx := dialTerminal(t, ts)
+	// read and discard everything the server says, so that it never waits for the reader
+	go func() {
+		for {
+			if _, _, err := c.Read(ctx); err != nil {
+				return
+			}
+		}
+	}()
+	for i := 0; i < 400; i++ {
+		data, _ := json.Marshal(messages[rng.Intn(len(messages))]())
+		if rng.Intn(25) == 0 {
+			data = []byte(pick("{broken", "", "[]", "null", `{"type":5}`).(string))
+		}
+		kind := websocket.MessageText
+		if rng.Intn(40) == 0 {
+			kind = websocket.MessageBinary
+		}
+		if err := c.Write(ctx, kind, data); err != nil {
+			t.Fatalf("message %d: %v", i, err)
+		}
+		if i%20 == 0 {
+			time.Sleep(15 * time.Millisecond)
+		}
+	}
+	time.Sleep(300 * time.Millisecond)
+	if code, _ := ts.do(t, "GET", "/api/ping", "", ts.secret); code != 200 {
+		t.Errorf("the server did not answer after the messages: %d", code)
+	}
+	c.Close(websocket.StatusNormalClosure, "done")
+	time.Sleep(100 * time.Millisecond)
+	if code, _ := ts.do(t, "GET", "/api/ping", "", ts.secret); code != 200 {
+		t.Errorf("the server did not answer after the connection closed: %d", code)
 	}
 }
