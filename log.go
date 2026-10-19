@@ -148,6 +148,24 @@ func (l *Logger) Write(dir int, data []byte) {
 	}
 }
 
+// Mark writes a line that is neither received nor sent, such as a bookmark, after the lines in progress.
+// Safe on a nil Logger.
+func (l *Logger) Mark(text string) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.flushPartial(dirRx)
+	l.flushPartial(dirTx)
+	if l.f == nil {
+		return
+	}
+	if _, err := fmt.Fprintf(l.f, "---- %s ----\n", text); err != nil && l.err == nil {
+		l.err = err
+	}
+}
+
 // endLine writes the current line of dir, even when it is empty (a blank line was sent or received).
 func (l *Logger) endLine(dir int) {
 	if l.f == nil {

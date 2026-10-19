@@ -220,10 +220,13 @@ async function startServer() {
   check("the data to send belongs to the tab", (await page.locator(".sendbar [data-send-text]").first().inputValue()) === "");
   await page.locator(".tab", { hasText: "Auto login" }).click();
   check("and comes back with it", (await page.locator(".sendbar [data-send-text]").first().inputValue()) === "draft for this tab");
+  await page.keyboard.press("Alt+Shift+M");
+  await sleep(300);
   await page.click(".toolbar [data-action=log]");
   await sleep(500);
   await page.click(".toolbar [data-action=log]");
-  check("the log file is written with markers", fs.existsSync(path.join(server.dir, "auto-login.log")));
+  check("the log file is written", fs.existsSync(path.join(server.dir, "auto-login.log")));
+  check("a mark (Alt+Shift+M) is written to the log between the lines", /^---- mark 1 at \d\d:\d\d:\d\d ----$/m.test(fs.readFileSync(path.join(server.dir, "auto-login.log"), "utf8")));
   await shot("11-triggers");
   await page.locator(".tab", { hasText: "Auto login" }).locator(".close").click();
   await page.locator(".tab", { hasText: "Auto login" }).locator(".close").click();  // a second click confirms
@@ -421,6 +424,16 @@ async function startServer() {
   await page.waitForFunction((n) => tabs[n].events.length > 0 && !tabs[n].hold, shellTab);
   check("5000 lines are kept and a view switch takes under 3 s", Date.now() - t0 < 3000, Date.now() - t0);
   await page.selectOption(".viewbar [data-view]", "text");
+
+  // marks: add one in the middle of a flood and go back to it
+  await page.click(".viewbar [data-mark]");
+  await input.fill("flood 300");
+  await input.press("Enter");
+  await waitScreen(/line 300 of 300/, shellTab, 8000);
+  await page.click(".viewbar [data-mark-prev]");
+  await sleep(200);
+  const marked = await page.evaluate((n) => tabs[n].term.getSelection(), shellTab);
+  check("the previous-mark arrow scrolls to the mark and selects it", /^\[termdeck\] mark 1 at /.test(marked), marked);
 
   check("no page errors or console errors", problems.length === 0, problems);
   check("the program reports no data race or panic", !/DATA RACE|panic:/.test(server.child.stderrText), server.child.stderrText.slice(0, 600));

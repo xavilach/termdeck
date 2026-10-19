@@ -117,3 +117,21 @@ func TestALogThatCannotBeWrittenReportsItsFirstError(t *testing.T) {
 		t.Error("a nil logger has no error")
 	}
 }
+
+func TestAMarkIsWrittenBetweenTheLines(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "m.log")
+	l, err := OpenLog(Profile{LogPath: path}, "overwrite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.Write(dirRx, []byte("one\nunfinished"))
+	l.Mark("mark 1 at 10:00:00")
+	l.Write(dirRx, []byte("two\n"))
+	l.Close()
+	got, _ := os.ReadFile(path)
+	if string(got) != "one\nunfinished\n---- mark 1 at 10:00:00 ----\ntwo\n" {
+		t.Errorf("log %q", got)
+	}
+	var none *Logger
+	none.Mark("x") // safe
+}

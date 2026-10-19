@@ -21,6 +21,7 @@ GOOS=windows GOARCH=amd64 go build -o termdeck.exe .   # Windows
 - View: text, hex, decimal or binary rows; New line at (Terminal, CR, LF, CR LF, Custom, None: other CR/LF are dropped, or shown as `<CR>` `<LF>` with control characters on); control characters as `<ESC>`...; time at the start of each line; new line after a pause. Changing the view redraws the kept data (last 8 MB), so switching back restores it.
 - The port list follows plugging and unplugging by itself. Virtual ports (own section in the left column, reduced at first) to try things without hardware: `fake:echo`, `fake:shell` (login admin/admin, type `help`), `fake:counter`, `fake:binary`, `fake:flaky` (drops and comes back, to try Reconnect), and `fake:link-a` / `fake:link-b` (a null-modem cable: open one in each tab).
 - Freeze (keep the screen while data is still kept), Copy, Save text, Save raw (the bytes the device sent). Time can show the clock or the time since the previous line.
+- Marks (Mark button, Alt+Shift+M): a line in the output and in the log; ◀ ▶ jump between them.
 - Reconnect (session option): when the port goes away, it is opened again every second until it is back.
 - Quick sends (Advanced): buttons above the send bar, one per line `name | type | data` (`| end=cr` to choose the end).
 - Slow send (Advanced): a pause after each character and after line ends, for devices that lose data; Stop and Cancel drop what is waiting.
@@ -35,7 +36,7 @@ GOOS=windows GOARCH=amd64 go build -o termdeck.exe .   # Windows
 ## Use
 
 - Left column: left click selects, double click opens (or runs a script), right click edits. Drag a session or script onto a group to move it.
-- Ctrl+Shift+C / V / L: copy, paste, clear. Alt+Shift+N / W / S / B: new session, close tab, layout, left column.
+- Ctrl+Shift+C / V / L: copy, paste, clear. Alt+Shift+N / W / S / B / M: new session, close tab, layout, left column, mark.
 
 ## Data
 

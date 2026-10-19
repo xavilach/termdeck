@@ -270,6 +270,19 @@ const tab = () => run("tabs[0]", "x");
   for (let i = 0; i < 40; i++) run(`record(tabs[tabs.length - 1], { k: "note", t: ${i}, text: "n${i}" }, 500000)`, "x");
   const capped = run("({ n: tabs[tabs.length - 1].events.length, kept: tabs[tabs.length - 1].kept, first: tabs[tabs.length - 1].events[0].text })", "x");
   check("kept events stay within the cap and drop the oldest", capped.kept <= 8 * 1024 * 1024 * 1.25 && capped.n < 40 && capped.first !== "n0", capped);
+  // marks
+  const mws = run("tabs[0].ws", "x");
+  mws.sent.length = 0;
+  q("[data-mark]").click();
+  const markMsg = mws.sent.find((m) => m.type === "mark");
+  check("Mark adds a line to the output and tells the log", markMsg && /^mark \d+ at \d\d:\d\d:\d\d$/.test(markMsg.data) && run("tabs[0].term", "x").text().includes("[termdeck] " + markMsg.data), markMsg);
+  const mt = run("tabs[0].term", "x");
+  mt.buffer.active = { length: 100, viewportY: 50, getLine: (i) => ({ translateToString: () => (i === 10 || i === 90 ? "[termdeck] mark 1 at 10:00:00" : "x") }) };
+  let scrolled = null; mt.scrollToLine = (n) => { scrolled = n; };
+  q("[data-mark-next]").click(); const afterNext = scrolled;
+  q("[data-mark-prev]").click(); const afterPrev = scrolled;
+  check("the arrows go to the next and the previous mark", afterNext === 90 && afterPrev === 10, { afterNext, afterPrev });
+
   // quick sends: buttons from the session settings
   run("applyProfile(tabs[0], { ...tabs[0].profile, quickSends: 'Hello | text | hi there\\n# note\\nRaw | hex | 41 42 | end=none\\nWiggle | cmd | dtr=0; wait=1' })", "x");
   const qws = run("tabs[0].ws", "x");

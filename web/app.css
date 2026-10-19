@@ -221,3 +221,7 @@ option[value=cmd] { color: var(--t-cmd); }
 .quickbar .cmd { border-left-color: var(--t-cmd); }
 .tab.reconnecting .dot { background: var(--warn); }
 .status.reconnecting { color: var(--warn); }
+.marks { display: inline-flex; }
+.marks button { border-radius: 0; margin-left: -1px; padding: 3px 7px; }
+.marks button:first-child { border-radius: 4px 0 0 4px; margin-left: 0; }
+.marks button:last-child { border-radius: 0 4px 4px 0; }

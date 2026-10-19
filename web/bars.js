@@ -94,6 +94,30 @@ function toggleFreeze(pane) {
   showFreeze(pane);
 }
 
+// ---- marks: a line of its own in the output (and in the log) to find a moment again
+const MARK_ROW = /^\[termdeck\] mark \d+ at /;
+
+function addMark(tab) {
+  tab.markCount = (tab.markCount || 0) + 1;
+  const text = `mark ${tab.markCount} at ${stamp(Date.now()).slice(0, 8)}`;
+  note(tab, text);
+  sendMessage(tab, { type: "mark", data: text });
+}
+
+// Scroll to the next (1) or previous (-1) mark above or below the top of the screen.
+function jumpMark(tab, direction) {
+  const buffer = tab.term.buffer.active;
+  const rows = [];
+  for (let row = 0; row < buffer.length; row++) {
+    if (MARK_ROW.test(buffer.getLine(row)?.translateToString(true) || "")) rows.push(row);
+  }
+  const top = buffer.viewportY;
+  const target = direction > 0 ? rows.find((r) => r > top) : [...rows].reverse().find((r) => r < top);
+  if (target === undefined) return tell(rows.length ? `No ${direction > 0 ? "later" : "earlier"} mark.` : "No marks yet: Mark adds one.");
+  tab.term.scrollToLine(target);
+  tab.term.select(0, target, buffer.getLine(target).translateToString(true).length);
+}
+
 // Everything on the screen and in its scrollback, as text.
 const outputText = (tab) => Format.bufferText(tab.term.buffer.active);
 
@@ -372,6 +396,9 @@ function wireViewBar(pane) {
   });
   view("[data-action=find]").addEventListener("click", () => openFind(pane));
   view("[data-freeze]").addEventListener("click", () => toggleFreeze(pane));
+  view("[data-mark]").addEventListener("click", () => { if (pane.active) addMark(pane.active); });
+  view("[data-mark-prev]").addEventListener("click", () => { if (pane.active) jumpMark(pane.active, -1); });
+  view("[data-mark-next]").addEventListener("click", () => { if (pane.active) jumpMark(pane.active, 1); });
   view("[data-copy-all]").addEventListener("click", () => {
     if (pane.active) navigator.clipboard.writeText(outputText(pane.active)).then(() => tell("Output copied."), (e) => tell(`Cannot copy: ${e.message}`));
   });

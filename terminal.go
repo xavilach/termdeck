@@ -333,7 +333,7 @@ func (t *termSession) send(data []byte, raw bool) {
 	}
 }
 
-// terminal serves one tab. The client sends JSON: open, close, input, raw, steps, break, script (by name), stop.
+// terminal serves one tab. The client sends JSON: open, close, input, raw, steps, flush, mark, break, script (by name), stop.
 // The server sends binary frames of port output (see frame) and JSON: state (connecting, connected, failed,
 // closed, ended), tx (a line a script sent), script (running, done, stopped, error), break, notice, counters, trigger.
 // The port can be closed and opened again over the same connection, so the tab keeps its screen.
@@ -387,6 +387,8 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			t.stopScript()
 		case "flush":
 			t.flushOut()
+		case "mark":
+			t.logger().Mark(m.Data)
 		case "log":
 			go func() {
 				t.opMu.Lock()
