@@ -194,3 +194,81 @@ test("shapeText: a held start of the sequence is not lost", () => {
   assert.equal(shape({ nl: "crlf" }, ["x"], held), "x");  // the CR was not followed by LF: dropped
   assert.deepEqual(held, []);
 });
+
+// ---- properties over random input (a fixed seed, so a failure can be repeated)
+function rng(seed) { let s = seed; return () => { s = (s * 1664525 + 1013904223) % 4294967296; return s / 4294967296; }; }
+
+test("random bytes survive being written and read in every type", () => {
+  const rand = rng(11);
+  for (let i = 0; i < 200; i++) {
+    const bytes = Uint8Array.from({ length: Math.floor(rand() * 40) }, () => Math.floor(rand() * 256));
+    for (const type of ["hex", "dec", "bin"]) {
+      assert.deepEqual([...F.parseNumbers(type, F.formatBytes(type, bytes))], [...bytes], `${type} ${[...bytes]}`);
+    }
+    assert.deepEqual(F.textBytes(F.unescapeText(F.formatBytes("text", bytes))).length >= bytes.length, true);
+  }
+});
+
+test("grouping digits is stable: grouping what is grouped changes nothing, and never changes the digits", () => {
+  const rand = rng(12);
+  for (let i = 0; i < 300; i++) {
+    for (const [type, alphabet] of [["hex", "0123456789abcdefABCDEF "], ["dec", "0123456789 "], ["bin", "01 "]]) {
+      const text = Array.from({ length: Math.floor(rand() * 30) }, () => alphabet[Math.floor(rand() * alphabet.length)]).join("");
+      const once = F.groupDigits(type, text);
+      assert.equal(F.groupDigits(type, once), once, `${type} ${JSON.stringify(text)}`);
+      assert.equal(once.replace(/\s/g, ""), text.replace(/\s/g, ""), `${type} ${JSON.stringify(text)}`);
+    }
+  }
+});
+
+test("a decimal group is never more than 255", () => {
+  const rand = rng(13);
+  for (let i = 0; i < 300; i++) {
+    const digits = Array.from({ length: 1 + Math.floor(rand() * 30) }, () => Math.floor(rand() * 10)).join("");
+    for (const word of F.groupDigits("dec", digits).split(" ").filter(Boolean)) assert.ok(Number(word) <= 255, `${digits} -> ${word}`);
+  }
+});
+
+test("shaping keeps every byte that is not a line end or a control character, in order", () => {
+  const rand = rng(14);
+  const views = [{ nl: "terminal" }, { nl: "cr" }, { nl: "lf" }, { nl: "crlf" }, { nl: "none" }, { nl: "custom", nlCustom: ";" }, { nl: "crlf", ctrl: true }];
+  for (let i = 0; i < 300; i++) {
+    const text = Array.from({ length: Math.floor(rand() * 40) }, () => "ab;\r\n\x1b c"[Math.floor(rand() * 10)]).join("");
+    const view = views[Math.floor(rand() * views.length)];
+    const held = [];
+    // fed in pieces, the result is the same as fed at once
+    const whole = shape(view, [text], []);
+    const cut = Math.floor(rand() * (text.length + 1));
+    const pieces = shape(view, [text.slice(0, cut), text.slice(cut)], held);
+    assert.equal(pieces, whole, `${JSON.stringify(view)} ${JSON.stringify(text)} cut at ${cut}`);
+    if (view.nl === "none" || !view.ctrl) {
+      const kept = whole.replace(/\r\n/g, "");  // the line ends shapeText added
+      for (const ch of "ab c") assert.equal(kept.split(ch).length, text.split(ch).length, `${ch} in ${JSON.stringify(text)}`);
+    }
+  }
+});
+
+test("frames cut the same way however the bytes arrive", () => {
+  const rand = rng(15);
+  const spec = F.parseFrameSpec("sync = AA 55\nsize = u8@2 + 4\nheader = 3\ncheck = sum8");
+  for (let i = 0; i < 100; i++) {
+    const stream = [];
+    for (let f = 0; f < 6; f++) {
+      if (rand() < 0.4) stream.push(...Array.from({ length: 1 + Math.floor(rand() * 4) }, () => Math.floor(rand() * 0x50)));  // noise, never a sync byte
+      const payload = Array.from({ length: Math.floor(rand() * 8) }, () => Math.floor(rand() * 256));
+      const body = [0xaa, 0x55, payload.length, ...payload];
+      stream.push(...body, ...F.checksum("sum8", body));
+    }
+    const all = F.makeFrameParser(spec)(stream).map((r) => F.frameLine(spec, r));
+    const feed = F.makeFrameParser(spec);
+    const pieces = [];
+    for (let at = 0; at < stream.length;) { const n = 1 + Math.floor(rand() * 7); pieces.push(...feed(stream.slice(at, at + n))); at += n; }
+    // noise may come in more rows when it arrives in pieces; the frames and the noise bytes are the same
+    const frames = (rows) => rows.filter((r) => !r.noise).map((r) => F.frameLine(spec, r));
+    const noise = (rows) => rows.filter((r) => r.noise).flatMap((r) => r.bytes);
+    const whole = F.makeFrameParser(spec)(stream);
+    assert.deepEqual(frames(pieces), frames(whole));
+    assert.deepEqual(noise(pieces), noise(whole));
+    assert.ok(all.filter((l) => /OK$/.test(l)).length >= 6, "every frame was found");
+  }
+});
