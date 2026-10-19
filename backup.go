@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 // Export and import of the sessions, scripts and groups, to move them to another computer or keep a copy.
@@ -12,6 +13,17 @@ type backup struct {
 	Profiles []Profile `json:"profiles"`
 	Scripts  []Script  `json:"scripts"`
 	Groups   []string  `json:"groups"`
+}
+
+// hasParentSegment says whether a path climbs out of its folder with "..": a file from elsewhere must not
+// make a session write over files outside the place it names.
+func hasParentSegment(path string) bool {
+	for _, part := range strings.FieldsFunc(path, func(r rune) bool { return r == '/' || r == '\\' }) {
+		if part == ".." {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) export(w http.ResponseWriter, r *http.Request) {
@@ -32,7 +44,7 @@ func (s *Server) export(w http.ResponseWriter, r *http.Request) {
 // stored unless every item is valid.
 func (s *Server) importSettings(w http.ResponseWriter, r *http.Request) {
 	var in backup
-	if !readJSON(w, r, &in) {
+	if !readJSONLimit(w, r, &in, 32<<20) { // sessions can carry bell sounds of 300 KB each
 		return
 	}
 	if in.Version != 1 {
@@ -42,6 +54,10 @@ func (s *Server) importSettings(w http.ResponseWriter, r *http.Request) {
 	for i := range in.Profiles { // all valid first
 		if err := in.Profiles[i].Normalize(); err != nil {
 			writeError(w, http.StatusBadRequest, fmt.Errorf("session %q: %w", in.Profiles[i].Name, err))
+			return
+		}
+		if hasParentSegment(in.Profiles[i].LogPath) {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("session %q: a log path with .. in it is not imported", in.Profiles[i].Name))
 			return
 		}
 	}

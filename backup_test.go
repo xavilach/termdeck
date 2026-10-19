@@ -51,3 +51,14 @@ func TestAnImportWithABadItemStoresNothing(t *testing.T) {
 		t.Errorf("an export needs the login: got %d", code)
 	}
 }
+
+func TestAnImportedSessionCannotClimbOutOfItsLogFolder(t *testing.T) {
+	ts := newTestServer(t)
+	body := `{"version":1,"profiles":[{"name":"x","device":"COM1","logPath":"logs/../../../etc/x.log"}],"scripts":[],"groups":[]}`
+	if code, _ := ts.do(t, "POST", "/api/import", body, ts.secret); code != 400 {
+		t.Errorf("got %d, want 400", code)
+	}
+	if hasParentSegment("logs/{name}.log") || hasParentSegment("C:\\logs\\a..b.log") || !hasParentSegment("..\\x") {
+		t.Error("only a .. segment counts")
+	}
+}

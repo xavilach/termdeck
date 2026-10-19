@@ -158,7 +158,11 @@ func writeError(w http.ResponseWriter, status int, err error) {
 }
 
 func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
-	if err := json.NewDecoder(io.LimitReader(r.Body, maxBody)).Decode(v); err != nil {
+	return readJSONLimit(w, r, v, maxBody)
+}
+
+func readJSONLimit(w http.ResponseWriter, r *http.Request, v any, limit int64) bool {
+	if err := json.NewDecoder(io.LimitReader(r.Body, limit)).Decode(v); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return false
 	}
