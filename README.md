@@ -36,7 +36,6 @@ The server listens on 127.0.0.1 only; the start link works once.
 ## Notes
 
 `internal/serial` is go.bug.st/serial (BSD) plus flow control.
-Not tested: real serial hardware, the Windows build, a real browser.
 
 ## Licence
 
