@@ -587,6 +587,7 @@ function shiftTab(step) {
 const PAGE_SHORTCUTS = {
   KeyN: () => editProfile(null),
   KeyM: () => (active ? addMark(active) : false),
+  KeyH: () => $("#help").showModal(),
   KeyB: toggleSidebar,
   KeyS: () => setLayout({ single: "cols", cols: "rows", rows: "single" }[layout]),
   KeyW: () => (active ? requestClose(active) : false),

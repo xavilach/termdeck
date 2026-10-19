@@ -362,6 +362,16 @@ async function startServer() {
   check("Duplicate opens a new session with the same settings", (await form.locator("[name=name]").inputValue()) === "Slow echo copy" && (await form.locator("[name=charDelayMs]").inputValue()) === "50" && (await page.locator("#profile-title").textContent()) === "New profile");
   await page.keyboard.press("Escape");
 
+  // help
+  await page.keyboard.press("Alt+Shift+H");
+  check("Alt+Shift+H opens the help", await page.locator("#help").evaluate((d) => d.open) && /Triggers/.test(await page.locator("#help").textContent()));
+  await shot("14-help");
+  await page.keyboard.press("Escape");
+  check("Escape closes it", !(await page.locator("#help").evaluate((d) => d.open)));
+  await page.click("#open-help");
+  await page.click("#help [data-close-help]");
+  check("the Help button opens it and Close closes it", !(await page.locator("#help").evaluate((d) => d.open)));
+
   // null-modem pair
   await page.locator("#port-tree .item.port", { hasText: "fake:link-a" }).dblclick();
   await page.locator("#port-tree .item.port", { hasText: "fake:link-b" }).dblclick();

@@ -15,6 +15,7 @@
         <button id="export-settings" title="Save all sessions, scripts and groups in a file">Export</button>
         <button id="import-settings" title="Add the sessions, scripts and groups of a file saved with Export; items with the same name are replaced">Import</button>
         <input type="file" id="import-file" accept=".json,application/json" hidden>
+        <button id="open-help" title="Shortcuts and the little languages of the settings (Alt+Shift+H)">Help</button>
       </span></header>
     <div id="problem" class="problem" role="status" hidden></div>
     <nav id="port-tree" aria-label="Serial ports"></nav>
@@ -296,6 +297,31 @@
             <button type="submit" class="primary">Save</button>
           </div>
         </form>
+</dialog>
+<dialog id="help" aria-label="Help">
+  <article>
+    <header><h2>termdeck help</h2><button type="button" data-close-help>Close</button></header>
+    <h3>Keys</h3>
+    <p><kbd>Alt+Shift+N</kbd> new session · <kbd>W</kbd> close tab · <kbd>S</kbd> layout · <kbd>B</kbd> left column · <kbd>M</kbd> mark · <kbd>PageUp</kbd>/<kbd>PageDown</kbd> other tab · <kbd>←</kbd>/<kbd>→</kbd> move the tab · <kbd>H</kbd> this help.<br>
+    <kbd>Ctrl+Shift+C</kbd> copy · <kbd>V</kbd> paste into the send bar · <kbd>L</kbd> clear · <kbd>F</kbd> find. In the send bar: <kbd>Enter</kbd> sends, <kbd>↑</kbd>/<kbd>↓</kbd> recall, <kbd>Alt+T</kbd>/<kbd>H</kbd>/<kbd>D</kbd>/<kbd>B</kbd> choose Text, Hex, Decimal, Binary.</p>
+    <h3>Sending</h3>
+    <p>Only the send bar sends; the output is read-only. Text accepts <code>\r \n \t \0 \\ \xNN</code>. Hex, Decimal and Binary refuse wrong characters and group the digits. <b>Cmd</b> takes steps (below). <b>End</b> is added after the data (None, CR, LF, CR LF, Custom); <b>Check</b> adds a sum, XOR or CRC after byte data. <b>Auto</b> sends again every N ms. <b>File…</b> sends a file as it is.</p>
+    <h3>Steps (Cmd, scripts, trigger replies)</h3>
+    <p><code>dtr=1; wait=500; dtr=0; rts=1; hex=0D 0A</code>. In a script, a line that starts with <code>@</code> is steps; <code>@@</code> sends a literal <code>@</code>.</p>
+    <h3>Settings with one rule per line</h3>
+    <ul>
+      <li><b>Triggers</b>: <code>login: =&gt; admin</code> · <code>/Password:/ =&gt; @hex=31 32</code></li>
+      <li><b>Quick sends</b>: <code>name | type | data</code> and options <code>| end=cr | check=crc16modbus</code></li>
+      <li><b>Graph series</b>: <code>Temp | Temperature: | degC</code> · <code>Hum | /hum=([0-9.]+)%/</code></li>
+      <li><b>Highlights</b>: <code>ERROR = red+bold</code> · <code>/warn(ing)?/ = orange</code></li>
+      <li><b>Filter</b> (receive bar): <code>text</code>, <code>/regex/</code>, <code>!hide</code></li>
+    </ul>
+    <p>A pattern is text (any case) or <code>/regex/</code>. Lines starting with <code>#</code> are notes.</p>
+    <h3>Receive bar</h3>
+    <p>View (Text, Hex, Decimal, Binary), <b>New line at</b>, time (clock or since the last line), control characters, new line after a pause, filter. Changing them redraws the data kept (the last 8 MB), so nothing is lost. A changed setting is marked; <b>Reset view</b> goes back to the session's.</p>
+    <h3>Virtual ports</h3>
+    <p><code>fake:echo</code>, <code>fake:shell</code> (admin/admin), <code>fake:counter</code>, <code>fake:binary</code>, <code>fake:flaky</code> (drops and returns), <code>fake:link-a</code> and <code>fake:link-b</code> (a null-modem cable).</p>
+  </article>
 </dialog>
 <dialog id="log-ask" aria-label="Log file exists">
   <form method="dialog">

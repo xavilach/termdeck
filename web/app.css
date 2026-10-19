@@ -239,3 +239,14 @@ option[value=cmd] { color: var(--t-cmd); }
 .backup button { min-height: 22px; padding: 1px 8px; font-weight: 400; }
 .sendbar label.check-hint { display: inline-flex; align-items: center; gap: 4px; margin: 0; color: var(--t); font-weight: 600; white-space: nowrap; }
 .sendbar [data-send-check] { color: var(--t); border-color: var(--t); }
+
+dialog#help { padding: 0; border: 1px solid var(--control); border-radius: 6px; background: var(--panel); color: var(--text); width: min(760px, 95vw); max-height: 90vh; overflow: auto; }
+dialog#help::backdrop { background: rgba(0, 0, 0, .55); }
+dialog#help article { padding: 12px 20px 18px; }
+dialog#help header { display: flex; align-items: center; justify-content: space-between; }
+dialog#help h2 { margin: 0; font-size: 16px; }
+dialog#help h3 { margin: 14px 0 4px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+dialog#help p, dialog#help li { margin: 4px 0; }
+dialog#help code, dialog#help kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; }
+.brand { flex-wrap: wrap; gap: 4px 8px; }
+.backup button { padding: 1px 6px; font-size: 12px; }

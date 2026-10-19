@@ -19,6 +19,11 @@ async function importSettings(file) {
   } catch (error) { showText($("#problem"), `Import failed: ${error.message}`); }
 }
 
+const helpDialog = $("#help");
+$("#open-help").addEventListener("click", () => helpDialog.showModal());
+helpDialog.querySelector("[data-close-help]").addEventListener("click", () => helpDialog.close());
+helpDialog.addEventListener("click", (e) => { if (e.target === helpDialog) helpDialog.close(); });  // a click outside
+
 $("#export-settings").addEventListener("click", exportSettings);
 $("#import-settings").addEventListener("click", () => $("#import-file").click());
 $("#import-file").addEventListener("change", () => {

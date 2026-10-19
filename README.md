@@ -41,6 +41,7 @@ GOOS=windows GOARCH=amd64 go build -o termdeck.exe .   # Windows
 ## Use
 
 - Left column: left click selects, double click opens (or runs a script), right click edits. Drag a session or script onto a group to move it.
+- Help (left column, Alt+Shift+H): shortcuts and the syntax of the one-rule-per-line settings.
 - Ctrl+Shift+C / V / L: copy, paste, clear. Alt+Shift+N / W / S / B / M: new session, close tab, layout, left column, mark.
 
 ## Data
