@@ -131,3 +131,75 @@ func parseTriggers(text string) ([]trigger, error) {
 	}
 	return out, nil
 }
+
+// quickSend is a button of the send bar: a name and what it sends.
+type quickSend struct {
+	Name, Type, Data, End string
+}
+
+var (
+	quickTypes = []string{"text", "hex", "dec", "bin", "cmd"}
+	quickEnds  = []string{"session", "none", "cr", "lf", "crlf"}
+	quickEnd   = regexp.MustCompile(`^\s*end=(\w+)\s*$`)
+)
+
+// parseQuickSends reads lines "name | type | data" and "name | type | data | end=cr". The type is text,
+// hex, dec, bin or cmd. The end (session, none, cr, lf, crlf) is the Enter key of the session for text
+// and none for the others when it is left out. Empty lines and lines starting with # are skipped.
+func parseQuickSends(text string) ([]quickSend, error) {
+	var out []quickSend
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.Split(line, "|")
+		if len(parts) < 3 {
+			return nil, fmt.Errorf("quick send %q: use  name | type | data", line)
+		}
+		q := quickSend{Name: strings.TrimSpace(parts[0]), Type: strings.ToLower(strings.TrimSpace(parts[1]))}
+		if last := parts[len(parts)-1]; len(parts) > 3 && quickEnd.MatchString(last) {
+			q.End = quickEnd.FindStringSubmatch(last)[1]
+			parts = parts[:len(parts)-1]
+		}
+		q.Data = strings.TrimSpace(strings.Join(parts[2:], "|"))
+		if q.Name == "" || len(q.Name) > 40 {
+			return nil, fmt.Errorf("quick send %q: the name is 1 to 40 characters", line)
+		}
+		if !oneOf(q.Type, quickTypes) {
+			return nil, fmt.Errorf("quick send %q: the type is one of %s", q.Name, strings.Join(quickTypes, ", "))
+		}
+		if q.End != "" && !oneOf(q.End, quickEnds) {
+			return nil, fmt.Errorf("quick send %q: the end is one of %s", q.Name, strings.Join(quickEnds, ", "))
+		}
+		if err := checkQuickData(q); err != nil {
+			return nil, fmt.Errorf("quick send %q: %w", q.Name, err)
+		}
+		out = append(out, q)
+	}
+	return out, nil
+}
+
+func checkQuickData(q quickSend) error {
+	switch q.Type {
+	case "hex":
+		_, err := parseHex(q.Data)
+		return err
+	case "dec":
+		for _, word := range strings.FieldsFunc(q.Data, func(r rune) bool { return r == ' ' || r == ',' }) {
+			if n, err := strconv.Atoi(word); err != nil || n < 0 || n > 255 {
+				return fmt.Errorf("%q: decimal bytes go from 0 to 255", word)
+			}
+		}
+	case "bin":
+		for _, word := range strings.FieldsFunc(q.Data, func(r rune) bool { return r == ' ' || r == ',' }) {
+			if !regexp.MustCompile(`^([01]{1,8}|([01]{8})+)$`).MatchString(word) {
+				return fmt.Errorf("%q: binary bytes are up to 8 digits of 0 and 1", word)
+			}
+		}
+	case "cmd":
+		_, err := parseSteps(q.Data)
+		return err
+	}
+	return nil
+}

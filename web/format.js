@@ -162,6 +162,24 @@ const Format = (() => {
     return Array.from(bytes, (b) => named[b] ?? (b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : `\\x${hex2(b)}`)).join("");
   }
 
+  // The buttons of the send bar, from the session's lines "name | type | data" and "... | end=cr" (the
+  // server has checked them). Lines that do not fit are left out.
+  function parseQuickSends(text) {
+    const out = [];
+    for (let line of (text || "").split("\n")) {
+      line = line.trim();
+      if (!line || line.startsWith("#")) continue;
+      const parts = line.split("|");
+      if (parts.length < 3) continue;
+      const entry = { name: parts[0].trim(), type: parts[1].trim().toLowerCase(), end: "" };
+      const m = parts.length > 3 && /^\s*end=(\w+)\s*$/.exec(parts[parts.length - 1]);
+      if (m) { entry.end = m[1]; parts.pop(); }
+      entry.data = parts.slice(2).join("|").trim();
+      if (entry.name) out.push(entry);
+    }
+    return out;
+  }
+
   function b64(bytes) {
     let text = "";
     for (let i = 0; i < bytes.length; i += 8192) text += String.fromCharCode(...bytes.subarray(i, i + 8192));
@@ -169,7 +187,7 @@ const Format = (() => {
   }
 
   return { ENC, hex2, stamp, formatDelta, bufferText, controlName, NEWLINES, unescapeText, textBytes, newlineBytes, shapeText, NUMBERS,
-           parseNumbers, ALLOWED, clean, groupDigits, formatBytes, b64 };
+           parseNumbers, parseQuickSends, ALLOWED, clean, groupDigits, formatBytes, b64 };
 })();
 
 if (typeof module !== "undefined") module.exports = Format;

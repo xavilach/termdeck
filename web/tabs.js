@@ -17,7 +17,7 @@ function createPane() {
   const pane = { el: root, tabsEl: root.querySelector(".tabs"), toolbar: root.querySelector(".toolbar"),
                  terminals: root.querySelector(".terminals"), workspace: root.querySelector(".workspace"),
                  empty: root.querySelector(".empty"), tabs: [], active: null,
-                 viewbar: root.querySelector(".viewbar"), sendbar: root.querySelector(".sendbar"), findbar: root.querySelector(".findbar"),
+                 viewbar: root.querySelector(".viewbar"), quickbar: root.querySelector(".quickbar"), sendbar: root.querySelector(".sendbar"), findbar: root.querySelector(".findbar"),
                  find: { index: -1, matches: [], key: "" } };
   wireBars(pane);
   if (panes.length === 0) {  // the first pane carries the button for the left column and the layout buttons
@@ -455,7 +455,7 @@ function renderToolbar(pane) {
   const tab = pane.active;
   pane.toolbar.hidden = !tab;
   pane.empty.hidden = pane.tabs.length > 0;
-  if (!tab) { pane.viewbar.hidden = pane.sendbar.hidden = pane.findbar.hidden = true; return; }
+  if (!tab) { pane.viewbar.hidden = pane.sendbar.hidden = pane.findbar.hidden = pane.quickbar.hidden = true; return; }
   const q = (selector) => pane.toolbar.querySelector(selector);
   q(".status").textContent = STATUS[tab.state];
   q(".status").className = `status ${tab.state}`;
@@ -472,6 +472,7 @@ function renderToolbar(pane) {
   pane.viewbar.hidden = pane.sendbar.hidden = false;
   const off = tab.state !== "connected";
   for (const field of pane.sendbar.querySelectorAll("select, input:not([data-file]), button:not([data-file-cancel])")) field.disabled = off;
+  showQuick(pane);
   if (off) stopAuto(pane);
   renderFileStatus(pane);
 }

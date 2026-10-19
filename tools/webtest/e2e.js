@@ -202,6 +202,7 @@ async function startServer() {
   await form.locator("[name=logPath]").fill(path.join(server.dir, "auto-login.log"));
   await form.locator("#advanced").evaluate((d) => { d.open = true; });
   await form.locator("[name=triggers]").fill("login: => admin\n/Password:/ => admin");
+  await form.locator("[name=quickSends]").fill("Hello | text | echo quick\nHex | hex | 65 63 68 6f 20 68 71 0d | end=none");
   await page.click("#profile-connect");
   await sleep(500);
   check("the session dialog saves and opens", await page.locator(".tab", { hasText: "Auto login" }).count() === 1, { error: await page.locator("#profile-error").textContent(), open: await page.locator("#panel").evaluate((d) => d.open), tabs: await page.locator(".tab .label").allTextContents() });
@@ -209,6 +210,11 @@ async function startServer() {
   s = await waitScreen(/admin# /, autoTab);
   check("triggers log in by themselves", /Welcome/.test(s), s);
   check("Rx and Tx markers and local echo", /^RX login: /m.test(s) && /^TX admin/m.test(s), s);
+  await page.locator(".quickbar button", { hasText: "Hello" }).click();
+  await page.locator(".quickbar button", { hasText: "Hex" }).click();
+  s = await waitScreen(/hq/, autoTab);
+  check("quick send buttons send text with the Enter key and hex as it is", /^RX quick/m.test(s) && /^RX hq/m.test(s), s);
+  await shot("12-quick-sends");
   await page.locator(".sendbar [data-send-text]").first().fill("draft for this tab");
   await page.locator(".tab", { hasText: "fake:counter" }).click();
   check("the data to send belongs to the tab", (await page.locator(".sendbar [data-send-text]").first().inputValue()) === "");

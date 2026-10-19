@@ -209,3 +209,23 @@ func TestPortsAreSortedNaturally(t *testing.T) {
 		t.Error("equal and prefix names")
 	}
 }
+
+func TestQuickSendsAreParsedAndValidated(t *testing.T) {
+	good := "# resets\nReset | hex | 41 42 | end=cr\nHello | text | AT+GMR\\r\nLines | dec | 1, 2 ,255\nBits | bin | 01000001 10\nWiggle | cmd | dtr=0; wait=100; dtr=1\nPipe | text | a | b | end=lf\n"
+	got, err := parseQuickSends(good)
+	if err != nil || len(got) != 6 {
+		t.Fatalf("%v %+v", err, got)
+	}
+	if got[0].End != "cr" || got[0].Data != "41 42" || got[1].End != "" || got[5].Data != "a | b" || got[5].End != "lf" {
+		t.Errorf("parsed %+v", got)
+	}
+	for _, bad := range []string{"no bars", "x | float | 1", " | text | a", "x | hex | 4", "x | dec | 256", "x | bin | 102", "x | cmd | speed=1", "x | text | a | end=never", strings.Repeat("n", 41) + " | text | a"} {
+		if _, err := parseQuickSends(bad); err == nil {
+			t.Errorf("%q should be refused", bad)
+		}
+	}
+	p := Profile{Device: "x", QuickSends: "bad"}
+	if p.Normalize() == nil {
+		t.Error("a profile with a bad quick send was accepted")
+	}
+}

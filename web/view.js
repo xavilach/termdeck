@@ -80,7 +80,7 @@ function addImplicitLF(tab, bytes) {
 // screen and shows the events again, so a view can be left and come back with nothing lost.
 
 const KEEP_BYTES = 8 * 1024 * 1024;
-const { ENC, hex2, stamp, formatDelta, NEWLINES, shapeText, NUMBERS, unescapeText, textBytes, parseNumbers, ALLOWED, clean, groupDigits, formatBytes, b64 } = Format;
+const { ENC, hex2, stamp, formatDelta, NEWLINES, shapeText, NUMBERS, unescapeText, textBytes, parseNumbers, parseQuickSends, ALLOWED, clean, groupDigits, formatBytes, b64 } = Format;
 const viewOf = (p) => ({ mode: p.view || "text", stamps: !!p.timestamps, timeMode: p.timeMode || "clock", pause: p.linePauseMs || 0, ctrl: !!p.showControl,
                                     nl: p.newLine || "terminal", nlCustom: p.newLineCustom || "" });
 

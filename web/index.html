@@ -85,6 +85,7 @@
       </div>
       <div class="terminals"><p class="empty muted">Open a session from the list on the left, or a port from Serial ports.</p></div>
     </div>
+    <div class="quickbar" hidden></div>
     <div class="sendbar" hidden>
       <span class="bar-title" title="What you send to the device">Send</span>
       <select data-send-type title="What you type is: Text (with \r \n \t \xNN \\ escapes); Hex bytes like 0D 0A; Decimal numbers 0 to 255; Binary groups like 01000001; Cmd, steps such as dtr=1; wait=500; dtr=0 (also hex=0D 0A). Alt+T, Alt+D, Alt+H and Alt+B choose the type while typing.">
@@ -196,6 +197,10 @@
               <div class="checks">
                 <label class="check" title="Whatever you select with the mouse is copied to the clipboard at once."><input name="copyOnSelect" type="checkbox"> Copy on select</label>
               </div>
+            </fieldset>
+            <fieldset>
+              <legend>Quick sends</legend>
+              <label title="Buttons above the send bar, one per line: name | type | data. The type is text, hex, dec, bin or cmd. Text gets the line end of the session, the others nothing; add | end=cr (or lf, crlf, none, session) to choose. Examples: Version | text | AT+GMR    Reset | hex | 7E 01 00 7E | end=none    Wiggle | cmd | dtr=0; wait=100; dtr=1. Lines starting with # are notes.">Buttons <textarea name="quickSends" rows="3" spellcheck="false" placeholder="Version | text | AT+GMR&#10;Reset | cmd | dtr=0; wait=100; dtr=1"></textarea></label>
             </fieldset>
             <fieldset>
               <legend>Slow send</legend>

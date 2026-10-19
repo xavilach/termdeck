@@ -68,6 +68,15 @@ test("bufferText joins wrapped rows and drops the empty rows at the end", () => 
   assert.equal(F.bufferText(buffer), "abcdef\n\nghi");
 });
 
+test("parseQuickSends", () => {
+  const got = F.parseQuickSends("# c\nReset | hex | 41 42 | end=cr\nHello | TEXT | AT\\r\nPipe | text | a | b | end=lf\nbroken\n | text | x\n");
+  assert.deepEqual(got, [
+    { name: "Reset", type: "hex", data: "41 42", end: "cr" },
+    { name: "Hello", type: "text", data: "AT\\r", end: "" },
+    { name: "Pipe", type: "text", data: "a | b", end: "lf" },
+  ]);
+});
+
 test("b64", () => {
   assert.equal(F.b64(Uint8Array.from([0, 255, 65])), "AP9B");
   assert.equal(F.b64(new Uint8Array(20000).fill(65)).length, Math.ceil(20000 / 3) * 4);

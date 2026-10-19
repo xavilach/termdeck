@@ -211,3 +211,11 @@ option[value=cmd] { color: var(--t-cmd); }
 .toolbar .lines { margin-left: 2px; }
 .lines { flex-wrap: wrap; max-width: 100%; }
 .viewbar button[data-freeze][aria-pressed=true] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+
+.quickbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 3px 8px; background: var(--panel); border-top: 1px solid var(--border); }
+.quickbar button { min-height: 22px; padding: 1px 9px; border-left-width: 3px; white-space: nowrap; }
+.quickbar .text { border-left-color: var(--t-text); }
+.quickbar .hex { border-left-color: var(--t-hex); }
+.quickbar .dec { border-left-color: var(--t-dec); }
+.quickbar .bin { border-left-color: var(--t-bin); }
+.quickbar .cmd { border-left-color: var(--t-cmd); }

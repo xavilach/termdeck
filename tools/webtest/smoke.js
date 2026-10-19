@@ -270,6 +270,23 @@ const tab = () => run("tabs[0]", "x");
   for (let i = 0; i < 40; i++) run(`record(tabs[tabs.length - 1], { k: "note", t: ${i}, text: "n${i}" }, 500000)`, "x");
   const capped = run("({ n: tabs[tabs.length - 1].events.length, kept: tabs[tabs.length - 1].kept, first: tabs[tabs.length - 1].events[0].text })", "x");
   check("kept events stay within the cap and drop the oldest", capped.kept <= 8 * 1024 * 1024 * 1.25 && capped.n < 40 && capped.first !== "n0", capped);
+  // quick sends: buttons from the session settings
+  run("applyProfile(tabs[0], { ...tabs[0].profile, quickSends: 'Hello | text | hi there\\n# note\\nRaw | hex | 41 42 | end=none\\nWiggle | cmd | dtr=0; wait=1' })", "x");
+  const qws = run("tabs[0].ws", "x");
+  const quick = [...w.document.querySelectorAll(".quickbar button")];
+  check("quick sends make buttons", quick.map((b) => b.textContent).join(",") === "Hello,Raw,Wiggle" && !q(".quickbar").hidden, quick.map((b) => b.textContent));
+  json(qws, { type: "state", state: "connected", message: "" });
+  const quickFrom = qws.sent.length;
+  const live = [...w.document.querySelectorAll(".quickbar button")];  // drawn again when the state changed
+  live[0].click(); live[1].click(); live[2].click();
+  const sentNow = qws.sent.slice(quickFrom);
+  check("a button sends its data: text with the session's Enter, hex as it is, steps", sentNow[0].type === "input" && sentNow[0].data === "hi there\n" && sentNow[1].type === "raw" && Buffer.from(sentNow[1].bytes, "base64").toString() === "AB" && sentNow[2].type === "steps" && sentNow[2].data === "dtr=0; wait=1", sentNow);
+  json(qws, { type: "state", state: "ended", message: "" });
+  check("the buttons are disabled when the port is closed", [...w.document.querySelectorAll(".quickbar button")].every((b) => b.disabled));
+  json(qws, { type: "state", state: "connected", message: "" });
+  run("applyProfile(tabs[0], { ...tabs[0].profile, quickSends: '' })", "x");
+  check("no quick sends, no bar", q(".quickbar").hidden === true);
+
   // tabs come back after a reload
   run("tabs.forEach((t, i) => { if (i === 0) t.state = 'closed'; })", "x");   // the first one was not connected
   run("saveTabs()", "x");

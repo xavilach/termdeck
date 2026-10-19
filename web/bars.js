@@ -18,6 +18,7 @@ function syncBars(pane) {
   q("[data-pause]").value = tab.view.pause;
   q("[data-ctrl]").checked = tab.view.ctrl;
   showFreeze(pane);
+  showQuick(pane);
   q("[data-nl]").value = tab.view.nl;
   q("[data-nl-custom]").value = tab.view.nlCustom;
   q("[data-nl-custom]").hidden = tab.view.nl !== "custom";
@@ -176,10 +177,16 @@ function submitSend(pane, auto = false) {
   const tab = pane.active;
   if (!tab || tab.state !== "connected") return false;
   const type = pane.sendbar.querySelector("[data-send-type]").value;
-  const input = pane.sendbar.querySelector("[data-send-text]");
-  const text = input.value;
+  const text = pane.sendbar.querySelector("[data-send-text]").value;
   if (!text && type !== "text") return false;
-  const ending = type === "cmd" ? [] : endingBytes(tab);
+  if (!sendData(tab, type, text, type === "cmd" ? [] : endingBytes(tab))) return false;
+  rememberSent(tab, { type, text });
+  if (!auto) pane.sendbar.querySelector("[data-send-text]").value = "";
+  return true;
+}
+
+// Send data of a type with its end (bytes), and show it when Local echo is on. Says whether it went out.
+function sendData(tab, type, text, ending) {
   try {
     if (type === "cmd") {
       tab.ws.send(JSON.stringify({ type: "steps", data: text }));
@@ -197,9 +204,33 @@ function submitSend(pane, auto = false) {
     tell(error.message);
     return false;
   }
-  rememberSent(tab, { type, text });
-  if (!auto) pane.sendbar.querySelector("[data-send-text]").value = "";
   return true;
+}
+
+// ---- quick sends: buttons above the send bar, from the session's settings
+function quickEnding(tab, entry) {
+  const end = entry.end || (entry.type === "text" ? "session" : "none");
+  if (end === "none" || entry.type === "cmd") return [];
+  return NEWLINES[end === "session" ? tab.profile.enter || "cr" : end];
+}
+
+function sendQuick(pane, entry) {
+  const tab = pane.active;
+  if (tab?.state === "connected") sendData(tab, entry.type, entry.data, quickEnding(tab, entry));
+}
+
+function showQuick(pane) {
+  const tab = pane.active;
+  const entries = tab ? parseQuickSends(tab.profile.quickSends) : [];
+  const bar = pane.quickbar;
+  bar.hidden = entries.length === 0;
+  bar.replaceChildren(...entries.map((entry) => {
+    const button = el("button", `quick ${entry.type}`, entry.name);
+    button.title = `${entry.type}: ${entry.data}${entry.end ? ` (end ${entry.end})` : ""}`;
+    button.addEventListener("click", () => sendQuick(pane, entry));
+    return button;
+  }));
+  bar.querySelectorAll("button").forEach((b) => { b.disabled = tab.state !== "connected"; });
 }
 
 // ---- automatic send: the input goes out again and again, every so many milliseconds
