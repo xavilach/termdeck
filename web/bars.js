@@ -19,6 +19,7 @@ function syncBars(pane) {
   q("[data-ctrl]").checked = tab.view.ctrl;
   showFreeze(pane);
   showQuick(pane);
+  syncGraph(pane);
   q("[data-nl]").value = tab.view.nl;
   q("[data-nl-custom]").value = tab.view.nlCustom;
   q("[data-nl-custom]").hidden = tab.view.nl !== "custom";
@@ -484,6 +485,7 @@ function wireFindBar(pane) {
 }
 
 function wireBars(pane) {
+  wireGraph(pane);
   wireViewBar(pane);
   wireSendBar(pane);
   wireFindBar(pane);

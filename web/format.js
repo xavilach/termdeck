@@ -180,6 +180,51 @@ const Format = (() => {
     return out;
   }
 
+  // ---- graph series: "name | prefix | suffix" takes the number after the prefix (up to the suffix, if any);
+  // "name | /regex/" takes the first group of the match (the whole match without a group)
+  function parseSeries(text) {
+    const out = [];
+    for (let line of (text || "").split("\n")) {
+      line = line.trim();
+      if (!line || line.startsWith("#")) continue;
+      const parts = line.split("|").map((p) => p.trim());
+      if (parts.length < 2 || !parts[0] || !parts[1]) continue;
+      const spec = { name: parts[0], prefix: parts[1], suffix: parts[2] || "", regex: null };
+      if (spec.prefix.length > 2 && spec.prefix.startsWith("/") && spec.prefix.endsWith("/")) {
+        try { spec.regex = new RegExp(spec.prefix.slice(1, -1)); } catch { continue; }
+      }
+      out.push(spec);
+    }
+    return out;
+  }
+
+  const LEADING_NUMBER = /^\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)/;
+
+  // The numbers one line gives, one per series that finds one: [{ name, value }]
+  function extractValues(line, specs) {
+    const out = [];
+    for (const spec of specs) {
+      let text;
+      if (spec.regex) {
+        const m = spec.regex.exec(line);
+        if (!m) continue;
+        text = m[1] ?? m[0];
+      } else {
+        const at = line.indexOf(spec.prefix);
+        if (at < 0) continue;
+        text = line.slice(at + spec.prefix.length);
+        if (spec.suffix) {
+          const end = text.indexOf(spec.suffix);
+          if (end < 0) continue;
+          text = text.slice(0, end);
+        }
+      }
+      const m = LEADING_NUMBER.exec(text);
+      if (m) out.push({ name: spec.name, value: Number(m[1]) });
+    }
+    return out;
+  }
+
   function b64(bytes) {
     let text = "";
     for (let i = 0; i < bytes.length; i += 8192) text += String.fromCharCode(...bytes.subarray(i, i + 8192));
@@ -187,7 +232,7 @@ const Format = (() => {
   }
 
   return { ENC, hex2, stamp, formatDelta, bufferText, controlName, NEWLINES, unescapeText, textBytes, newlineBytes, shapeText, NUMBERS,
-           parseNumbers, parseQuickSends, ALLOWED, clean, groupDigits, formatBytes, b64 };
+           parseNumbers, parseQuickSends, parseSeries, extractValues, ALLOWED, clean, groupDigits, formatBytes, b64 };
 })();
 
 if (typeof module !== "undefined") module.exports = Format;

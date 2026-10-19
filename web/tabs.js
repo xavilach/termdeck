@@ -17,7 +17,7 @@ function createPane() {
   const pane = { el: root, tabsEl: root.querySelector(".tabs"), toolbar: root.querySelector(".toolbar"),
                  terminals: root.querySelector(".terminals"), workspace: root.querySelector(".workspace"),
                  empty: root.querySelector(".empty"), tabs: [], active: null,
-                 viewbar: root.querySelector(".viewbar"), quickbar: root.querySelector(".quickbar"), sendbar: root.querySelector(".sendbar"), findbar: root.querySelector(".findbar"),
+                 viewbar: root.querySelector(".viewbar"), quickbar: root.querySelector(".quickbar"), graphbar: root.querySelector(".graphbar"), sendbar: root.querySelector(".sendbar"), findbar: root.querySelector(".findbar"),
                  find: { index: -1, matches: [], key: "" } };
   wireBars(pane);
   if (panes.length === 0) {  // the first pane carries the button for the left column and the layout buttons
@@ -233,7 +233,7 @@ function openTab(profile, { connect: doConnect = true } = {}) {
   const pane = focusPane || panes[0];
   const tab = { profile, pane, state: "connecting", ws: null, fontSize: profile.fontSize || 14,
                 lineStart: true, txOpen: false, script: null, events: [], kept: 0, held: [], view: viewOf(profile),
-                sendEnd: { mode: profile.enter || "cr", custom: "" }, counters: { rx: 0, tx: 0 }, sent: loadHistory(profile.name), sentAt: 0 };
+                sendEnd: { mode: profile.enter || "cr", custom: "" }, counters: { rx: 0, tx: 0 }, sent: loadHistory(profile.name), sentAt: 0, graph: newGraph(profile) };
   tab.sentAt = tab.sent.length;
   newTerminal(tab);
   newTabElement(tab);
@@ -456,7 +456,7 @@ function renderToolbar(pane) {
   const tab = pane.active;
   pane.toolbar.hidden = !tab;
   pane.empty.hidden = pane.tabs.length > 0;
-  if (!tab) { pane.viewbar.hidden = pane.sendbar.hidden = pane.findbar.hidden = pane.quickbar.hidden = true; return; }
+  if (!tab) { pane.viewbar.hidden = pane.sendbar.hidden = pane.findbar.hidden = pane.quickbar.hidden = pane.graphbar.hidden = true; return; }
   const q = (selector) => pane.toolbar.querySelector(selector);
   q(".status").textContent = STATUS[tab.state];
   q(".status").className = `status ${tab.state}`;

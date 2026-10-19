@@ -70,6 +70,7 @@ type Profile struct {
 	// How received data is shown at first (the toolbar changes it for an open tab).
 	View          string `json:"view"`          // text, hex, dec or bin
 	Timestamps    bool   `json:"timestamps"`    // start each line with the time
+	GraphSeries   string `json:"graphSeries"`   // lines "name | prefix | suffix" or "name | /regex/": numbers to draw as lines
 	QuickSends    string `json:"quickSends"`    // lines "name | type | data": buttons of the send bar
 	CharDelayMs   int    `json:"charDelayMs"`   // slow send: pause after each character sent
 	LineDelayMs   int    `json:"lineDelayMs"`   // slow send: extra pause after a CR or LF sent
@@ -184,6 +185,9 @@ func (p *Profile) Normalize() error {
 	}
 	if p.CharDelayMs < 0 || p.CharDelayMs > 5000 || p.LineDelayMs < 0 || p.LineDelayMs > 5000 {
 		return errors.New("send delays are 0 to 5000 ms")
+	}
+	if err := checkGraphSeries(p.GraphSeries); err != nil {
+		return err
 	}
 	if _, err := parseQuickSends(p.QuickSends); err != nil {
 		return err

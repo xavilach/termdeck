@@ -132,6 +132,35 @@ func parseTriggers(text string) ([]trigger, error) {
 	return out, nil
 }
 
+// checkGraphSeries validates the lines "name | prefix | suffix" and "name | /regex/" of the graph settings.
+func checkGraphSeries(text string) error {
+	seen := map[string]bool{}
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.Split(line, "|")
+		name, spec := strings.TrimSpace(parts[0]), ""
+		if len(parts) > 1 {
+			spec = strings.TrimSpace(parts[1])
+		}
+		if len(parts) < 2 || len(parts) > 3 || name == "" || spec == "" || len(name) > 30 {
+			return fmt.Errorf("graph series %q: use  name | prefix | suffix  or  name | /regex/", line)
+		}
+		if seen[name] {
+			return fmt.Errorf("graph series %q is there twice", name)
+		}
+		seen[name] = true
+		if len(spec) > 2 && strings.HasPrefix(spec, "/") && strings.HasSuffix(spec, "/") {
+			if _, err := regexp.Compile(spec[1 : len(spec)-1]); err != nil {
+				return fmt.Errorf("graph series %q: %w", name, err)
+			}
+		}
+	}
+	return nil
+}
+
 // quickSend is a button of the send bar: a name and what it sends.
 type quickSend struct {
 	Name, Type, Data, End string

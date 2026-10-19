@@ -269,6 +269,35 @@ async function startServer() {
   check("Stop reconnecting leaves the port closed", /Port closed/.test(await page.locator(".toolbar .status").first().textContent()));
   await page.locator(".tab", { hasText: "Flaky" }).locator(".close").click();
 
+  // graph: numbers of the received lines drawn as lines (the counter port is free for it first)
+  await page.locator(".tab", { hasText: "fake:counter" }).locator(".close").click();
+  await page.locator(".tab", { hasText: "fake:counter" }).locator(".close").click();
+  await page.keyboard.press("Alt+Shift+N");
+  await form.locator("[name=name]").fill("Graphed");
+  await form.locator("[name=device]").fill("fake:counter");
+  await form.locator("#advanced").evaluate((d) => { d.open = true; });
+  await form.locator("[name=graphSeries]").fill("Temp | temp=\nTick | tick ");
+  await page.click("#profile-connect");
+  await page.waitForSelector(".tab:has-text('Graphed')");
+  await page.click(".viewbar [data-graph]");
+  await page.waitForFunction(() => document.querySelector(".graph-legend")?.textContent.includes("Tick: 4"), null, { timeout: 8000 });
+  const drawn = await page.evaluate(() => { const c = document.querySelector(".graph-canvas"); const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; });
+  check("the graph draws lines on its canvas", drawn > 500, drawn);
+  check("the legend shows each series with its last value", /Temp: [\d.]+/.test(await page.locator(".graph-legend").first().textContent()) && /Tick: \d+/.test(await page.locator(".graph-legend").first().textContent()));
+  await page.check("[data-graph-each]");
+  await sleep(600);
+  await shot("13-graph");
+  const drawnEach = await page.evaluate(() => { const c = document.querySelector(".graph-canvas"); const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; });
+  check("each series on its own scale still draws", drawnEach > 500, drawnEach);
+  const [csvDownload] = await Promise.all([page.waitForEvent("download"), page.click("[data-graph-csv]")]);
+  const csvFile = path.join(server.dir, "graph.csv");
+  await csvDownload.saveAs(csvFile);
+  const csv = fs.readFileSync(csvFile, "utf8");
+  check("Save CSV writes time, series and value", /^time,series,value\n/.test(csv) && /,Temp,2\d\.\d\n/.test(csv) && /,Tick,\d+\n/.test(csv) && csvDownload.suggestedFilename().endsWith(".csv"), csv.slice(0, 120));
+  await page.click(".viewbar [data-graph]");
+  await page.locator(".tab", { hasText: "Graphed" }).locator(".close").click();
+  await page.locator(".tab", { hasText: "Graphed" }).locator(".close").click();
+
   // null-modem pair
   await page.locator("#port-tree .item.port", { hasText: "fake:link-a" }).dblclick();
   await page.locator("#port-tree .item.port", { hasText: "fake:link-b" }).dblclick();
@@ -332,7 +361,7 @@ async function startServer() {
 
   // ---- groups, scripts and sessions in the tree
   const btn = (title) => page.locator(`button[title="${title}"]`);
-  const row = (name) => page.locator("#tree .item", { hasText: name }).first();
+  const row = (name) => page.locator("#tree .item").filter({ has: page.locator(".name", { hasText: new RegExp(`^${name}$`) }) }).first();
   await btn("New group").click();
   await page.fill("#new-group-input", "Lab");
   await page.keyboard.press("Enter");
@@ -378,10 +407,10 @@ async function startServer() {
   await pf.locator("[name=name]").fill("Counter");
   await pf.locator("[name=device]").fill("fake:counter");
   await pf.locator("button[type=submit]").click();
-  await page.waitForSelector("#tree .item:has-text('Counter')");
+  await page.waitForSelector("#tree .item .name:text-is('Counter')");
   await row("Counter").dragTo(page.locator("#tree .node-head.group", { hasText: "General" }));
   await sleep(400);
-  check("a session dragged onto a group moves there", await page.locator("#tree .group-node").first().locator(".item:has-text('Counter')").count() === 1);
+  check("a session dragged onto a group moves there", await page.locator("#tree .group-node").first().locator(".item .name", { hasText: /^Counter$/ }).count() === 1);
   await row("Counter").dblclick();
   await waitScreen(/tick 1/, 1);
   await row("Counter").locator("button[title='Edit Counter']").click();

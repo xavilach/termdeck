@@ -229,3 +229,16 @@ func TestQuickSendsAreParsedAndValidated(t *testing.T) {
 		t.Error("a profile with a bad quick send was accepted")
 	}
 }
+
+func TestGraphSeriesAreValidated(t *testing.T) {
+	good := Profile{Device: "x", GraphSeries: "# temperatures\nTemp | Temperature: | degC\nHum | /hum=([0-9.]+)%/\nTick | tick "}
+	if err := good.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"no bar", "x |", " | y", "a | b | c | d", "r | /(/", "same | a\nsame | b", strings.Repeat("n", 31) + " | a"} {
+		p := Profile{Device: "x", GraphSeries: bad}
+		if p.Normalize() == nil {
+			t.Errorf("%q should be refused", bad)
+		}
+	}
+}

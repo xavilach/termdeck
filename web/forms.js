@@ -90,6 +90,7 @@ function applyProfile(tab, p) {
   o.theme = terminalTheme(p);
   Object.assign(o, boldOptions(p));
   tab.view = viewOf(p);
+  updateGraphSpecs(tab);
   syncBars(tab.pane);
   redraw(tab);
   renderToolbar(tab.pane);

@@ -225,3 +225,13 @@ option[value=cmd] { color: var(--t-cmd); }
 .marks button { border-radius: 0; margin-left: -1px; padding: 3px 7px; }
 .marks button:first-child { border-radius: 4px 0 0 4px; margin-left: 0; }
 .marks button:last-child { border-radius: 0 4px 4px 0; }
+
+.graphbar { background: var(--bg); border-bottom: 1px solid var(--border); }
+.graph-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 3px 8px; background: var(--panel); font-size: 12px; }
+.graph-head label { display: inline-flex; align-items: center; gap: 5px; margin: 0; }
+.graph-head select { width: auto; padding: 1px 5px; }
+.graph-legend { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; }
+.graph-legend .chip { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
+.graph-legend .chip i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.graph-canvas { display: block; width: 100%; height: 200px; }
+.viewbar button[data-graph][aria-pressed=true] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }

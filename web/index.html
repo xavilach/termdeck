@@ -67,11 +67,24 @@
       <span class="spacer"></span>
       <span class="counters" title="Bytes received since the port opened. Clear resets it.">Rx <b data-count="rx">0</b></span>
       <span class="marks" role="group" aria-label="Marks"><button data-mark title="Add a mark: a line of its own in the output and in the log, to find a moment again (Alt+Shift+M)">Mark</button><button data-mark-prev title="Go to the previous mark" aria-label="Previous mark">◀</button><button data-mark-next title="Go to the next mark" aria-label="Next mark">▶</button></span>
+      <button data-graph aria-pressed="false" title="Draw numbers found in the received lines as a graph (set the series under Advanced in the session settings)">Graph</button>
       <button data-freeze aria-pressed="false" title="Keep the screen as it is while the device goes on sending. The data is still received, counted and kept; Resume shows it all.">Freeze</button>
       <button data-copy-all title="Copy everything on the screen and in its scrollback">Copy</button>
       <button data-save-text title="Save everything on the screen and in its scrollback as a text file">Save text</button>
       <button data-save-raw title="Save the bytes the device sent (the last 8 MB kept) as a file">Save raw</button>
       <button data-action="find" title="Search the lines on screen (Ctrl+Shift+F)">Find</button>
+    </div>
+    <div class="graphbar" hidden>
+      <div class="graph-head">
+        <span class="bar-title" title="Numbers found in the received lines, drawn over time. The series are set in the session settings, under Advanced.">Graph</span>
+        <label>Show <select data-graph-window><option value="10">10 s</option><option value="30">30 s</option><option value="60">1 min</option><option value="300">5 min</option><option value="900">15 min</option><option value="3600">1 hour</option><option value="0">All</option></select></label>
+        <label class="check" title="Draw each series over its own range (0 to 100 %), for series of very different sizes such as 21 and 1000."><input type="checkbox" data-graph-each> Each on its own scale</label>
+        <span class="graph-legend"></span>
+        <span class="spacer"></span>
+        <button data-graph-clear title="Forget the points drawn so far">Clear graph</button>
+        <button data-graph-csv title="Save the points as a CSV file: time, series, value">Save CSV</button>
+      </div>
+      <canvas class="graph-canvas" aria-label="Graph of the numbers received"></canvas>
     </div>
     <div class="workspace">
       <div class="findbar" hidden>
@@ -201,6 +214,10 @@
               </div>
             </fieldset>
             <fieldset>
+              <legend>Graph</legend>
+              <label title="Numbers to draw as lines, one series per line: name | prefix | suffix takes the number after the prefix, up to the suffix if there is one; name | /regex/ takes the first group of the match. Example: Temp | Temperature: | degC   or   Hum | /hum=([0-9.]+)%/. Open the graph with the Graph button in the receive bar. Lines starting with # are notes.">Series <textarea name="graphSeries" rows="3" spellcheck="false" placeholder="Temp | Temperature: | degC&#10;Hum | /hum=([0-9.]+)%/"></textarea></label>
+            </fieldset>
+            <fieldset>
               <legend>Quick sends</legend>
               <label title="Buttons above the send bar, one per line: name | type | data. The type is text, hex, dec, bin or cmd. Text gets the line end of the session, the others nothing; add | end=cr (or lf, crlf, none, session) to choose. Examples: Version | text | AT+GMR    Reset | hex | 7E 01 00 7E | end=none    Wiggle | cmd | dtr=0; wait=100; dtr=1. Lines starting with # are notes.">Buttons <textarea name="quickSends" rows="3" spellcheck="false" placeholder="Version | text | AT+GMR&#10;Reset | cmd | dtr=0; wait=100; dtr=1"></textarea></label>
             </fieldset>
@@ -283,6 +300,7 @@
 <script src="/tree.js"></script>
 <script src="/forms.js"></script>
 <script src="/view.js"></script>
+<script src="/graph.js"></script>
 <script src="/bars.js"></script>
 <script src="/tabs.js"></script>
 </body>
