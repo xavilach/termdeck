@@ -37,6 +37,10 @@ var fakeKinds = []fakeKind{
 		go f.every(time.Second, binaryFrame)
 		return nil
 	}},
+	{"stream", "a fast stream of numbered lines (about 600 KB/s for 5 seconds), to try the speed of the page", func(f *fakePort) error {
+		go f.burst(5 * time.Second)
+		return nil
+	}},
 	{"flaky", "drops a moment after it opens and is gone for 2 seconds, then comes back: to try Reconnect", setupFlaky},
 	{"link-a", "one end of a null-modem cable: what is written here comes out of fake:link-b", setupLink},
 	{"link-b", "the other end of the cable", setupLink},
@@ -172,6 +176,27 @@ func (f *fakePort) every(interval time.Duration, make func(n int) []byte) {
 		case <-tick.C:
 			f.feed(make(n))
 		}
+	}
+}
+
+// burst sends numbered lines as fast as a reader keeps up with, in chunks of 6 KB every 10 ms, for the duration.
+func (f *fakePort) burst(d time.Duration) {
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	end := time.Now().Add(d)
+	line := 0
+	for time.Now().Before(end) {
+		select {
+		case <-f.stop:
+			return
+		case <-tick.C:
+		}
+		var b strings.Builder
+		for b.Len() < 6000 {
+			line++
+			fmt.Fprintf(&b, "stream line %07d value=%d\r\n", line, line%1000)
+		}
+		f.feed([]byte(b.String()))
 	}
 }
 

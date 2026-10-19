@@ -634,6 +634,15 @@ async function startServer() {
   const tunnelLog = fs.readFileSync(path.join(server.dir, "tunnel.log"), "utf8");
   check("the tunnel log has both directions", /^A>B tick 1/m.test(tunnelLog) && /^B>A tick 1/m.test(tunnelLog), tunnelLog.slice(0, 120));
 
+  // speed: 3 MB of lines in 5 seconds must neither freeze the page nor grow without bound
+  await page.evaluate(() => { window.__max = 0; let last = performance.now(); const loop = () => { const now = performance.now(); window.__max = Math.max(window.__max, now - last); last = now; requestAnimationFrame(loop); }; requestAnimationFrame(loop); });
+  await page.locator("#port-tree .item.port", { hasText: "fake:stream" }).dblclick();
+  await page.waitForFunction(() => tabs[0].counters.rx > 2_500_000, null, { timeout: 30000 }).catch(() => {});
+  const speed = await page.evaluate(() => ({ rx: tabs[0].counters.rx, gap: Math.round(window.__max), kept: tabs[0].kept, rows: tabs[0].term.buffer.active.length }));
+  check("a fast stream (600 KB/s) is taken without freezing the page (longest frame under 400 ms)", speed.rx > 2_500_000 && speed.gap < 400 && speed.kept < 11 * 1024 * 1024, speed);
+  await page.locator(".tab .close").first().click();
+  await page.locator(".tab .close").first().click();
+
   check("no page errors or console errors", problems.length === 0, problems);
   check("the program reports no data race or panic", !/DATA RACE|panic:/.test(server.child.stderrText), server.child.stderrText.slice(0, 600));
   await browser.close();
