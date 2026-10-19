@@ -33,6 +33,7 @@ Press Help (left column, Alt+Shift+H) for the keys and the syntax of the setting
 ## Send (the bar below)
 
 - Text, Hex, Decimal, Binary or Cmd (steps: `dtr=1; wait=500; hex=0D 0A; expect=login:`; `expect` waits for what the device says, so scripts can log in or flash step by step). End, Check (sum, XOR, CRC), Auto, history, files, quick-send buttons.
+- All tabs: send the same data to every connected tab (a test bench); Open all (▶▶) opens every session of a group.
 - Transfer: XMODEM and YMODEM, send or receive (checked against lrzsz).
 - Scripts, triggers (`login: => admin`, paused when they loop) and quick sends are rules, one per line.
 

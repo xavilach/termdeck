@@ -95,7 +95,11 @@ function submitSend(pane, auto = false) {
   const type = pane.sendbar.querySelector("[data-send-type]").value;
   const text = pane.sendbar.querySelector("[data-send-text]").value;
   if (!text && type !== "text") return false;
-  if (!sendData(tab, type, text, type === "cmd" ? [] : endingBytes(tab), tab.sendCheck)) return false;
+  const targets = pane.sendbar.querySelector("[data-all]").checked ? tabs.filter((t) => t.state === "connected" && !t.profile.peer) : [tab];
+  const ending = type === "cmd" ? [] : endingBytes(tab);  // what the bar says goes to every tab
+  let sent = false;
+  for (const target of targets) sent = sendData(target, type, text, ending, tab.sendCheck) || sent;
+  if (!sent) return false;
   rememberSent(tab, { type, text });
   if (!auto) pane.sendbar.querySelector("[data-send-text]").value = "";
   return true;
@@ -133,7 +137,9 @@ function quickEnding(tab, entry) {
 
 function sendQuick(pane, entry) {
   const tab = pane.active;
-  if (tab?.state === "connected") sendData(tab, entry.type, entry.data, quickEnding(tab, entry), entry.check);
+  if (tab?.state !== "connected") return;
+  const targets = pane.sendbar.querySelector("[data-all]").checked ? tabs.filter((t) => t.state === "connected" && !t.profile.peer) : [tab];
+  for (const target of targets) sendData(target, entry.type, entry.data, quickEnding(tab, entry), entry.check);
 }
 
 function showQuick(pane) {

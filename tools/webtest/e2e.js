@@ -719,6 +719,27 @@ async function startServer() {
     if (await page.locator(".tab .close.confirm").count()) await close.click();
   }
 
+  // open all the sessions of a group, and send to all of them at once
+  await page.evaluate(async () => {
+    await api("/api/profiles", { method: "POST", body: { name: "Bench 1", group: "Bench", device: "fake:echo" } });
+    await api("/api/profiles", { method: "POST", body: { name: "Bench 2", group: "Bench", device: "fake:shell" } });
+    await loadProfiles();
+  });
+  await page.locator(`button[title="Open all 2 sessions of Bench"]`).click();
+  await page.waitForFunction(() => tabs.length === 2 && tabs.every((t) => t.state === "connected"));
+  check("Open all opens every session of the group", (await page.locator(".tab .label").allTextContents()).sort().join() === "Bench 1,Bench 2");
+  await page.locator(".sendbar [data-all]").first().check();
+  await page.locator(".sendbar [data-send-text]").first().fill("to every bench");
+  await page.locator(".sendbar [data-send]").first().click();
+  await page.waitForFunction(() => tabs.every((t) => t.counters.tx >= 14), null, { timeout: 4000 });
+  check("All tabs sends the data to every connected tab", true);
+  await page.locator(".sendbar [data-all]").first().uncheck();
+  while ((await page.locator(".tab").count()) > 0) {
+    const close = page.locator(".tab .close").first();
+    await close.click();
+    if (await page.locator(".tab .close.confirm").count()) await close.click();
+  }
+
   // RS-485 direction control: RTS of link-a is high only while it sends, and link-b sees it as CTS
   await page.evaluate(async () => {
     await api("/api/profiles", { method: "POST", body: { name: "RS485 A", device: "fake:link-a", rtsMode: "high", rtsDelayMs: 1000 } });

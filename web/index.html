@@ -125,6 +125,7 @@
         <input data-send-end-custom hidden spellcheck="false" placeholder="\r\n" aria-label="Custom end"></label>
       <label class="check-hint" title="Bytes added after the data to check it: a sum, an XOR or a CRC. For Hex, Decimal and Binary only. The check bytes come before the End.">Check
         <select data-send-check><option value="none">None</option></select></label>
+      <label class="check broadcast" title="Send to every connected tab, not only this one: for several devices at once. Quick sends and Auto go to all of them too."><input type="checkbox" data-all> All tabs</label>
       <label class="check auto" title="Send the data again and again, every so many milliseconds, until you untick it, change tab or the port closes. The input is kept while it runs."><input type="checkbox" data-auto> Auto</label>
       <input type="number" data-auto-ms min="10" max="3600000" step="100" value="1000" title="Milliseconds between two automatic sends" aria-label="Milliseconds between automatic sends"><span class="muted">ms</span>
       <button data-send class="primary">Send</button>

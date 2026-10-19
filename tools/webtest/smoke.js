@@ -338,6 +338,21 @@ const tab = () => run("tabs[0]", "x");
   check("an empty filter shows everything again, nothing was lost", hlTab.term.text().includes("all fine") && hlTab.term.text().includes("an ERROR"));
   run("applyProfile(tabs[0], { ...tabs[0].profile, highlights: '' })", "x");
 
+  // "All tabs": the same data goes to every connected tab
+  run("openTab({ ...profiles[0], name: 'all one', device: 'COM81' }); openTab({ ...profiles[0], name: 'all two', device: 'COM82' })", "x");
+  const allOne = run("tabs.find((t) => t.profile.name === 'all one')", "x"), allTwo = run("tabs.find((t) => t.profile.name === 'all two')", "x");
+  await sleep(10);  // the sockets of the stub are open a moment after they are made
+  json(allOne.ws, { type: "state", state: "connected", message: "" }); json(allTwo.ws, { type: "state", state: "connected", message: "" });
+  run("activate(tabs.find((t) => t.profile.name === 'all one'))", "x");
+  allOne.ws.sent.length = 0; allTwo.ws.sent.length = 0;
+  const allBar = (selector) => allOne.pane.sendbar.querySelector(selector);  // the pane may not be the first one
+  allBar("[data-send-text]").value = "to all"; allBar("[data-all]").checked = true; allBar("[data-send]").click();
+  check("with All tabs the data goes to every connected tab", allOne.ws.sent.some((m) => m.type === "input" && m.data.startsWith("to all")) && allTwo.ws.sent.some((m) => m.type === "input" && m.data.startsWith("to all")));
+  allOne.ws.sent.length = 0; allTwo.ws.sent.length = 0;
+  allBar("[data-all]").checked = false; allBar("[data-send-text]").value = "only one"; allBar("[data-send]").click();
+  check("and without it only to the shown one", allOne.ws.sent.some((m) => m.type === "input") && !allTwo.ws.sent.some((m) => m.type === "input"));
+  run("closeTab(tabs.find((t) => t.profile.name === 'all one')); closeTab(tabs.find((t) => t.profile.name === 'all two'))", "x");
+
   // a check is added after hex data
   const checkTab = run("tabs[0]", "x");
   const checkWs = checkTab.ws; json(checkWs, { type: "state", state: "connected", message: "" });

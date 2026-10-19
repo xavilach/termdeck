@@ -200,7 +200,8 @@ function groupNode(group) {
   const select = () => { selectedGroup = group; renderTree(); };
   const { wrap, head } = node(`g:${group}`, label, "group", tools, (body) => {
     const sessions = node(`g:${group}/s`, `Sessions · ${mine.length}`, "sub",
-      [toolButton("+", `New session in ${label}`, () => editProfile(null, { group }))], (inner) => {
+      [toolButton("▶▶", `Open all ${mine.length} sessions of ${label}`, () => mine.forEach((p) => openTab(p)), mine.length < 2),
+       toolButton("+", `New session in ${label}`, () => editProfile(null, { group }))], (inner) => {
         for (const p of mine) inner.append(sessionRow(p));
         if (!mine.length) inner.append(el("div", "empty-note", "none yet"));
       });
