@@ -100,7 +100,7 @@ func (t *termSession) open(profile Profile) { t.openPort(profile, false) }
 // nothing while it fails, and does not stop the reconnecting loop it belongs to.
 func (t *termSession) openPort(profile Profile, reconnecting bool) bool {
 	if profile.Peer != nil {
-		return t.openTunnel(profile)
+		return t.openTunnel(profile, reconnecting)
 	}
 	if !reconnecting {
 		t.close()

@@ -30,37 +30,43 @@ func (m chanMutex) unlock() { <-m }
 
 const tunnelA2B, tunnelB2A = "a2b", "b2a"
 
-// openTunnel opens both ports of profile and its peer, and starts carrying data between them.
-func (t *termSession) openTunnel(profile Profile) bool {
-	t.close()
-	if err := profile.Normalize(); err != nil {
-		t.sendState("failed", err.Error())
+// openTunnel opens both ports of profile and its peer, and starts carrying data between them. A
+// reconnecting attempt is quiet and does not end the reconnecting loop it belongs to.
+func (t *termSession) openTunnel(profile Profile, reconnecting bool) bool {
+	if !reconnecting {
+		t.close()
+	}
+	fail := func(message string) bool {
+		if !reconnecting {
+			t.sendState("failed", message)
+		}
 		return false
 	}
+	if err := profile.Normalize(); err != nil {
+		return fail(err.Error())
+	}
 	peer := profile.Peer // normalized with it
-	t.sendState("connecting", "")
+	if !reconnecting {
+		t.sendState("connecting", "")
+	}
 	if !t.srv.claimPort(profile.Device, t) {
-		t.sendState("failed", profile.Device+" is already open in another tab")
-		return false
+		return fail(profile.Device + " is already open in another tab")
 	}
 	if !t.srv.claimPort(peer.Device, t) {
 		t.srv.releasePort(profile.Device, t)
-		t.sendState("failed", peer.Device+" is already open in another tab")
-		return false
+		return fail(peer.Device + " is already open in another tab")
 	}
 	release := func() { t.srv.releasePort(profile.Device, t); t.srv.releasePort(peer.Device, t) }
 	a, err := openPort(profile)
 	if err != nil {
 		release()
-		t.sendState("failed", err.Error())
-		return false
+		return fail(err.Error())
 	}
 	b, err := openPort(*peer)
 	if err != nil {
 		a.Close()
 		release()
-		t.sendState("failed", err.Error())
-		return false
+		return fail(err.Error())
 	}
 	logProfile := profile
 	if logProfile.LogRxMarker == "" && logProfile.LogTxMarker == "" {
@@ -69,7 +75,7 @@ func (t *termSession) openTunnel(profile Profile) bool {
 	existing := profile.LogExisting
 	if existing == "ask" {
 		existing = "append"
-		if logExists(profile) {
+		if logExists(profile) && !reconnecting {
 			existing = t.askAboutLog(profile)
 		}
 	}
@@ -123,7 +129,15 @@ func (t *termSession) pump(gen int, ctx context.Context, tun *tunnel, from, to s
 				if err != nil {
 					message = err.Error()
 				}
-				t.sendState("ended", message)
+				t.mu.Lock()
+				profile := t.profile
+				t.mu.Unlock()
+				if profile.Reconnect {
+					t.sendState("reconnecting", message)
+					t.startReconnect(profile)
+				} else {
+					t.sendState("ended", message)
+				}
 			}
 			return
 		}

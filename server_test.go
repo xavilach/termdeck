@@ -1366,3 +1366,15 @@ func writeFile(t *testing.T, path, content string) {
 }
 
 func jsonString(s string) string { b, _ := json.Marshal(s); return string(b) }
+
+func TestATunnelReconnectsWhenAPortComesBack(t *testing.T) {
+	ts := newTestServer(t)
+	resetFlaky()
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "tun", "device": "fake:flaky", "reconnect": true, "peer": map[string]any{"device": "fake:echo"}}})
+	statesUntil(t, c, ctx, "connected", 2*time.Second)
+	statesUntil(t, c, ctx, "reconnecting", 3*time.Second)
+	if seen := statesUntil(t, c, ctx, "connected", 6*time.Second); len(seen) != 1 {
+		t.Errorf("a quiet reconnect says nothing while it fails, but saw %v", seen)
+	}
+}
