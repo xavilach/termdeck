@@ -33,12 +33,11 @@ const tunnelA2B, tunnelB2A = "a2b", "b2a"
 // openTunnel opens both ports of profile and its peer, and starts carrying data between them.
 func (t *termSession) openTunnel(profile Profile) bool {
 	t.close()
-	peer := profile.Peer
 	if err := profile.Normalize(); err != nil {
 		t.sendState("failed", err.Error())
 		return false
 	}
-	peer = profile.Peer // normalized with it
+	peer := profile.Peer // normalized with it
 	t.sendState("connecting", "")
 	if !t.srv.claimPort(profile.Device, t) {
 		t.sendState("failed", profile.Device+" is already open in another tab")
