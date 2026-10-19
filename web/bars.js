@@ -229,6 +229,7 @@ function sendData(tab, type, text, ending) {
     tell(error.message);
     return false;
   }
+  tab.term.scrollToBottom();  // what you send is answered at the bottom: show it
   return true;
 }
 

@@ -19,7 +19,7 @@ w.Audio = class { play() { return Promise.resolve(); } };
 Object.defineProperty(w.navigator, "clipboard", { value: { writeText: () => Promise.resolve(), readText: () => Promise.resolve("") } });
 w.Terminal = class {
   constructor(o) { this.options = { ...o }; this.out = []; this.rows = 24; this.modes = {}; this.parser = { registerEscHandler() {} }; this.buffer = { active: { length: 0, getLine: () => null } }; this.handlers = {}; }
-  loadAddon() {} open() {} focus() {} dispose() {} clear() { this.out.push("<clear>"); } reset() { this.out.length = 0; this.out.push("<reset>"); }
+  scrollToBottom() { this.bottomed = (this.bottomed || 0) + 1; } loadAddon() {} open() {} focus() {} dispose() {} clear() { this.out.push("<clear>"); } reset() { this.out.length = 0; this.out.push("<reset>"); }
   onBell() {} onTitleChange() {} onSelectionChange() {} onData() {} hasSelection() { return false; } getSelection() { return ""; }
   attachCustomKeyEventHandler(f) { this.keyHandler = f; } select() {} scrollToLine() {} clearSelection() {}
   write(d, cb) { if (typeof d !== "string" && d) d = Buffer.from(d).toString("latin1"); if (d) this.out.push(d); if (cb) cb(); }
@@ -283,6 +283,12 @@ const tab = () => run("tabs[0]", "x");
   check("Clear graph forgets the points", run("tabs[0].graph.series.size", "x") === 0);
   q("[data-graph]").click();
   check("and the button hides it again", q(".graphbar").hidden);
+
+  // sending jumps to the bottom of the output
+  json(run("tabs[0].ws", "x"), { type: "state", state: "connected", message: "" });
+  const bottomTab = run("tabs[0]", "x"); const bottomBefore = bottomTab.term.bottomed || 0;
+  q("[data-send-text]").value = "go"; q("[data-send]").click();
+  check("a send scrolls the output to the bottom", (bottomTab.term.bottomed || 0) === bottomBefore + 1, bottomTab.term.bottomed);
 
   // marks
   const mws = run("tabs[0].ws", "x");
