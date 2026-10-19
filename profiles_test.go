@@ -1,8 +1,10 @@
 package main
 
 import (
+	"math/rand"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -247,5 +249,28 @@ func TestExpectAndTimeoutSteps(t *testing.T) {
 	sc := Script{Name: "s", Commands: []string{"@expect=login:", "admin"}}
 	if err := sc.Normalize(); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestNaturalOrderIsAConsistentOrder(t *testing.T) {
+	rng := rand.New(rand.NewSource(22))
+	names := make([]string, 60)
+	for i := range names {
+		names[i] = []string{"COM", "ttyUSB", "ttyACM", "/dev/"}[rng.Intn(4)] + strconv.Itoa(rng.Intn(120))
+	}
+	for _, a := range names {
+		if naturalLess(a, a) {
+			t.Errorf("%q is less than itself", a)
+		}
+		for _, b := range names {
+			if naturalLess(a, b) && naturalLess(b, a) {
+				t.Errorf("%q and %q are each less than the other", a, b)
+			}
+			for _, c := range names {
+				if naturalLess(a, b) && naturalLess(b, c) && !naturalLess(a, c) {
+					t.Fatalf("not transitive: %q < %q < %q", a, b, c)
+				}
+			}
+		}
 	}
 }

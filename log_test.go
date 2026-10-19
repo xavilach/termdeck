@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -178,5 +179,25 @@ func TestALogThatGetsBigStartsANewFileAndKeepsTheOldOnes(t *testing.T) {
 	}
 	if got := read(path); strings.Contains(got, "line 1") {
 		t.Errorf("the current file should be a fresh one: %q", got)
+	}
+}
+
+func TestPrintableOnlyKeepsNoControlCharactersAndIsStable(t *testing.T) {
+	rng := rand.New(rand.NewSource(21))
+	alphabet := []byte("ab \t\r\n\x1b[0m31;\x08\x00\x07]\\\x7f")
+	for i := 0; i < 2000; i++ {
+		in := make([]byte, rng.Intn(30))
+		for j := range in {
+			in[j] = alphabet[rng.Intn(len(alphabet))]
+		}
+		once := printableOnly(in)
+		for _, b := range once {
+			if b < 0x20 && b != '\t' || b == 0x7f {
+				t.Fatalf("%q gave %q with a control character", in, once)
+			}
+		}
+		if twice := printableOnly(once); string(twice) != string(once) {
+			t.Fatalf("%q: not stable: %q then %q", in, once, twice)
+		}
 	}
 }

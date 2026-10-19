@@ -44,3 +44,26 @@ func FuzzCodecNeverPanics(f *testing.F) {
 		_ = codec.ToDevice(codec.FromDevice(data))
 	})
 }
+
+func TestEverySingleByteCharsetRoundTripsItsBytes(t *testing.T) {
+	for _, name := range charsetNames() {
+		codec := NewCodec(name)
+		if codec == nil {
+			continue // UTF-8: nothing to convert
+		}
+		for b := 0; b < 256; b++ {
+			in := []byte{byte(b)}
+			out := codec.ToDevice(codec.FromDevice(in))
+			if len(out) != 1 {
+				t.Errorf("%s: byte %02x came back as %x", name, b, out)
+			} else if out[0] != byte(b) && out[0] != '?' {
+				t.Errorf("%s: byte %02x came back as %02x", name, b, out[0])
+			}
+		}
+		// what the device sends, as text, then sent back is the same for the ASCII range
+		ascii := []byte("Hello, World 123 !?")
+		if got := codec.ToDevice(codec.FromDevice(ascii)); string(got) != string(ascii) {
+			t.Errorf("%s: ASCII changed: %q", name, got)
+		}
+	}
+}
