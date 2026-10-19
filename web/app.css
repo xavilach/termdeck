@@ -4,6 +4,7 @@
   --ok: #3fbf7f; --warn: #e5a83a; --danger: #ef6b6b; --select: #24406b;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: dark;
+  --on-ok: #04180c; --on-danger: #1d0505;
   --t-text: #e4e7ee; --t-hex: #e5a83a; --t-dec: #3fbf7f; --t-bin: #c48bff; --t-cmd: #ef7ba8;
 }
 @media (prefers-color-scheme: light) {
@@ -11,6 +12,7 @@
     --bg: #fff; --panel: #f4f5f8; --panel-2: #e9ecf1; --border: #d4d8e0; --control: #858d9c;
     --text: #1b1f27; --muted: #5b6474; --accent: #2459b8; --accent-text: #fff;
     --ok: #1d7a4a; --warn: #8a5a00; --danger: #c42b2b; --select: #d4e3fb; color-scheme: light;
+    --on-ok: #fff; --on-danger: #fff;
     --t-text: #1b1f27; --t-hex: #8a5a00; --t-dec: #1d7a4a; --t-bin: #7a3fc4; --t-cmd: #b02a64;
   }
 }
@@ -84,10 +86,10 @@ body.no-sidebar #sidebar { display: none; }
 details#advanced { margin: 10px 0; }
 details#advanced > summary { cursor: pointer; padding: 4px 0; color: var(--muted); }
 .lines { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
-.lines button[aria-pressed=true] { background: var(--ok); color: #fff; border-color: var(--ok); }
+.lines button[aria-pressed=true] { background: var(--ok); color: var(--on-ok); border-color: var(--ok); }
 .lines.off { opacity: .45; }
 .led { padding: 1px 6px; border-radius: 3px; font-size: 11px; border: 1px solid var(--control); color: var(--muted); }
-.led.on { background: var(--ok); color: #fff; border-color: var(--ok); }
+.led.on { background: var(--ok); color: var(--on-ok); border-color: var(--ok); }
 .term.bell { box-shadow: inset 0 0 0 3px var(--warn); }
 .checks { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 8px 0; }
 .checks .check { margin: 0; }
@@ -154,7 +156,7 @@ dialog#log-ask p { margin: 0 0 8px; word-break: break-all; }
 #notice { color: var(--warn); }
 .tab.belled { animation: bellflash 0.8s ease-in-out infinite alternate; }
 @keyframes bellflash { from { background: var(--panel); } to { background: var(--warn); color: #000; } }
-.toolbar [data-action=log][aria-pressed=true] { background: var(--danger); color: #fff; border-color: var(--danger); }
+.toolbar [data-action=log][aria-pressed=true] { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }
 .toolbar [data-action=log][aria-pressed=true]::before { content: "● "; }
 textarea[name=colours] { font-family: ui-monospace, Consolas, monospace; }
 /* ---- receive bar (top), send bar (bottom), find bar ---- */
@@ -277,3 +279,5 @@ dialog#tunnel label { display: block; margin: 6px 0; }
 .viewbar details.more > .more-body { position: absolute; left: 0; top: calc(100% + 4px); z-index: 30; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 230px;
   padding: 10px 12px; background: var(--panel); border: 1px solid var(--control); border-radius: 6px; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); }
 .viewbar details.more > .more-body label { white-space: nowrap; }
+.tab .tabmain { display: flex; align-items: center; gap: 6px; border: 0; background: none; padding: 0; min-height: 0; color: inherit; font: inherit; cursor: pointer; }
+.tab .tabmain:hover { background: none; }

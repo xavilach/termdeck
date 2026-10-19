@@ -1181,3 +1181,23 @@ func TestAFileIsSentAndReceivedWithYmodemThroughTheCable(t *testing.T) {
 		t.Errorf("received %v with %d bytes", done["received"], len(raw))
 	}
 }
+
+// Accessibility of the page (axe-core, WCAG A and AA) in the light and dark themes, when Chromium is installed.
+func TestWebPageAccessibility(t *testing.T) {
+	npm, err := exec.LookPath("npm")
+	if err != nil {
+		t.Skip("npm is not installed")
+	}
+	cache, _ := os.UserCacheDir()
+	if _, err := os.Stat("tools/webtest/node_modules/@axe-core"); err != nil {
+		t.Skip("run npm install in tools/webtest to include this test")
+	}
+	if matches, _ := filepath.Glob(filepath.Join(cache, "ms-playwright", "chromium*")); len(matches) == 0 {
+		t.Skip("run npx playwright install chromium in tools/webtest to include this test")
+	}
+	cmd := exec.Command(npm, "run", "a11y")
+	cmd.Dir = "tools/webtest"
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+}

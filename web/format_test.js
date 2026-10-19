@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const F = require("./format.js");
 
 const bytesOf = (text) => Uint8Array.from(Buffer.from(text, "latin1"));
-const shape = (view, chunks, held = []) => chunks.map((c) => Buffer.from(F.shapeText(bytesOf(c), view, held)).toString("latin1").replace(/\x1b\[2m|\x1b\[22m/g, "")).join("");
+const shape = (view, chunks, held = []) => chunks.map((c) => Buffer.from(F.shapeText(bytesOf(c), view, held)).toString("latin1").replace(/\x1b\[90m|\x1b\[39m/g, "")).join("");
 
 test("unescapeText", () => {
   assert.equal(F.unescapeText("a\\r\\n\\t\\0\\\\\\x41\\q"), "a\r\n\t\0\\A\\q");

@@ -23,7 +23,7 @@ w.Terminal = class {
   onBell() {} onTitleChange() {} onSelectionChange() {} onData() {} hasSelection() { return false; } getSelection() { return ""; }
   attachCustomKeyEventHandler(f) { this.keyHandler = f; } select() {} scrollToLine() {} clearSelection() {}
   write(d, cb) { if (typeof d !== "string" && d) d = Buffer.from(d).toString("latin1"); if (d) this.out.push(d); if (cb) cb(); }
-  text() { return this.out.join("").replace(/\x1b\[2m|\x1b\[22m/g, ""); }
+  text() { return this.out.join("").replace(/\x1b\[90m|\x1b\[39m|\x1b\[0m/g, ""); }
 };
 w.FitAddon = { FitAddon: class { fit() {} } };
 const sockets = [];

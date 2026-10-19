@@ -19,8 +19,8 @@ function colourOverrides(text) {
 function terminalTheme(profile) {
   const choice = profile?.theme || "auto";
   const light = choice === "light" || (choice === "auto" && matchMedia("(prefers-color-scheme: light)").matches);
-  const base = light ? { background: "#ffffff", foreground: "#1b1f27", cursor: "#1b1f27", selectionBackground: "#d4e3fb" }
-                     : { background: "#0f1218", foreground: "#e4e7ee", cursor: "#e4e7ee", selectionBackground: "#24406b" };
+  const base = light ? { background: "#ffffff", foreground: "#1b1f27", cursor: "#1b1f27", selectionBackground: "#d4e3fb", brightBlack: "#5b6474" }
+                     : { background: "#0f1218", foreground: "#e4e7ee", cursor: "#e4e7ee", selectionBackground: "#24406b", brightBlack: "#9aa2b3" };
   return { ...base, ...colourOverrides(profile?.colours) };
 }
 
@@ -151,7 +151,7 @@ function lineHead(tab, marker, at) {
   let head = "";
   if (tab.view.stamps) {
     const text = tab.view.timeMode === "delta" ? formatDelta(tab.lastHead ? at - tab.lastHead : 0) : stamp(at);
-    head = `\x1b[2m[${text}]\x1b[22m `;
+    head = `\x1b[90m[${text}]\x1b[39m `;
     tab.lastHead = at;
   }
   return head + (marker || "");
@@ -273,7 +273,7 @@ function showFrames(tab, ev) {
   }
   for (const row of tab.frameFeed(ev.raw)) {
     const line = frameLine(tab.frameSpec, row);
-    const sgr = row.noise ? "2" : row.ok === false ? "31" : "";
+    const sgr = row.noise ? "90" : row.ok === false ? "31" : "";
     const text = ENC.encode(`${sgr ? `\x1b[${sgr}m` : ""}${line}${sgr ? "\x1b[0m" : ""}\r\n`);
     writeLines(tab, text, tab.profile.rxMarker, ev.t);
   }
@@ -361,7 +361,7 @@ function note(tab, text) {
 function writeNote(tab, text) {
   flushHex(tab);
   if (!tab.lineStart) tab.term.write("\r\n");
-  tab.term.write(`\x1b[2m[termdeck] ${text}\x1b[0m\r\n`);
+  tab.term.write(`\x1b[90m[termdeck] ${text}\x1b[0m\r\n`);
   tab.lineStart = true;
   tab.txOpen = false;
 }

@@ -6,9 +6,11 @@
     "lint": "node lint.js",
     "smoke": "node smoke.js",
     "test": "npm run lint && npm run smoke",
-    "e2e": "node e2e.js"
+    "e2e": "node e2e.js",
+    "a11y": "node a11y.js"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "eslint": "^9.0.0",
     "globals": "^15.0.0",
     "jsdom": "^24.0.0",

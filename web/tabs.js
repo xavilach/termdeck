@@ -71,6 +71,7 @@ function refreshPane(pane) {
   for (const t of pane.tabs) {
     t.box.classList.toggle("active", t === pane.active);
     t.tabEl.classList.toggle("active", t === pane.active);
+    if (t === pane.active) t.tabMain.setAttribute("aria-current", "true"); else t.tabMain.removeAttribute("aria-current");
   }
   pane.empty.hidden = pane.tabs.length > 0;
 }
@@ -200,9 +201,11 @@ function newTabElement(tab) {
   tab.dot = el("span", "dot");
   tab.closeBtn = close;
   tab.tabEl = el("div", "tab");
-  tab.tabEl.setAttribute("role", "tab");
+  // the tab itself is the button inside it: a button must not hold another
   tab.tabEl.draggable = true;
-  tab.tabEl.append(tab.dot, tab.label, close);
+  tab.tabMain = el("button", "tabmain");
+  tab.tabMain.append(tab.dot, tab.label);
+  tab.tabEl.append(tab.tabMain, close);
   tab.tabEl.addEventListener("click", () => { activate(tab); showLines(); });
   addReorder(tab);
 }

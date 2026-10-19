@@ -75,7 +75,7 @@ const Format = (() => {
     if (!sequence && !view.ctrl) return bytes;
     const ends = sequence || [10];  // the terminal's own way, with control characters shown: LF ends the line
     const out = [];
-    const mark = (b) => out.push(...ENC.encode(`\x1b[2m<${controlName(b)}>\x1b[22m`));
+    const mark = (b) => out.push(...ENC.encode(`\x1b[90m<${controlName(b)}>\x1b[39m`));
     const plain = (b) => {
       if (view.ctrl && isControl(b)) mark(b);
       else if (b !== 13 && b !== 10) out.push(b);
