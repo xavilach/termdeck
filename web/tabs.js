@@ -529,15 +529,24 @@ $("#sidebar-toggle").addEventListener("click", toggleSidebar);
 // The width of the left column can be changed by dragging its edge; it is remembered.
 const SIDEBAR_MIN = 180;
 const SIDEBAR_MAX = 600;
+function showSidebarWidth(width) {
+  const handle = $("#sidebar-resize");
+  handle.setAttribute("aria-valuenow", String(width));
+  handle.setAttribute("aria-valuemin", String(SIDEBAR_MIN));
+  handle.setAttribute("aria-valuemax", String(SIDEBAR_MAX));
+}
+
 function setSidebarWidth(px) {
   const width = Math.min(Math.max(Math.round(px), SIDEBAR_MIN), SIDEBAR_MAX);
   document.documentElement.style.setProperty("--sidebar-w", `${width}px`);
+  showSidebarWidth(width);
   stored.write("termdeck.sidebar", width);
   fitAll();
   return width;
 }
-const savedSidebar = stored.read("termdeck.sidebar", 0);
-if (savedSidebar) document.documentElement.style.setProperty("--sidebar-w", `${Math.min(Math.max(savedSidebar, SIDEBAR_MIN), SIDEBAR_MAX)}px`);
+const savedSidebar = Math.min(Math.max(stored.read("termdeck.sidebar", 250), SIDEBAR_MIN), SIDEBAR_MAX);
+if (savedSidebar !== 250) document.documentElement.style.setProperty("--sidebar-w", `${savedSidebar}px`);
+showSidebarWidth(savedSidebar);
 
 $("#sidebar-resize").addEventListener("pointerdown", (e) => {
   e.preventDefault();  // no text selection or drag of something under it starts instead
