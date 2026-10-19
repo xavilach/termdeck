@@ -408,6 +408,26 @@ async function startServer() {
   await shot("15-xmodem");
   await page.click("#xmodem-close");
 
+  // the same with YMODEM: the received file keeps its name and its exact size
+  await page.locator(".tab", { hasText: "fake:link-b" }).click();
+  await page.click("[data-xmodem]");
+  await page.check("#xmodem [name=xproto][value=ymodem]");
+  await page.check("#xmodem [name=xdir][value=receive]");
+  await page.click("#xmodem-start");
+  await page.click("#xmodem-close");
+  await page.locator(".tab", { hasText: "fake:link-a" }).click();
+  const yfile = path.join(server.dir, "exact-name.dat");
+  fs.writeFileSync(yfile, Buffer.from("y".repeat(1500)));
+  await page.click("[data-xmodem]");
+  await page.check("#xmodem [name=xproto][value=ymodem]");
+  await page.check("#xmodem [name=xdir][value=send]");
+  await page.setInputFiles("#xmodem-file", yfile);
+  const [ymodemDownload] = await Promise.all([page.waitForEvent("download", { timeout: 25000 }), page.click("#xmodem-start")]);
+  const ySaved = path.join(server.dir, "y-received.bin");
+  await ymodemDownload.saveAs(ySaved);
+  check("YMODEM: the file arrives with its own name and its exact size", ymodemDownload.suggestedFilename() === "exact-name.dat" && fs.statSync(ySaved).size === 1500, { name: ymodemDownload.suggestedFilename(), size: fs.statSync(ySaved).size });
+  await page.click("#xmodem-close");
+
   // the line changes the device drives show as notes: DTR of one end is DSR of the other
   await page.evaluate((i) => { tabs[i].profile.noteLines = true; }, a);
   await page.locator(".tab", { hasText: "fake:link-b" }).click();

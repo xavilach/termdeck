@@ -11,7 +11,8 @@ const xferSummary = (x) => {
   const size = x.total ? ` of ${x.total.toLocaleString()} bytes` : "";
   return {
     running: `${x.dir === "send" ? "Sending" : "Receiving"}: ${(x.done || 0).toLocaleString()}${size}${x.dir === "receive" && !x.done ? " (asking the device to start)" : ""}`,
-    done: x.dir === "send" ? `Sent ${x.name} (${x.total.toLocaleString()} bytes).` : `Received ${(x.done || 0).toLocaleString()} bytes: the file was saved by the browser (padded with 1A to a block).`,
+    done: x.dir === "send" ? `Sent ${x.name} (${x.total.toLocaleString()} bytes).`
+      : `Received ${(x.done || 0).toLocaleString()} bytes: the file was saved by the browser${x.proto === "ymodem" ? "" : " (padded with 1A to a block)"}.`,
     failed: `Failed: ${x.message}`,
     cancelled: "Cancelled.",
   }[x.state];
@@ -33,12 +34,13 @@ function showXmodem() {
 
 // What the server says about the transfer of a tab.
 function receiveTransfer(tab, m) {
-  tab.xfer = { dir: m.dir, name: m.name, total: m.total, done: m.done, state: m.state, message: m.message };
+  tab.xfer = { dir: m.dir, name: m.name, total: m.total, done: m.done, state: m.state, message: m.message, proto: m.proto };
   if (m.state === "done" && m.dir === "receive" && m.data) {
     const bytes = Uint8Array.from(atob(m.data), (c) => c.charCodeAt(0));
-    download(fileName(tab, "bin"), new Blob([bytes], { type: "application/octet-stream" }));
+    const name = (m.received || "").replace(/[^\w. -]+/g, "_");  // YMODEM tells the name of the file
+    download(name || fileName(tab, "bin"), new Blob([bytes], { type: "application/octet-stream" }));
   }
-  if (m.state !== "running") note(tab, `XMODEM ${m.dir}: ${xferSummary(tab.xfer)}`);
+  if (m.state !== "running") note(tab, `${(m.proto || "xmodem").toUpperCase()} ${m.dir}: ${xferSummary(tab.xfer)}`);
   if (tab === xmodemTab) showXmodem();
 }
 
@@ -46,14 +48,14 @@ async function startXmodem() {
   const tab = xmodemTab;
   if (!tab || tab.state !== "connected") return;
   const send = xmodemDialog.querySelector("[name=xdir]:checked").value === "send";
-  const message = { type: "xmodem", action: send ? "send" : "receive", oneK: $("#xmodem-1k").checked, name: "" };
+  const message = { type: "xmodem", action: send ? "send" : "receive", oneK: $("#xmodem-1k").checked, name: "", proto: xmodemDialog.querySelector("[name=xproto]:checked").value };
   if (send) {
     const file = $("#xmodem-file").files[0];
     if (!file) { $("#xmodem-status").textContent = "Choose the file to send first."; return; }
     message.name = file.name;
     message.bytes = b64(new Uint8Array(await file.arrayBuffer()));
   }
-  tab.xfer = { dir: message.action, name: message.name, total: send ? Math.ceil((message.bytes.length * 3) / 4) : 0, done: 0, state: "running" };
+  tab.xfer = { dir: message.action, name: message.name, total: send ? Math.ceil((message.bytes.length * 3) / 4) : 0, done: 0, state: "running", proto: message.proto };
   sendMessage(tab, message);
   showXmodem();
 }

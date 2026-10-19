@@ -123,7 +123,7 @@
       <input type="number" data-auto-ms min="10" max="3600000" step="100" value="1000" title="Milliseconds between two automatic sends" aria-label="Milliseconds between automatic sends"><span class="muted">ms</span>
       <button data-send class="primary">Send</button>
       <button data-send-file title="Send the content of a file to the device, as it is">File…</button>
-      <button data-xmodem title="Send a file to the device, or receive one from it, with the XMODEM protocol">XMODEM…</button>
+      <button data-xmodem title="Send a file to the device, or receive one from it, with the XMODEM or YMODEM protocol">Transfer…</button>
       <input type="file" data-file hidden>
       <span class="counters" title="Bytes sent since the port opened (in a tunnel: carried from B to A). Clear resets it.">Tx <b data-count="tx">0</b></span>
       <span class="file-status" hidden><span data-file-text></span> <button data-file-cancel>Cancel</button></span>
@@ -300,15 +300,19 @@
           </div>
         </form>
 </dialog>
-<dialog id="xmodem" aria-label="XMODEM file transfer">
+<dialog id="xmodem" aria-label="XMODEM and YMODEM file transfer">
   <article>
-    <header><h2>XMODEM file transfer</h2></header>
+    <header><h2>XMODEM / YMODEM file transfer</h2></header>
+    <div class="checks">
+      <label class="check" title="XMODEM: only the bytes travel, the last block is padded (1A). The device chooses the name."><input type="radio" name="xproto" value="xmodem" checked> XMODEM</label>
+      <label class="check" title="YMODEM: the name and the exact size travel with the file, in blocks of 1024 bytes."><input type="radio" name="xproto" value="ymodem"> YMODEM</label>
+    </div>
     <div class="checks">
       <label class="check"><input type="radio" name="xdir" value="send" checked> Send a file to the device</label>
       <label class="check"><input type="radio" name="xdir" value="receive"> Receive a file from the device</label>
     </div>
     <label id="xmodem-sendfile" title="The file to send.">File <input type="file" id="xmodem-file"></label>
-    <div class="checks"><label class="check" title="Blocks of 1024 bytes instead of 128 when sending (XMODEM-1K): faster, if the device supports it."><input type="checkbox" id="xmodem-1k"> 1K blocks (sending)</label></div>
+    <div class="checks"><label class="check" title="XMODEM only: blocks of 1024 bytes instead of 128 when sending (XMODEM-1K): faster, if the device supports it. YMODEM always uses 1024."><input type="checkbox" id="xmodem-1k"> 1K blocks (XMODEM sending)</label></div>
     <progress id="xmodem-progress" value="0" max="1" hidden></progress>
     <p id="xmodem-status" class="muted"></p>
     <div class="buttons">

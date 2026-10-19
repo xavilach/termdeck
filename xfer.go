@@ -83,7 +83,7 @@ func (t *termSession) startXmodem(m clientMessage, times xmodemTimes) {
 	link := sessionLink{t, x}
 	dir := m.Action
 	report := func(extra map[string]any) {
-		message := map[string]any{"type": "xfer", "dir": dir, "name": m.Name, "total": len(m.Bytes)}
+		message := map[string]any{"type": "xfer", "dir": dir, "name": m.Name, "total": len(m.Bytes), "proto": m.Proto}
 		for k, v := range extra {
 			message[k] = v
 		}
@@ -106,9 +106,15 @@ func (t *termSession) startXmodem(m clientMessage, times xmodemTimes) {
 		report(map[string]any{"state": "running", "done": 0})
 		var err error
 		var received []byte
-		if dir == "send" {
+		receivedName := ""
+		switch {
+		case dir == "send" && m.Proto == "ymodem":
+			err = ymodemSend(ctx, link, m.Name, m.Bytes, times, progress)
+		case dir == "send":
 			err = xmodemSend(ctx, link, m.Bytes, m.OneK, times, progress)
-		} else {
+		case m.Proto == "ymodem":
+			receivedName, received, err = ymodemReceive(ctx, link, times, progress)
+		default:
 			received, err = xmodemReceive(ctx, link, times, progress)
 		}
 		switch {
@@ -120,7 +126,7 @@ func (t *termSession) startXmodem(m clientMessage, times xmodemTimes) {
 		case dir == "send":
 			report(map[string]any{"state": "done", "done": len(m.Bytes)})
 		default:
-			report(map[string]any{"state": "done", "done": len(received), "data": received})
+			report(map[string]any{"state": "done", "done": len(received), "data": received, "received": receivedName})
 		}
 	}()
 }

@@ -157,3 +157,33 @@ func TestCRC16XmodemHasItsPublishedCheckValue(t *testing.T) {
 		t.Errorf("%04x", got)
 	}
 }
+
+func TestYmodemCarriesTheNameAndTheExactSize(t *testing.T) {
+	rng := rand.New(rand.NewSource(2))
+	for _, size := range []int{1, 1000, 1024, 1025, 5000} {
+		data := make([]byte, size)
+		rng.Read(data)
+		tx, rx := newPipe()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		sendErr := make(chan error, 1)
+		go func() { sendErr <- ymodemSend(ctx, tx, "firmware.bin", data, fastTimes, func(int) {}) }()
+		name, got, err := ymodemReceive(ctx, rx, fastTimes, func(int) {})
+		cancel()
+		if err != nil || <-sendErr != nil {
+			t.Fatalf("%d bytes: %v", size, err)
+		}
+		if name != "firmware.bin" || !bytes.Equal(got, data) {
+			t.Errorf("%d bytes: name %q, received %d bytes", size, name, len(got))
+		}
+	}
+}
+
+func TestYmodemHeaderHoldsNameAndSize(t *testing.T) {
+	h := ymodemHeader("a.txt", 123)
+	if h[0] != xSOH || h[1] != 0 || h[2] != 0xff || !bytes.HasPrefix(h[3:], []byte("a.txt\x00123")) || len(h) != 133 {
+		t.Errorf("header %x", h)
+	}
+	if end := ymodemHeader("", 0); end[3] != 0 {
+		t.Error("the end of the batch has an empty name")
+	}
+}

@@ -42,7 +42,7 @@ GOOS=windows GOARCH=amd64 go build -o termdeck.exe .   # Windows
 
 - Left column: left click selects, double click opens (or runs a script), right click edits. Drag a session or script onto a group to move it.
 - Tunnel (left column): join two ports, both directions are shown (A→B green, B→A cyan) and logged (`A>B`, `B>A`).
-- XMODEM (send bar, XMODEM…): send a file to the device or receive one from it (CRC-16, 128 or 1K blocks); the transfer's data stays out of the output and the log; a received file is saved by the browser, padded with 1A to a block.
+- Transfer (send bar, Transfer…): XMODEM (CRC-16, 128 or 1K blocks) or YMODEM (name and exact size travel with the file), send or receive; checked against the reference `sz`/`rz` (lrzsz); the transfer's data stays out of the output and the log; a received file is saved by the browser.
 - Help (left column, Alt+Shift+H): shortcuts and the syntax of the one-rule-per-line settings.
 - Ctrl+Shift+C / V / L: copy, paste, clear. Alt+Shift+N / W / S / B / M: new session, close tab, layout, left column, mark.
 

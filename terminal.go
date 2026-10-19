@@ -27,6 +27,7 @@ type clientMessage struct {
 	Bytes   []byte  `json:"bytes"`  // raw bytes to send, as they are
 	Action  string  `json:"action"` // xmodem: send, receive or cancel
 	OneK    bool    `json:"oneK"`   // xmodem: blocks of 1024 bytes instead of 128
+	Proto   string  `json:"proto"`  // xmodem (the default) or ymodem: the name and the exact size travel with the file
 }
 
 // termSession is one tab: a WebSocket that can open and close its port as often as the user wants.

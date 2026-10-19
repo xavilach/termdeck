@@ -1145,3 +1145,39 @@ func TestATunnelNeedsTwoDifferentPortsThatAreFree(t *testing.T) {
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave}})
 	waitFor(t, c, ctx, "state", "connected")
 }
+
+func TestAFileIsSentAndReceivedWithYmodemThroughTheCable(t *testing.T) {
+	shortXmodemTimes(t)
+	ts := newTestServer(t)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:link-a"}})
+	waitFor(t, c, ctx, "state", "connected")
+	other, err := openFake("fake:link-b", true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	link := newPortLink(other)                       // one reader of the port for the whole test
+	data := bytes.Repeat([]byte("exact size "), 150) // 1650 bytes: not a multiple of a block
+	got := make(chan []byte, 1)
+	name := make(chan string, 1)
+	go func() {
+		n, d, _ := ymodemReceive(context.Background(), link, fastTimes, func(int) {})
+		name <- n
+		got <- d
+	}()
+	sendJSON(t, c, ctx, map[string]any{"type": "xmodem", "action": "send", "proto": "ymodem", "name": "exact.txt", "bytes": data})
+	waitFor(t, c, ctx, "xfer", "done")
+	if n, d := <-name, <-got; n != "exact.txt" || !bytes.Equal(d, data) {
+		t.Errorf("the device got %q with %d bytes", n, len(d))
+	}
+
+	// and the other way: the device sends, the page is given the name and the exact bytes
+	sendJSON(t, c, ctx, map[string]any{"type": "xmodem", "action": "receive", "proto": "ymodem"})
+	go ymodemSend(context.Background(), link, "from-device.bin", data[:777], fastTimes, func(int) {})
+	done := waitFor(t, c, ctx, "xfer", "done")
+	raw, _ := base64.StdEncoding.DecodeString(done["data"].(string))
+	if done["received"] != "from-device.bin" || !bytes.Equal(raw, data[:777]) {
+		t.Errorf("received %v with %d bytes", done["received"], len(raw))
+	}
+}

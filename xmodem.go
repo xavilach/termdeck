@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -247,4 +248,189 @@ func readXmodemBlock(ctx context.Context, link xmodemLink, head byte, crcMode bo
 		}
 	}
 	return bytes.Clone(data), int(number), nil
+}
+
+// ---- YMODEM: XMODEM with a first block that holds the name and the size of the file, 1024 byte blocks,
+// and an empty first block at the end. The received file has its exact size.
+
+func ymodemHeader(name string, size int) []byte {
+	info := append([]byte(name), 0)
+	info = append(info, []byte(strconv.Itoa(size))...)
+	length := 128
+	if len(info) > 120 {
+		length = 1024
+	}
+	block := make([]byte, 0, 5+length)
+	head := byte(xSOH)
+	if length == 1024 {
+		head = xSTX
+	}
+	payload := make([]byte, length)
+	copy(payload, info)
+	block = append(block, head, 0, 0xff)
+	block = append(block, payload...)
+	crc := crc16xmodem(payload)
+	return append(block, byte(crc>>8), byte(crc))
+}
+
+// ymodemSend sends one file.
+func ymodemSend(ctx context.Context, link xmodemLink, name string, data []byte, times xmodemTimes, progress func(done int)) error {
+	if err := waitForByte(ctx, link, xCRC, times.start); err != nil {
+		return err
+	}
+	if err := sendAndWait(ctx, link, ymodemHeader(name, len(data)), times); err != nil {
+		return fmt.Errorf("the name block: %w", err)
+	}
+	if err := waitForByte(ctx, link, xCRC, times.block); err != nil {
+		return err
+	}
+	number := 1
+	for sent := 0; sent < len(data); {
+		end := min(sent+1024, len(data))
+		if err := sendAndWait(ctx, link, xmodemBlock(number, data[sent:end], true, true), times); err != nil {
+			return fmt.Errorf("block %d: %w", number, err)
+		}
+		sent = end
+		number++
+		progress(sent)
+	}
+	// the end of the file: some receivers acknowledge the first EOT, others refuse it once
+	for try := 0; ; try++ {
+		if try >= xmodemRetries {
+			return errors.New("the end of the file was not acknowledged")
+		}
+		link.write([]byte{xEOT})
+		b, err := link.read(ctx, times.block)
+		if err != nil && !errors.Is(err, errXTimeout) {
+			return err
+		}
+		if err == nil && b == xACK {
+			break
+		}
+	}
+	if err := waitForByte(ctx, link, xCRC, times.block); err != nil {
+		return err
+	}
+	if err := sendAndWait(ctx, link, ymodemHeader("", 0), times); err != nil {
+		return fmt.Errorf("the end of the batch: %w", err)
+	}
+	return nil
+}
+
+// waitForByte reads until the byte comes, within the time.
+func waitForByte(ctx context.Context, link xmodemLink, want byte, within time.Duration) error {
+	for start := time.Now(); time.Since(start) < within; {
+		b, err := link.read(ctx, time.Second)
+		if err == nil && b == want {
+			return nil
+		}
+		if err != nil && !errors.Is(err, errXTimeout) {
+			return err
+		}
+	}
+	return fmt.Errorf("the device did not answer (waited for %#x)", want)
+}
+
+// ymodemReceive receives one file and gives its name and exact content.
+func ymodemReceive(ctx context.Context, link xmodemLink, times xmodemTimes, progress func(done int)) (string, []byte, error) {
+	name, size, err := ymodemFirstBlock(ctx, link, times)
+	if err != nil || name == "" {
+		return name, nil, err
+	}
+	link.write([]byte{xCRC}) // ready for the data
+	var file []byte
+	expected, eots := 1, 0
+	for {
+		b, err := link.read(ctx, times.block)
+		if errors.Is(err, errXTimeout) {
+			link.write([]byte{xNAK})
+			continue
+		}
+		if err != nil {
+			return name, nil, err
+		}
+		switch b {
+		case xEOT:
+			eots++
+			if eots == 1 {
+				link.write([]byte{xNAK}) // the first EOT is refused once, so a line error cannot end the file early
+				continue
+			}
+			link.write([]byte{xACK, xCRC})
+			// the batch ends with an empty name block
+			if end, _, err := ymodemFirstBlock(ctx, link, times); err != nil || end != "" {
+				return name, nil, fmt.Errorf("the end of the batch: %v", err)
+			}
+			if size >= 0 && size <= len(file) {
+				file = file[:size]
+			}
+			return name, file, nil
+		case xCAN:
+			return name, nil, errors.New("the device cancelled")
+		case xSOH, xSTX:
+			data, number, err := readXmodemBlock(ctx, link, b, true, times)
+			switch {
+			case err != nil:
+				link.write([]byte{xNAK})
+			case number == (expected-1)&0xff:
+				link.write([]byte{xACK})
+			case number == expected&0xff:
+				file = append(file, data...)
+				expected++
+				progress(len(file))
+				link.write([]byte{xACK})
+			default:
+				link.write([]byte{xCAN, xCAN})
+				return name, nil, fmt.Errorf("block %d came instead of %d", number, expected&0xff)
+			}
+		}
+	}
+}
+
+// ymodemFirstBlock asks for and reads block 0: the name and the size of the file (-1 when it is not given).
+// An empty name is the end of the batch. The block is acknowledged.
+func ymodemFirstBlock(ctx context.Context, link xmodemLink, times xmodemTimes) (string, int, error) {
+	var lastInvite time.Time
+	for invites := 0; ; {
+		if time.Since(lastInvite) >= times.invite {
+			if invites >= xmodemRetries {
+				return "", 0, errors.New("the device did not start sending")
+			}
+			link.write([]byte{xCRC})
+			invites++
+			lastInvite = time.Now()
+		}
+		b, err := link.read(ctx, max(times.invite-time.Since(lastInvite), time.Millisecond))
+		if errors.Is(err, errXTimeout) {
+			continue
+		}
+		if err != nil {
+			return "", 0, err
+		}
+		if b != xSOH && b != xSTX {
+			continue
+		}
+		data, number, err := readXmodemBlock(ctx, link, b, true, times)
+		if err != nil || number != 0 {
+			link.write([]byte{xNAK})
+			continue
+		}
+		link.write([]byte{xACK})
+		end := bytes.IndexByte(data, 0)
+		if end <= 0 {
+			return "", 0, nil
+		}
+		size := -1
+		rest := data[end+1:]
+		if z := bytes.IndexByte(rest, 0); z >= 0 {
+			rest = rest[:z] // the size ends at the next zero; the block is padded with zeros
+		}
+		fields := bytes.Fields(rest)
+		if len(fields) > 0 {
+			if n, err := strconv.Atoi(string(fields[0])); err == nil {
+				size = n
+			}
+		}
+		return string(data[:end]), size, nil
+	}
 }
