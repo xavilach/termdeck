@@ -16,7 +16,7 @@ Press Help (left column, Alt+Shift+H) for the keys and the syntax of the setting
 
 ## Sessions
 
-- Saved as JSON, in groups, with scripts per group. Tabs, or two panes. The left column can be resized (drag its edge). Export / Import (left column) move them between computers.
+- Saved as JSON, in groups, with scripts per group. Tabs, or two panes. The left column can be resized (drag its edge). Export / Import (left column) move them between computers; PuTTY adds your serial PuTTY sessions (found in the Registry or `~/.putty/sessions`, or from a `.reg` export or session file you choose).
 - Baud, data bits, parity, stop bits, flow control (RTS/CTS, XON/XOFF, DSR/DTR on Windows), DTR/RTS, live CTS/DSR/DCD/RI, character sets.
 - Reconnect when the port comes back. RS-485 direction by RTS. Slow send (pause per character and per line end). Note line changes. Duplicate (❐).
 - A tab that gets data while another is shown is marked, and the browser tab title counts them: `(2) termdeck`.

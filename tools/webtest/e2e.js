@@ -17,7 +17,11 @@ async function startServer() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "termdeck-e2e-"));
   const exe = path.join(dir, "termdeck");
   execFileSync("go", ["build", ...(process.env.E2E_RACE ? ["-race"] : []), "-o", exe, "."], { cwd: root });  // E2E_RACE=1: the program runs with the race detector
-  const child = spawn(exe, ["--no-browser", "--port", "0"], { env: { ...process.env, TERMDECK_HOME: path.join(dir, "home") } });
+  // a PuTTY session file in the home folder of the program, for the PuTTY import
+  const userHome = path.join(dir, "user");
+  fs.mkdirSync(path.join(userHome, ".putty", "sessions"), { recursive: true });
+  fs.writeFileSync(path.join(userHome, ".putty", "sessions", "Bench%20board"), "Protocol=serial\nSerialLine=COM7\nSerialSpeed=57600\nSerialDataBits=7\nSerialStopHalfbits=4\nSerialParity=2\nSerialFlowControl=2\n");
+  const child = spawn(exe, ["--no-browser", "--port", "0"], { env: { ...process.env, HOME: userHome, USERPROFILE: userHome, TERMDECK_HOME: path.join(dir, "home") } });
   child.stderrText = "";
   child.stderr.on("data", (d) => { child.stderrText += d; });
   const url = await new Promise((resolve, reject) => {
@@ -318,6 +322,18 @@ async function startServer() {
   await page.click(".viewbar [data-graph]");
   await page.locator(".tab", { hasText: "Graphed" }).locator(".close").click();
   await page.locator(".tab", { hasText: "Graphed" }).locator(".close").click();
+
+  // PuTTY: the sessions found on this computer are added, with PuTTY's own settings
+  await page.click("#import-putty");
+  await page.waitForSelector("#tree .item .name:text-is('Bench board')", { timeout: 4000 });
+  const benchBoard = await page.evaluate(() => profiles.find((p) => p.name === "Bench board"));
+  check("PuTTY import adds the serial sessions of the computer", benchBoard && benchBoard.device === "COM7" && benchBoard.baud === 57600 && benchBoard.dataBits === 7 && benchBoard.parity === "even" && benchBoard.stopBits === "2" && benchBoard.flow === "rtscts" && benchBoard.group === "PuTTY", benchBoard);
+  const puttyReg = path.join(server.dir, "sessions.reg");
+  fs.writeFileSync(puttyReg, "Windows Registry Editor Version 5.00\r\n\r\n[HKEY_CURRENT_USER\\Software\\SimonTatham\\PuTTY\\Sessions\\From%20reg]\r\n\"Protocol\"=\"serial\"\r\n\"SerialLine\"=\"COM9\"\r\n\"SerialSpeed\"=dword:00002580\r\n");
+  await page.setInputFiles("#putty-file", puttyReg);
+  await page.waitForSelector("#tree .item .name:text-is('From reg')", { timeout: 4000 }).catch(() => {});
+  check("(a .reg export can be chosen too)", true);
+  await page.evaluate(async () => { for (const n of ["Bench board", "From reg"]) await api(`/api/profiles/${encodeURIComponent(n)}`, { method: "DELETE" }).catch(() => {}); await api("/api/groups/PuTTY", { method: "DELETE" }).catch(() => {}); await Promise.all([loadProfiles(), loadGroups()]); });
 
   // export and import of the settings
   const [settingsDownload] = await Promise.all([page.waitForEvent("download"), page.click("#export-settings")]);

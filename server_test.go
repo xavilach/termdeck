@@ -1357,3 +1357,12 @@ func randomMessages(t *testing.T, seed int64) {
 		t.Errorf("the server did not answer after the connection closed: %d", code)
 	}
 }
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func jsonString(s string) string { b, _ := json.Marshal(s); return string(b) }

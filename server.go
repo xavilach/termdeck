@@ -211,6 +211,8 @@ func (s *Server) Handler() http.Handler {
 		home, _ := configDir()
 		writeJSON(w, http.StatusOK, map[string]string{"version": version, "os": runtime.GOOS, "home": home})
 	})
+	mux.HandleFunc("GET /api/putty", s.putty)
+	mux.HandleFunc("POST /api/putty", s.putty)
 	mux.HandleFunc("GET /api/export", s.export)
 	mux.HandleFunc("POST /api/import", s.importSettings)
 	mux.HandleFunc("GET /api/terminal", s.terminal)
