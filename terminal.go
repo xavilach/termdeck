@@ -383,53 +383,8 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 		if json.Unmarshal(data, &m) != nil {
 			continue
 		}
-		switch m.Type {
-		case "open":
-			go func() { // in the background: the page may have to answer a question first
-				t.opMu.Lock()
-				defer t.opMu.Unlock()
-				t.open(m.Profile)
-			}()
-		case "loganswer":
-			select {
-			case t.answers <- m.Answer:
-			default:
-			}
-		case "close":
-			t.close()
-			t.sendState("closed", "port closed")
-		case "input":
-			t.write([]byte(m.Data))
-		case "raw":
-			t.writeRaw(m.Bytes)
-		case "steps":
-			t.runCmd(m.Data)
-		case "resetcounters":
-			t.resetCounters()
-		case "break":
-			t.sendBreak()
-		case "script":
-			t.runScript(m.Name)
-		case "stop":
-			t.stopScript()
-		case "flush":
-			t.flushOut()
-		case "xmodem":
-			if m.Action == "cancel" {
-				t.cancelTransfer()
-			} else {
-				t.startXmodem(m, xmodemTimesInUse)
-			}
-		case "mark":
-			t.logger().Mark(m.Data)
-		case "log":
-			go func() {
-				t.opMu.Lock()
-				defer t.opMu.Unlock()
-				t.setLogging(m.Value)
-			}()
-		case "line":
-			t.setLine(m.Line, m.Value)
+		if handle := messageHandlers[m.Type]; handle != nil {
+			handle(t, m)
 		}
 	}
 }
@@ -450,4 +405,49 @@ func (t *termSession) rs485() (string, time.Duration) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.profile.RTSMode, time.Duration(t.profile.RTSDelayMs) * time.Millisecond
+}
+
+// What the session does for each kind of message from the page.
+var messageHandlers = map[string]func(t *termSession, m clientMessage){
+	"open": func(t *termSession, m clientMessage) {
+		go func() { // in the background: the page may have to answer a question first
+			t.opMu.Lock()
+			defer t.opMu.Unlock()
+			t.open(m.Profile)
+		}()
+	},
+	"loganswer": func(t *termSession, m clientMessage) {
+		select {
+		case t.answers <- m.Answer:
+		default:
+		}
+	},
+	"close": func(t *termSession, m clientMessage) {
+		t.close()
+		t.sendState("closed", "port closed")
+	},
+	"input":         func(t *termSession, m clientMessage) { t.write([]byte(m.Data)) },
+	"raw":           func(t *termSession, m clientMessage) { t.writeRaw(m.Bytes) },
+	"steps":         func(t *termSession, m clientMessage) { t.runCmd(m.Data) },
+	"resetcounters": func(t *termSession, m clientMessage) { t.resetCounters() },
+	"break":         func(t *termSession, m clientMessage) { t.sendBreak() },
+	"script":        func(t *termSession, m clientMessage) { t.runScript(m.Name) },
+	"stop":          func(t *termSession, m clientMessage) { t.stopScript() },
+	"flush":         func(t *termSession, m clientMessage) { t.flushOut() },
+	"xmodem": func(t *termSession, m clientMessage) {
+		if m.Action == "cancel" {
+			t.cancelTransfer()
+		} else {
+			t.startXmodem(m, xmodemTimesInUse)
+		}
+	},
+	"mark": func(t *termSession, m clientMessage) { t.logger().Mark(m.Data) },
+	"log": func(t *termSession, m clientMessage) {
+		go func() {
+			t.opMu.Lock()
+			defer t.opMu.Unlock()
+			t.setLogging(m.Value)
+		}()
+	},
+	"line": func(t *termSession, m clientMessage) { t.setLine(m.Line, m.Value) },
 }

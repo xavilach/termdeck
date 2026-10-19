@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -124,25 +125,45 @@ func (p *Profile) Normalize() error {
 	p.Device = strings.TrimSpace(p.Device)
 	p.Group = cleanGroup(p.Group)
 	p.LogPath = strings.TrimSpace(p.LogPath)
+	p.FontFamily = strings.TrimSpace(p.FontFamily)
+	for _, check := range []func() error{p.normalizeLine, p.normalizeChoices, p.normalizeLimits, p.normalizeRules, p.normalizeTunnel} {
+		if err := check(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// withDefault sets *n to def when it is 0 and rejects what is outside min..max.
+func withDefault(n *int, def, min, max int, what string) error {
+	if *n == 0 {
+		*n = def
+	}
+	if *n < min || *n > max {
+		return fmt.Errorf("%s %d is out of range (%d to %d)", what, *n, min, max)
+	}
+	return nil
+}
+
+// normalizeLine checks the port and its line settings.
+func (p *Profile) normalizeLine() error {
 	if p.Device == "" {
 		return errors.New("device is required")
 	}
-	if p.Baud == 0 {
-		p.Baud = 115200
-	}
-	if p.Baud < 50 || p.Baud > 10_000_000 {
-		return fmt.Errorf("baud rate %d is out of range", p.Baud)
+	if err := withDefault(&p.Baud, 115200, 50, 10_000_000, "baud rate"); err != nil {
+		return err
 	}
 	if p.DataBits == 0 {
 		p.DataBits = 8
 	}
-	ok := false
-	for _, d := range dataBitsS {
-		ok = ok || d == p.DataBits
-	}
-	if !ok {
+	if !slices.Contains(dataBitsS, p.DataBits) {
 		return fmt.Errorf("data bits must be 5, 6, 7 or 8, not %d", p.DataBits)
 	}
+	return nil
+}
+
+// normalizeChoices sets the defaults of the settings that are one of a few words, and rejects any other.
+func (p *Profile) normalizeChoices() error {
 	for _, f := range []struct {
 		field   *string
 		def     string
@@ -172,71 +193,68 @@ func (p *Profile) Normalize() error {
 			return fmt.Errorf("%s must be one of %s", f.what, strings.Join(f.choices, ", "))
 		}
 	}
-	if p.FontSize == 0 {
-		p.FontSize = 14
+	return nil
+}
+
+// normalizeLimits checks the numbers.
+func (p *Profile) normalizeLimits() error {
+	for _, check := range []func() error{
+		func() error { return withDefault(&p.FontSize, 14, 6, 72, "font size") },
+		func() error { return withDefault(&p.Scrollback, 10000, 100, 1_000_000, "scrollback") },
+		func() error { return withDefault(&p.RTSDelayMs, 0, 0, 1000, "RTS delay") },
+		func() error { return withDefault(&p.CharDelayMs, 0, 0, 5000, "character delay") },
+		func() error { return withDefault(&p.LineDelayMs, 0, 0, 5000, "line delay") },
+		func() error { return withDefault(&p.LogMaxMB, 0, 0, 100_000, "log size (MB)") },
+		func() error { return withDefault(&p.LogKeep, 0, 0, 1000, "log files kept") },
+		func() error { return withDefault(&p.LinePauseMs, 0, 0, 60_000, "new line pause (ms)") },
+	} {
+		if err := check(); err != nil {
+			return err
+		}
 	}
-	if p.FontSize < 6 || p.FontSize > 72 {
-		return fmt.Errorf("font size %d is out of range (6 to 72)", p.FontSize)
-	}
-	if p.Scrollback == 0 {
-		p.Scrollback = 10000
-	}
-	if p.Scrollback < 100 || p.Scrollback > 1_000_000 {
-		return fmt.Errorf("scrollback %d is out of range (100 to 1000000)", p.Scrollback)
-	}
-	p.FontFamily = strings.TrimSpace(p.FontFamily)
 	if len(p.Answerback) > 255 {
 		return errors.New("the answerback is limited to 255 characters")
-	}
-	if err := checkColours(p.Colours); err != nil {
-		return err
 	}
 	if len(p.NewLineCustom) > 64 {
 		return errors.New("the custom new line is limited to 64 characters")
 	}
-	if p.Peer != nil {
-		if p.Peer.Peer != nil {
-			return errors.New("a tunnel joins two ports, not more")
-		}
-		if err := p.Peer.Normalize(); err != nil {
-			return fmt.Errorf("second port: %w", err)
-		}
-		if strings.EqualFold(p.Peer.Device, p.Device) {
-			return errors.New("a tunnel needs two different ports")
-		}
-	}
-	if p.RTSDelayMs < 0 || p.RTSDelayMs > 1000 {
-		return errors.New("the RTS delay is 0 to 1000 ms")
-	}
-	if p.CharDelayMs < 0 || p.CharDelayMs > 5000 || p.LineDelayMs < 0 || p.LineDelayMs > 5000 {
-		return errors.New("send delays are 0 to 5000 ms")
-	}
-	if err := checkFrameSpec(p.FrameSpec); err != nil {
-		return err
-	}
-	if err := checkHighlights(p.Highlights); err != nil {
-		return err
-	}
-	if err := checkFilter(p.Filter); err != nil {
-		return err
-	}
-	if _, err := parseGraphSeries(p.GraphSeries); err != nil {
-		return err
-	}
-	if _, err := parseQuickSends(p.QuickSends); err != nil {
-		return err
-	}
-	if p.LogMaxMB < 0 || p.LogMaxMB > 100_000 || p.LogKeep < 0 || p.LogKeep > 1000 {
-		return errors.New("log size is 0 to 100000 MB and the files kept 0 to 1000")
-	}
-	if p.LinePauseMs < 0 || p.LinePauseMs > 60_000 {
-		return fmt.Errorf("new line pause %d ms is out of range (0 to 60000)", p.LinePauseMs)
-	}
-	if _, err := parseTriggers(p.Triggers); err != nil {
-		return err
-	}
 	if p.BellSound != "" && (len(p.BellSound) > 400_000 || !strings.HasPrefix(p.BellSound, "data:audio/")) {
 		return errors.New("the bell sound must be an audio file of at most 300 KB")
+	}
+	return nil
+}
+
+// normalizeRules checks the settings that are written as rules, one per line.
+func (p *Profile) normalizeRules() error {
+	for _, check := range []func() error{
+		func() error { return checkColours(p.Colours) },
+		func() error { return checkFrameSpec(p.FrameSpec) },
+		func() error { return checkHighlights(p.Highlights) },
+		func() error { return checkFilter(p.Filter) },
+		func() error { _, err := parseGraphSeries(p.GraphSeries); return err },
+		func() error { _, err := parseQuickSends(p.QuickSends); return err },
+		func() error { _, err := parseTriggers(p.Triggers); return err },
+	} {
+		if err := check(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// normalizeTunnel checks the second port of a tunnel.
+func (p *Profile) normalizeTunnel() error {
+	if p.Peer == nil {
+		return nil
+	}
+	if p.Peer.Peer != nil {
+		return errors.New("a tunnel joins two ports, not more")
+	}
+	if err := p.Peer.Normalize(); err != nil {
+		return fmt.Errorf("second port: %w", err)
+	}
+	if strings.EqualFold(p.Peer.Device, p.Device) {
+		return errors.New("a tunnel needs two different ports")
 	}
 	return nil
 }

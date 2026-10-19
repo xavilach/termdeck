@@ -125,50 +125,58 @@ func (t *termSession) runScript(name string) {
 	}
 	t.sendJSON(map[string]string{"type": "script", "state": "running", "name": name})
 	go func() {
-		var failure error // what stopped the script, besides a Stop
-		defer func() {
-			switch {
-			case failure != nil:
-				t.sendJSON(map[string]string{"type": "script", "state": "error", "name": name, "message": failure.Error()})
-			case ctx.Err() != nil:
-				t.sendJSON(map[string]string{"type": "script", "state": "stopped", "name": name})
-			default:
-				t.sendJSON(map[string]string{"type": "script", "state": "done", "name": name})
-			}
-		}()
-		pause := func() bool {
-			select {
-			case <-ctx.Done():
-				return false
-			case <-time.After(time.Duration(script.DelayMs) * time.Millisecond):
-				return true
-			}
-		}
-		for round := 1; ; round++ {
-			for i, command := range script.Commands {
-				if ctx.Err() != nil {
-					return
-				}
-				if steps, isSteps, _ := scriptSteps(command); isSteps {
-					if err := t.runSteps(ctx, steps); err != nil {
-						if ctx.Err() == nil {
-							failure = err
-						}
-						return
-					}
-				} else {
-					command = scriptText(command)
-					t.expectClear() // an expect after this line sees the answer to it
-					t.write([]byte(command + enter))
-					t.sendJSON(map[string]string{"type": "tx", "data": command})
-				}
-				last := i == len(script.Commands)-1 && (!script.Loop || (script.Count > 0 && round >= script.Count))
-				if last || !pause() {
-					return
-				}
-			}
+		failure := t.scriptRounds(ctx, script, enter) // what stopped the script, besides a Stop
+		switch {
+		case failure != nil:
+			t.sendJSON(map[string]string{"type": "script", "state": "error", "name": name, "message": failure.Error()})
+		case ctx.Err() != nil:
+			t.sendJSON(map[string]string{"type": "script", "state": "stopped", "name": name})
+		default:
+			t.sendJSON(map[string]string{"type": "script", "state": "done", "name": name})
 		}
 	}()
+}
+
+// scriptRounds sends the commands of the script, pausing after each, once or as many rounds as it asks for.
+// It returns what went wrong (an expect that did not come), or nil when it ended or was stopped.
+func (t *termSession) scriptRounds(ctx context.Context, script Script, enter string) error {
+	pause := func() bool {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(time.Duration(script.DelayMs) * time.Millisecond):
+			return true
+		}
+	}
+	for round := 1; ; round++ {
+		for i, command := range script.Commands {
+			if ctx.Err() != nil {
+				return nil
+			}
+			if err := t.runCommand(ctx, command, enter); err != nil {
+				return err
+			}
+			last := i == len(script.Commands)-1 && (!script.Loop || (script.Count > 0 && round >= script.Count))
+			if last || !pause() {
+				return nil
+			}
+		}
+	}
+}
+
+// runCommand does one line of a script: steps, or text sent with the line end.
+func (t *termSession) runCommand(ctx context.Context, command, enter string) error {
+	if steps, isSteps, _ := scriptSteps(command); isSteps {
+		if err := t.runSteps(ctx, steps); err != nil && ctx.Err() == nil {
+			return err
+		}
+		return nil
+	}
+	command = scriptText(command)
+	t.expectClear() // an expect after this line sees the answer to it
+	t.write([]byte(command + enter))
+	t.sendJSON(map[string]string{"type": "tx", "data": command})
+	return nil
 }
 
 // runCmd does the steps typed in the Cmd input ("dtr=1; wait=500; dtr=0") in the background.

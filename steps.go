@@ -19,6 +19,41 @@ type step struct {
 
 const maxWaitMs = 3_600_000
 
+// stepParsers read the value of each kind of step.
+var stepParsers = map[string]func(value string) (step, error){
+	"dtr": func(v string) (step, error) { return lineStep("dtr", v) },
+	"rts": func(v string) (step, error) { return lineStep("rts", v) },
+	"wait": func(v string) (step, error) {
+		ms, err := strconv.Atoi(v)
+		if err != nil || ms < 0 || ms > maxWaitMs {
+			return step{}, fmt.Errorf("wait is a number of milliseconds (0 to %d)", maxWaitMs)
+		}
+		return step{kind: "wait", ms: ms}, nil
+	},
+	"timeout": func(v string) (step, error) {
+		ms, err := strconv.Atoi(v)
+		if err != nil || ms < 1 || ms > maxWaitMs {
+			return step{}, fmt.Errorf("timeout is a number of milliseconds (1 to %d)", maxWaitMs)
+		}
+		return step{kind: "timeout", ms: ms}, nil
+	},
+	"hex": func(v string) (step, error) {
+		data, err := parseHex(v)
+		return step{kind: "hex", bytes: data}, err
+	},
+	"expect": func(v string) (step, error) {
+		re, err := expectPattern(v)
+		return step{kind: "expect", pattern: re, label: v}, err
+	},
+}
+
+func lineStep(kind, value string) (step, error) {
+	if value != "0" && value != "1" {
+		return step{}, fmt.Errorf("%s is 0 or 1", kind)
+	}
+	return step{kind: kind, on: value == "1"}, nil
+}
+
 // parseSteps reads "dtr=1; wait=500; dtr=0; hex=0D 0A; timeout=3000; expect=login:". Items are separated
 // by semicolons. expect waits until the device has sent the text (or /regex/), for as long as the last
 // timeout says (10 seconds at first), and fails the script when it does not come.
@@ -34,39 +69,15 @@ func parseSteps(text string) ([]step, error) {
 		if !ok {
 			return nil, fmt.Errorf("%q: use name=value, for example dtr=1", item)
 		}
-		switch key {
-		case "dtr", "rts":
-			if value != "0" && value != "1" {
-				return nil, fmt.Errorf("%q: %s is 0 or 1", item, key)
-			}
-			steps = append(steps, step{kind: key, on: value == "1"})
-		case "wait":
-			ms, err := strconv.Atoi(value)
-			if err != nil || ms < 0 || ms > maxWaitMs {
-				return nil, fmt.Errorf("%q: wait is a number of milliseconds (0 to %d)", item, maxWaitMs)
-			}
-			steps = append(steps, step{kind: key, ms: ms})
-		case "hex":
-			data, err := parseHex(value)
-			if err != nil {
-				return nil, fmt.Errorf("%q: %w", item, err)
-			}
-			steps = append(steps, step{kind: key, bytes: data})
-		case "timeout":
-			ms, err := strconv.Atoi(value)
-			if err != nil || ms < 1 || ms > maxWaitMs {
-				return nil, fmt.Errorf("%q: timeout is a number of milliseconds (1 to %d)", item, maxWaitMs)
-			}
-			steps = append(steps, step{kind: key, ms: ms})
-		case "expect":
-			re, err := expectPattern(value)
-			if err != nil {
-				return nil, fmt.Errorf("%q: %w", item, err)
-			}
-			steps = append(steps, step{kind: key, pattern: re, label: value})
-		default:
+		parse := stepParsers[key]
+		if parse == nil {
 			return nil, fmt.Errorf("%q: unknown step %q (dtr, rts, wait, hex, timeout, expect)", item, key)
 		}
+		s, err := parse(value)
+		if err != nil {
+			return nil, fmt.Errorf("%q: %w", item, err)
+		}
+		steps = append(steps, s)
 	}
 	if len(steps) == 0 {
 		return nil, fmt.Errorf("nothing to do")
