@@ -287,3 +287,5 @@ dialog#tunnel label { display: block; margin: 6px 0; }
 .tab.activity .dot { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
 .tab.activity .label { font-weight: 600; }
 .backup { flex-wrap: wrap; }
+.empty .try { margin-top: 10px; }
+.empty .try button { margin-right: 6px; font-family: ui-monospace, Consolas, monospace; }

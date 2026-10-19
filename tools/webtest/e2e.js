@@ -50,6 +50,7 @@ async function startServer() {
   // the "More" menu is checked on its own below; the other checks use what is in it as if it were always open
   const openMore = () => page.evaluate(() => document.querySelectorAll(".viewbar details.more").forEach((d) => { d.open = true; }));
   // (the other checks open the menu before they use what is in it)
+  check("with no serial port and no session the empty pane offers virtual ports to try", await page.locator("[data-empty-try] button").count() === 3 && /Try a virtual one/.test(await page.locator("[data-empty-try]").first().textContent()));
   check("page loads with the start link and lists the ports", (await page.locator("#port-tree .node-head").first().textContent()).includes("Serial ports"));
   const virtualHead = page.locator("#port-tree .node-head", { hasText: "Virtual ports" });
   check("Virtual ports section is reduced at first", (await page.locator("#port-tree .item.port", { hasText: "fake:shell" }).count()) === 0 || !(await page.locator("#port-tree .item.port", { hasText: "fake:shell" }).first().isVisible()));

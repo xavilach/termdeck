@@ -249,7 +249,25 @@ function addGroupForm() {
   return formEl;
 }
 
+// The empty pane says what to do, and offers the virtual ports to try when the computer has no serial port.
+function renderEmpty() {
+  for (const pane of panes) {
+    const hint = pane.empty.querySelector("[data-empty-try]");
+    if (!hint) continue;
+    const show = portNames.length === 0 && profiles.length === 0 && virtualPortList.length > 0;
+    hint.hidden = !show;
+    hint.querySelectorAll("button").forEach((b) => b.remove());
+    if (!show) continue;
+    for (const name of ["fake:shell", "fake:counter", "fake:echo"]) {
+      const button = el("button", "", name);
+      button.addEventListener("click", () => openTab(quickProfile(name, 115200)));
+      hint.append(button);
+    }
+  }
+}
+
 function renderTree() {
+  renderEmpty();
   const tree = $("#tree");
   const portTree = $("#port-tree");
   tree.replaceChildren();
