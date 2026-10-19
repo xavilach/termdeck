@@ -211,7 +211,8 @@ function openTab(profile) {
   const pane = focusPane || panes[0];
   const tab = { profile, pane, state: "connecting", ws: null, fontSize: profile.fontSize || 14,
                 lineStart: true, txOpen: false, script: null, events: [], kept: 0, held: [], view: viewOf(profile),
-                sendEnd: { mode: profile.enter || "cr", custom: "" }, counters: { rx: 0, tx: 0 }, sent: [], sentAt: 0 };
+                sendEnd: { mode: profile.enter || "cr", custom: "" }, counters: { rx: 0, tx: 0 }, sent: loadHistory(profile.name), sentAt: 0 };
+  tab.sentAt = tab.sent.length;
   newTerminal(tab);
   newTabElement(tab);
   listenToTerminal(tab);

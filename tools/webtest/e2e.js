@@ -241,6 +241,10 @@ async function startServer() {
   check("the expanded Virtual ports section is remembered", await page.locator("#port-tree .item.port", { hasText: "fake:shell" }).isVisible());
   await page.locator("#port-tree .item.port", { hasText: "fake:shell" }).dblclick();
   await waitScreen(/login: /);   // the port was released by the reload and can be opened again
+  await input.focus();
+  await input.press("ArrowUp");
+  check("the send history survives a reload", (await input.inputValue()) !== "", await input.inputValue());
+  await input.fill("");
 
   // ---- groups, scripts and sessions in the tree
   const btn = (title) => page.locator(`button[title="${title}"]`);

@@ -36,9 +36,15 @@ function restoreDraft(pane, tab) {
   const input = pane.sendbar.querySelector("[data-send-text]");
   if (pane.draftTab) pane.draftTab.draft = { type: select.value, text: input.value };
   pane.draftTab = tab;
-  const draft = tab.draft || { type: "text", text: "" };
-  select.value = input.dataset.type = pane.sendbar.dataset.type = draft.type;
+  showDraft(pane, tab.draft || { type: "text", text: "" });
+}
+
+// Put a type and its data in the send bar as they are.
+function showDraft(pane, draft) {
+  const input = pane.sendbar.querySelector("[data-send-text]");
+  pane.sendbar.querySelector("[data-send-type]").value = input.dataset.type = pane.sendbar.dataset.type = draft.type;
   input.value = draft.text;
+  showEnding(pane);
 }
 
 // The end box of the send bar: hidden for Cmd, and the custom field only for Custom.
@@ -107,6 +113,19 @@ function sendRaw(tab, bytes) {
   if (tab.ws?.readyState === WebSocket.OPEN && tab.state === "connected") tab.ws.send(JSON.stringify({ type: "raw", bytes: b64(bytes) }));
 }
 
+// What was sent from the send bar is remembered per session, also after the page is reloaded.
+const HISTORY_MAX = 50;
+const historyKey = (name) => `termdeck.history.${name}`;
+const loadHistory = (name) => stored.read(historyKey(name), []).filter((e) => e && typeof e.text === "string").slice(-HISTORY_MAX);
+
+function rememberSent(tab, entry) {
+  const last = tab.sent[tab.sent.length - 1];
+  if (entry.text && !(last && last.type === entry.type && last.text === entry.text)) tab.sent.push(entry);
+  tab.sent = tab.sent.slice(-HISTORY_MAX);
+  tab.sentAt = tab.sent.length;
+  stored.write(historyKey(tab.profile.name), tab.sent);
+}
+
 // The send bar: what is typed goes out as text, bytes or steps. It says whether something was sent.
 // The input is emptied afterwards, except for an automatic send, which sends it again.
 function submitSend(pane, auto = false) {
@@ -134,8 +153,7 @@ function submitSend(pane, auto = false) {
     tell(error.message);
     return false;
   }
-  if (text && tab.sent[tab.sent.length - 1] !== text) tab.sent.push(text);
-  tab.sentAt = tab.sent.length;
+  rememberSent(tab, { type, text });
   if (!auto) pane.sendbar.querySelector("[data-send-text]").value = "";
   return true;
 }
@@ -313,7 +331,7 @@ function wireSendBar(pane) {
     else if ((e.key === "ArrowUp" || e.key === "ArrowDown") && tab?.sent.length) {
       e.preventDefault();
       tab.sentAt = Math.min(Math.max(tab.sentAt + (e.key === "ArrowUp" ? -1 : 1), 0), tab.sent.length);
-      input.value = tab.sent[tab.sentAt] || "";
+      showDraft(pane, tab.sent[tab.sentAt] || { type: input.dataset.type, text: "" });
     } else if (e.altKey && !e.ctrlKey && SEND_TYPES[e.key.toLowerCase()]) {
       e.preventDefault();
       setSendType(pane, SEND_TYPES[e.key.toLowerCase()]);

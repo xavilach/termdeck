@@ -16,6 +16,12 @@ let scripts = [];
 const tabs = [];
 let active = null;
 
+// Small things kept in this browser (JSON in localStorage). Both fall back quietly when there is no storage.
+const stored = {
+  read(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } },
+  write(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* no storage */ } },
+};
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     ...options,

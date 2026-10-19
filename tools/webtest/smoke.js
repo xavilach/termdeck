@@ -124,6 +124,13 @@ const tab = () => run("tabs[0]", "x");
   input.value = "41 42"; end.value = "crlf"; fire(end, "change"); send.click();
   const raw = ws.sent.filter((m) => m.type === "raw").pop();
   check("hex send raw with CRLF", raw && Buffer.from(raw.bytes, "base64").toString("hex") === "41420d0a", raw);
+  // the history keeps type and data, and survives a reload (localStorage)
+  check("sent data is remembered with its type", run("tabs[0].sent.length", "x") >= 3 && run("tabs[0].sent.some((e) => e.type === 'hex' && e.text === '41 42')", "x"));
+  check("and stored for the session", run("JSON.parse(localStorage.getItem('termdeck.history.p')).length", "x") >= 3);
+  input.value = ""; typ.value = "text"; fire(typ, "change");
+  input.dispatchEvent(new w.KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+  check("Up recalls the last entry with its type", typ.value === "hex" && input.value === "41 42", { type: typ.value, value: input.value });
+  input.value = ""; typ.value = "text"; fire(typ, "change");
   // type conversion
   typ.value = "text"; fire(typ, "change"); input.value = "Hi\\r"; typ.value = "hex"; fire(typ, "change");
   check("text -> hex converts", input.value === "48 69 0D", input.value);
