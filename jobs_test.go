@@ -9,7 +9,7 @@ import (
 
 func TestAnAutomaticSendGoesOnWhileThePageReloadsAndStopsWhenAsked(t *testing.T) {
 	ts := newTestServer(t)
-	master, slave := newPty(t)
+	master, slave := newLine(t)
 	c, ctx := dialTerminalID(t, ts, "auto-tab")
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave}})
 	waitFor(t, c, ctx, "state", "connected")
@@ -55,7 +55,7 @@ func TestAnAutomaticSendGoesOnWhileThePageReloadsAndStopsWhenAsked(t *testing.T)
 
 func TestAFileIsSentAsAJobWithItsProgressAndCanBeStopped(t *testing.T) {
 	ts := newTestServer(t)
-	master, slave := newPty(t)
+	master, slave := newLine(t)
 	c, ctx := dialTerminal(t, ts)
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave}})
 	waitFor(t, c, ctx, "state", "connected")

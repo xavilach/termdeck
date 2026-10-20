@@ -91,7 +91,8 @@ function activate(tab) {
   syncBars(pane);
   renderToolbars();
   renderTree();
-  requestAnimationFrame(() => { fitPane(pane); tab.term.focus(); });
+  requestAnimationFrame(() => fitPane(pane));
+  focusTerminalSoon();
 }
 
 // Control characters in pasted text are dropped (line breaks and tabs stay), unless the profile allows them.

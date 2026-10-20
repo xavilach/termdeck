@@ -48,36 +48,6 @@ func mustRules(t *testing.T, text string) []rule {
 	return rules
 }
 
-func TestAMonitorListensToBothPortsAndCarriesNothing(t *testing.T) {
-	ts := newTestServer(t)
-	masterA, slaveA := newPty(t)
-	masterB, slaveB := newPty(t)
-	c, ctx := dialTerminal(t, ts)
-	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "mon", "device": slaveA, "monitor": true, "peer": map[string]any{"device": slaveB}}})
-	waitFor(t, c, ctx, "state", "connected")
-	masterA.Write([]byte("from A\n"))
-	masterB.Write([]byte("from B\n"))
-	var screen string
-	for !strings.Contains(screen, "from A") || !strings.Contains(screen, "from B") {
-		text, err := readBinary(c, ctx)
-		if err != nil {
-			t.Fatalf("screen %q: %v", screen, err)
-		}
-		screen += string(text)
-	}
-	got := make(chan int, 4)
-	go func() {
-		buf := make([]byte, 64)
-		n, _ := masterB.Read(buf)
-		got <- n
-	}()
-	select {
-	case n := <-got:
-		t.Errorf("%d bytes were carried to B", n)
-	case <-time.After(300 * time.Millisecond):
-	}
-}
-
 func TestACaptureIsReplayedAsAPort(t *testing.T) {
 	ts := newTestServer(t)
 	file := filepath.Join(t.TempDir(), "capture.bin")

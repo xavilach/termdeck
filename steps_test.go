@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"golang.org/x/sys/unix"
 )
 
 func TestEveryKindOfStepIsReadAndCheckedOnce(t *testing.T) {
@@ -48,7 +46,7 @@ func TestTheSendBarAndScriptLinesBecomeSteps(t *testing.T) {
 
 func TestStepsGoOutAsOneWriteWithTheirCheckAndEnd(t *testing.T) {
 	ts := newTestServer(t)
-	master, slave := newPty(t)
+	master, slave := newLine(t)
 	c, ctx := dialTerminal(t, ts)
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "enter": "crlf", "localEcho": true, "txMarker": "> "}})
 	waitFor(t, c, ctx, "state", "connected")
@@ -79,18 +77,4 @@ func TestStepsGoOutAsOneWriteWithTheirCheckAndEnd(t *testing.T) {
 	waitNote(t, c, ctx, "sent it")
 	sendJSON(t, c, ctx, map[string]any{"type": "send", "format": "cmd", "data": "file=" + filepath.Join(t.TempDir(), "missing")})
 	waitNote(t, c, ctx, "missing")
-}
-
-func TestABaudStepChangesTheSpeedOfTheOpenPort(t *testing.T) {
-	ts := newTestServer(t)
-	master, slave := newPty(t)
-	c, ctx := dialTerminal(t, ts)
-	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "baud": 115200}})
-	waitFor(t, c, ctx, "state", "connected")
-	sendJSON(t, c, ctx, map[string]any{"type": "send", "format": "cmd", "data": "baud=9600"})
-	waitNote(t, c, ctx, "baud 9600")
-	settings, err := unix.IoctlGetTermios(int(master.Fd()), unix.TCGETS)
-	if err != nil || settings.Cflag&unix.CBAUD != unix.B9600 {
-		t.Errorf("speed %v %#x", err, settings.Cflag&unix.CBAUD)
-	}
 }

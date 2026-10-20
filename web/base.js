@@ -77,7 +77,14 @@ function showPage(selector) {
 
 function showLines() {
   if ($("#panel").open) $("#panel").close();
-  if (active) { fitAll(); requestAnimationFrame(() => active?.term.focus()); }
+  if (active) { fitAll(); focusTerminalSoon(); }
+}
+
+// The shown terminal takes the keys a frame later, unless something else was focused meanwhile (typing in
+// the send bar at once).
+function focusTerminalSoon() {
+  const focused = document.activeElement;
+  requestAnimationFrame(() => { if (document.activeElement === focused) active?.term.focus(); });
 }
 $("#panel").addEventListener("close", () => { if (active) active.term.focus(); });  // also after Esc
 

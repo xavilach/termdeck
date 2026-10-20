@@ -140,7 +140,7 @@ func TestLinesAreColouredOrHiddenByTheFirstRuleThatSaysSo(t *testing.T) {
 
 func TestTheRulesOfASessionActWhenTheirMomentComes(t *testing.T) {
 	ts := newTestServer(t)
-	master, slave := newPty(t)
+	master, slave := newLine(t)
 	c, ctx := dialTerminal(t, ts)
 	rules := "on connect => send @hex=43\n" + // C
 		"every 100ms => send @hex=45\n" + // E (stopped below)

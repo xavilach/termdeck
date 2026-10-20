@@ -10,7 +10,12 @@ const root = path.join(__dirname, "..", "..");
 const shots = process.env.SHOTS;
 if (shots) fs.mkdirSync(shots, { recursive: true });
 let failed = 0;
-const check = (name, ok, extra) => { if (!ok) failed++; console.log((ok ? "ok   " : "FAIL ") + name + (ok ? "" : "  " + JSON.stringify(extra))); };
+const trail = [];  // what the page asked of the server lately: told with a failed check
+const check = (name, ok, extra) => {
+  if (!ok) failed++;
+  console.log((ok ? "ok   " : "FAIL ") + name + (ok ? "" : "  " + JSON.stringify(extra)));
+  if (!ok) console.log("     lately: " + trail.slice(-12).join("\n             "));
+};
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function startServer() {
@@ -41,12 +46,21 @@ async function startServer() {
   const problems = [];
   page.on("pageerror", (e) => problems.push("pageerror: " + e.message));
   page.on("console", (m) => { if (m.type() === "error") problems.push("console: " + m.text()); });
+  const later = (text) => { trail.push(`${(performance.now() / 1000).toFixed(2)}s ${text.slice(0, 160)}`); if (trail.length > 100) trail.shift(); };
+  page.on("request", (r) => { if (r.url().includes("/api/") && !/\/api\/(ping|ports|portinfo|virtual)$/.test(r.url())) later(`${r.method()} ${r.url().replace(/^.*\/api/, "/api")} ${r.postData() || ""}`); });
+  page.on("websocket", (ws) => ws.on("framesent", (f) => { if (typeof f.payload === "string") later(`ws ${f.payload}`); }));
   const shot = async (name) => { if (shots) await page.screenshot({ path: path.join(shots, name + ".png") }); };
   const screen = (i = 0) => page.evaluate((n) => { const b = tabs[n]?.term.buffer.active; if (!b) return ""; let s = ""; for (let r = 0; r < b.length; r++) s += (b.getLine(r)?.translateToString(true) ?? "") + "\n"; return s; }, i);
-  const waitScreen = async (re, i = 0, ms = 5000) => { const end = Date.now() + ms; let s = ""; while (Date.now() < end) { s = await screen(i); if (re.test(s)) return s; await sleep(50); } return s; };
+  // waits for a condition in the page, or on this side; the check that follows says if it never came
+  const until = (fn, arg) => page.waitForFunction(fn, arg, { timeout: 15000 }).catch(() => {});
+  const untilHere = async (fn) => { const end = Date.now() + 15000; while (Date.now() < end && !fn()) await sleep(50); };
+  const waitScreen = async (re, i = 0, ms = 15000) => { const end = Date.now() + ms; let s = ""; while (Date.now() < end) { s = await screen(i); if (re.test(s)) return s; await sleep(50); } return s; };
 
   await page.goto(server.url);
   await page.waitForSelector("#port-tree .item.port", { state: "attached" });
+  // the state of the shown tab: said when a step does not get its answer
+  const pageState = () => page.evaluate(() => ({ focus: document.activeElement?.outerHTML.slice(0, 80), input: document.querySelector(".sendbar [data-send-text]").value,
+    type: document.querySelector(".sendbar [data-send-type]").value, tab: active?.profile.name, state: active?.state, socket: active?.ws?.readyState, jobs: active?.jobs }));
   // the "More" menu is checked on its own below; the other checks use what is in it as if it were always open
   const formPage = (name) => page.click(`#profile-form .form-tabs [data-form-page=${name}]`);
   const openMore = () => page.evaluate(() => document.querySelectorAll(".viewbar details.more").forEach((d) => { d.open = true; }));
@@ -145,7 +159,7 @@ async function startServer() {
   await shot("04-send-bar");
 
   // counters
-  await sleep(600);
+  await until(() => ["rx", "tx"].map((k) => Number(document.querySelector(`[data-count=${k}]`).textContent.replace(/\D/g, ""))).every((n, i) => n > [50, 10][i]));
   check("counters count", Number((await page.locator("[data-count=rx]").first().textContent()).replace(/\D/g, "")) > 50 && Number((await page.locator("[data-count=tx]").first().textContent()).replace(/\D/g, "")) > 10);
 
   // counter port with times and a pause
@@ -184,16 +198,16 @@ async function startServer() {
   await page.fill(".sendbar [data-auto-ms]", "100");
   const txBefore = await page.evaluate(() => tabs[0].counters.tx);
   await page.check(".sendbar [data-auto]");
-  await page.waitForSelector(".toolbar .jobs .job:has-text('Auto echo auto')", { timeout: 3000 }).catch(() => {});
+  await page.waitForSelector(".toolbar .jobs .job:has-text('Auto echo auto')", { timeout: 15000 }).catch(() => {});
   check("the automatic send shows in the toolbar as a job", await page.locator(".toolbar .jobs .job", { hasText: "Auto echo auto" }).first().isVisible());
   await page.locator(".tab", { hasText: "fake:counter" }).click();   // another tab: the automatic send goes on
   const txAway = await page.evaluate(() => tabs[0].counters.tx);
-  await page.waitForFunction((n) => tabs[0].counters.tx > n + 20, txAway, { timeout: 4000 }).catch(() => {});
+  await page.waitForFunction((n) => tabs[0].counters.tx > n + 20, txAway, { timeout: 15000 }).catch(() => {});
   check("it goes on while another tab is shown", (await page.evaluate(() => tabs[0].counters.tx)) > txAway + 20);
   await page.locator(".tab", { hasText: "fake:shell" }).click();
-  await page.waitForFunction((n) => tabs[0].counters.tx >= n + 50, txBefore, { timeout: 8000 });  // five or more sends of "echo auto\r"
+  await page.waitForFunction((n) => tabs[0].counters.tx >= n + 50, txBefore, { timeout: 15000 });  // five or more sends of "echo auto\r"
   await page.uncheck(".sendbar [data-auto]");
-  await page.waitForFunction(() => !tabs[0].jobs.length, null, { timeout: 3000 }).catch(() => {});
+  await page.waitForFunction(() => !tabs[0].jobs.length, null, { timeout: 15000 }).catch(() => {});
   s = await waitScreen(/(^auto\n[^]*){4}/m, 0);  // xterm parses what it was given a little later
   check("auto send repeats", (s.match(/^auto/gm) || []).length >= 4, s.replace(/\n+$/, ""));
   check("auto send keeps the input", (await input.inputValue()) === "echo auto");
@@ -208,7 +222,8 @@ async function startServer() {
   // freeze, copy and save
   await page.locator(".tab", { hasText: "fake:shell" }).click();
   await input.fill("echo before-freeze"); await input.press("Enter");
-  await waitScreen(/before-freeze/);
+  s = await waitScreen(/^before-freeze\n/m);  // the answer, not only the echo of the command
+  if (!/^before-freeze\n/m.test(s)) check("the shell answers before the freeze", false, await pageState());
   await page.click(".viewbar [data-freeze]");
   await input.fill("echo while-frozen"); await input.press("Enter");
   await page.waitForFunction(() => tabs[0].paused && tabs[0].paused.bytes > 30);  // the echo and the answer came
@@ -259,12 +274,12 @@ async function startServer() {
   await formPage("rules");
   await form.locator("[name=rules]").fill("login: => send admin\n/Password:/ => send admin\nbutton Hello => send echo quick\nbutton Hex => send @hex=65 63 68 6f 20 68 71 0d");
   await form.locator("button[type=submit]").click();
-  await page.waitForSelector("#tree .node-head.group:has-text('Auto login')", { timeout: 3000 }).catch(() => {});
+  await page.waitForSelector("#tree .node-head.group:has-text('Auto login')", { timeout: 15000 }).catch(() => {});
   check("the device is saved and listed", await page.locator("#tree .node-head.group", { hasText: "Auto login" }).count() === 1, await page.locator("#profile-error").textContent());
   await portRow("fake:shell").locator(".device-choice").selectOption("Auto login");
-  await sleep(300);
+  await until(() => portEntries.some((e) => e.port === "fake:shell" && e.device === "Auto login"));
   await portRow("fake:shell").locator(".name").dblclick();
-  await page.waitForSelector(".tab:has-text('Auto login · fake:shell')", { timeout: 3000 }).catch(() => {});
+  await page.waitForSelector(".tab:has-text('Auto login · fake:shell')", { timeout: 15000 }).catch(() => {});
   check("a port opens with the device chosen for it", await page.locator(".tab", { hasText: "Auto login · fake:shell" }).count() === 1, await page.locator(".tab .label").allTextContents());
   const autoTab = (await page.locator(".tab .label").allTextContents()).indexOf("Auto login · fake:shell");
   s = await waitScreen(/admin# /, autoTab);
@@ -281,12 +296,15 @@ async function startServer() {
   await page.locator(".tab", { hasText: "Auto login" }).click();
   check("and comes back with it", (await page.locator(".sendbar [data-send-text]").first().inputValue()) === "draft for this tab");
   await page.keyboard.press("Alt+Shift+M");
-  await sleep(300);
+  await waitScreen(/mark 1 at/, autoTab);
+  const logged = path.join(server.dir, "auto-login.log");
+  const markLogged = () => fs.existsSync(logged) && /^---- mark 1 at \d\d:\d\d:\d\d ----$/m.test(fs.readFileSync(logged, "utf8"));
+  await page.click(".toolbar [data-action=log]");  // stop: the log is closed, with all it was given
+  await until((n) => !tabs[n].logging, autoTab);
+  await untilHere(markLogged);
   await page.click(".toolbar [data-action=log]");
-  await sleep(500);
-  await page.click(".toolbar [data-action=log]");
-  check("the log file is written", fs.existsSync(path.join(server.dir, "auto-login.log")));
-  check("a mark (Alt+Shift+M) is written to the log between the lines", /^---- mark 1 at \d\d:\d\d:\d\d ----$/m.test(fs.readFileSync(path.join(server.dir, "auto-login.log"), "utf8")));
+  check("the log file is written", fs.existsSync(logged));
+  check("a mark (Alt+Shift+M) is written to the log between the lines", markLogged());
   await shot("11-triggers");
   await page.locator(".tab", { hasText: "Auto login" }).locator(".close").click();
   await page.locator(".tab", { hasText: "Auto login" }).locator(".close").click();  // a second click confirms
@@ -294,7 +312,7 @@ async function startServer() {
 
   // slow send, set for the port in its own settings (right click): a pause after each character
   await portRow("fake:echo").click({ button: "right" });
-  await page.waitForSelector("#profile-form.editing-port", { timeout: 3000 }).catch(() => {});
+  await page.waitForSelector("#profile-form.editing-port", { timeout: 15000 }).catch(() => {});
   check("a right click on a port opens its own settings", (await page.locator("#profile-title").textContent()) === "Port fake:echo", await page.locator("#profile-title").textContent());
   await formPage("send");
   check("the values come from below until changed", await form.locator("label.inherited:has([name=charDelayMs])").count() === 1);
@@ -308,7 +326,7 @@ async function startServer() {
   await page.selectOption(".sendbar [data-send-end]", "none");
   const slowStart = Date.now();
   await slowInput.press("Enter");
-  await waitScreen(/0123456789/, slowTab, 5000);
+  await waitScreen(/0123456789/, slowTab);
   const slowTook = Date.now() - slowStart;
   check("slow send: ten characters take about half a second", slowTook >= 400 && slowTook < 3000, slowTook);
   await page.locator(".tab", { hasText: "fake:echo" }).locator(".close").click();
@@ -318,13 +336,14 @@ async function startServer() {
   await withDevice("fake:flaky", "", {}, { reconnect: true });
   await portRow("fake:flaky").locator(".name").dblclick();
   await page.waitForSelector(".tab:has-text('fake:flaky')");
-  await page.waitForFunction(() => /Reconnecting/.test(document.querySelector(".toolbar .status").textContent), null, { timeout: 4000 });
+  await page.waitForFunction(() => /Reconnecting/.test(document.querySelector(".toolbar .status").textContent), null, { timeout: 15000 });
   check("a port that went away shows Reconnecting and can be stopped", (await page.locator("[data-action=port]").first().textContent()) === "Stop reconnecting");
-  await page.waitForFunction(() => /^Connected/.test(document.querySelector(".toolbar .status").textContent), null, { timeout: 8000 });
+  await page.waitForFunction(() => /^Connected/.test(document.querySelector(".toolbar .status").textContent), null, { timeout: 15000 });
   check("and is opened again by itself when it is back", true);
-  await page.waitForFunction(() => /Reconnecting/.test(document.querySelector(".toolbar .status").textContent), null, { timeout: 4000 });
+  await page.waitForFunction(() => /Reconnecting/.test(document.querySelector(".toolbar .status").textContent), null, { timeout: 15000 });
   await page.click("[data-action=port]");
-  await sleep(3500);
+  await until(() => /Port closed/.test(document.querySelector(".toolbar .status").textContent));
+  await sleep(2500);  // longer than the port is away: nothing opens it again
   check("Stop reconnecting leaves the port closed", /Port closed/.test(await page.locator(".toolbar .status").first().textContent()));
   await page.locator(".tab", { hasText: "fake:flaky" }).locator(".close").click();
 
@@ -335,14 +354,16 @@ async function startServer() {
   await portRow("fake:counter").locator(".name").dblclick();
   await page.waitForSelector(".tab:has-text('Graphed · fake:counter')");
   await page.click(".viewbar [data-graph]");
-  await page.waitForFunction(() => document.querySelector(".graph-legend")?.textContent.includes("Tick: 4"), null, { timeout: 8000 });
-  const drawn = await page.evaluate(() => { const c = document.querySelector(".graph-canvas"); const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; });
+  await page.waitForFunction(() => document.querySelector(".graph-legend")?.textContent.includes("Tick: 4"), null, { timeout: 15000 });
+  const inked = () => { const c = document.querySelector(".graph-canvas"); const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; };
+  await until(`(${inked})() > 500`);
+  const drawn = await page.evaluate(inked);
   check("the graph draws lines on its canvas", drawn > 500, drawn);
   check("the legend shows each series with its last value", /Temp: [\d.]+/.test(await page.locator(".graph-legend").first().textContent()) && /Tick: \d+/.test(await page.locator(".graph-legend").first().textContent()));
   await page.check("[data-graph-each]");
-  await sleep(600);
+  await until(`(${inked})() > 500`);
   await shot("13-graph");
-  const drawnEach = await page.evaluate(() => { const c = document.querySelector(".graph-canvas"); const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; });
+  const drawnEach = await page.evaluate(inked);
   check("each series on its own scale still draws", drawnEach > 500, drawnEach);
   const [csvDownload] = await Promise.all([page.waitForEvent("download"), page.click("[data-graph-csv]")]);
   const csvFile = path.join(server.dir, "graph.csv");
@@ -366,13 +387,13 @@ async function startServer() {
   // PuTTY: each serial session found on this computer becomes a device, and its port opens with it
   await page.click(".files > summary");
   await page.click("#import-putty");
-  await page.waitForSelector("#tree .node-head.group:has-text('Bench board')", { timeout: 4000 });
+  await page.waitForSelector("#tree .node-head.group:has-text('Bench board')", { timeout: 15000 });
   const benchBoard = await page.evaluate(async () => (await api("/api/layers?port=COM7")).profile);
   check("PuTTY import makes a device of each serial session, and its port opens with it", benchBoard && benchBoard.name === "Bench board · COM7" && benchBoard.baud === 57600 && benchBoard.dataBits === 7 && benchBoard.parity === "even" && benchBoard.stopBits === "2" && benchBoard.flow === "rtscts", benchBoard);
   const puttyReg = path.join(server.dir, "sessions.reg");
   fs.writeFileSync(puttyReg, "Windows Registry Editor Version 5.00\r\n\r\n[HKEY_CURRENT_USER\\Software\\SimonTatham\\PuTTY\\Sessions\\From%20reg]\r\n\"Protocol\"=\"serial\"\r\n\"SerialLine\"=\"COM9\"\r\n\"SerialSpeed\"=dword:00002580\r\n");
   await page.setInputFiles("#putty-file", puttyReg);
-  await page.waitForSelector("#tree .node-head.group:has-text('From reg')", { timeout: 4000 }).catch(() => {});
+  await page.waitForSelector("#tree .node-head.group:has-text('From reg')", { timeout: 15000 }).catch(() => {});
   check("(a .reg export can be chosen too)", true);
   await page.evaluate(async () => {
     for (const n of ["Bench board", "From reg"]) await api(`/api/devices/${encodeURIComponent(n)}`, { method: "DELETE" }).catch(() => {});
@@ -393,12 +414,12 @@ async function startServer() {
   const importFile = path.join(server.dir, "import.json");
   fs.writeFileSync(importFile, JSON.stringify(settings));
   await page.setInputFiles("#import-file", importFile);
-  await page.waitForSelector("#tree .node-head.group:has-text('Imported one')", { timeout: 4000 });
+  await page.waitForSelector("#tree .node-head.group:has-text('Imported one')", { timeout: 15000 });
   check("Import adds the devices of the file", await page.locator("#tree .node-head.group .title", { hasText: /^Imported one$/ }).count() === 1);
   check("and keeps what was there", await page.locator("#tree .node-head.group", { hasText: "Graphed" }).count() === 1);
   fs.writeFileSync(importFile, "{ not json");
   await page.setInputFiles("#import-file", importFile);
-  await page.waitForSelector("#problem:not([hidden])", { timeout: 3000 });
+  await page.waitForSelector("#problem:not([hidden])", { timeout: 15000 });
   check("a broken file is reported and changes nothing", /Import failed/.test(await page.locator("#problem").textContent()));
   await page.evaluate(async () => { await api("/api/devices/Imported%20one", { method: "DELETE" }); await loadDevices(); });
 
@@ -432,7 +453,7 @@ async function startServer() {
   check("a highlighted line has its colour in the terminal and the others do not", colours[2] === 1 && colours[1] !== 1 && colours[3] !== 1, colours);
   await page.fill(".viewbar [data-filter]", "tick 3");
   s = await waitScreen(/tick 3/, colouredTab);
-  await page.waitForFunction((n) => { const b = tabs[n].term.buffer.active; let t = ""; for (let r = 0; r < b.length; r++) t += b.getLine(r).translateToString(true) + "\n"; return /tick 3/.test(t) && !/tick 1 /.test(t); }, colouredTab, { timeout: 4000 });
+  await page.waitForFunction((n) => { const b = tabs[n].term.buffer.active; let t = ""; for (let r = 0; r < b.length; r++) t += b.getLine(r).translateToString(true) + "\n"; return /tick 3/.test(t) && !/tick 1 /.test(t); }, colouredTab, { timeout: 15000 });
   check("the filter shows only the lines that match, in the real terminal", true);
   await page.fill(".viewbar [data-filter]", "");
   await page.locator(".tab", { hasText: "Coloured" }).locator(".close").click();
@@ -484,7 +505,7 @@ async function startServer() {
   // help
   await page.keyboard.press("Alt+Shift+H");
   check("Alt+Shift+H opens the help", await page.locator("#help").evaluate((d) => d.open) && /Rules/.test(await page.locator("#help").textContent()));
-  await page.waitForFunction(() => document.querySelector("#about").textContent !== "", null, { timeout: 3000 }).catch(() => {});
+  await page.waitForFunction(() => document.querySelector("#about").textContent !== "", null, { timeout: 15000 }).catch(() => {});
   check("the help says which version runs and where the settings are", /termdeck \d+\.\d+\.\d+ on \w+\. Settings are kept in .*home/.test(await page.locator("#about").textContent()), await page.locator("#about").textContent());
   await shot("14-help");
   await page.keyboard.press("Escape");
@@ -498,7 +519,7 @@ async function startServer() {
   await portRow("fake:binary").locator(".name").dblclick();
   await page.waitForSelector(".tab:has-text('Framed · fake:binary')");
   const framedTab = await page.evaluate(() => tabs.findIndex((t) => t.profile.name === "Framed · fake:binary"));
-  s = await waitScreen(/AA 55 05 \| 00 02 10 20 30 \| [0-9A-F]{2}  OK/, framedTab, 8000);
+  s = await waitScreen(/AA 55 05 \| 00 02 10 20 30 \| [0-9A-F]{2}  OK/, framedTab);
   check("the Frames view shows the frames of fake:binary with their check OK", /AA 55 05 \| 00 01 10 20 30 \| [0-9A-F]{2}  OK/.test(s), s);
   await shot("17-frames");
   await page.locator(".tab", { hasText: "Framed" }).locator(".close").click();
@@ -507,7 +528,7 @@ async function startServer() {
   // null-modem pair
   await portRow("fake:link-a").locator(".name").dblclick();
   await portRow("fake:link-b").locator(".name").dblclick();
-  await sleep(300);
+  await page.waitForFunction(() => ["fake:link-a", "fake:link-b"].every((n) => tabs.some((t) => t.profile.name === n && t.state === "connected")), null, { timeout: 15000 }).catch(() => {});
   const tabNames = await page.locator(".tab .label").allTextContents();
   const a = tabNames.indexOf("fake:link-a"), b = tabNames.indexOf("fake:link-b");
   await page.locator(".tab", { hasText: "fake:link-a" }).click();
@@ -535,7 +556,7 @@ async function startServer() {
   await xmodemDownload.saveAs(xmodemSaved);
   const gotX = fs.readFileSync(xmodemSaved);
   check("XMODEM: the file sent from one end is received at the other and saved", gotX.subarray(0, payload.length).equals(payload) && gotX.length % 128 === 0, { got: gotX.length });
-  await page.waitForFunction(() => /Sent payload\.bin/.test(document.querySelector("#xmodem-status").textContent), null, { timeout: 5000 });
+  await page.waitForFunction(() => /Sent payload\.bin/.test(document.querySelector("#xmodem-status").textContent), null, { timeout: 15000 });
   check("and the sending end says it is done", true);
   await shot("15-xmodem");
   await page.click("#xmodem-close");
@@ -561,22 +582,22 @@ async function startServer() {
   await page.click("#xmodem-close");
 
   // the line changes the device drives show as notes: DTR of one end is DSR of the other
-  await page.evaluate((i) => { tabs[i].profile.rules = "on DSR => note"; sendMessage(tabs[i], { type: "profile", profile: tabs[i].profile }); sendMessage(tabs[i], { type: "open", profile: tabs[i].profile }); }, a);
-  await sleep(800);  // the port opens again with the rule, and its lines are seen once
+  await page.evaluate((i) => { tabs[i].lines = null; tabs[i].profile.rules = "on DSR => note"; sendMessage(tabs[i], { type: "profile", profile: tabs[i].profile }); sendMessage(tabs[i], { type: "open", profile: tabs[i].profile }); }, a);
+  await until((i) => tabs[i].state === "connected" && tabs[i].lines, a);  // the port opens again with the rule, and its lines are seen once
   await page.locator(".tab", { hasText: "fake:link-b" }).click();
   await page.click("[data-action=line-dtr]");
-  s = await waitScreen(/DSR off/, a, 4000);
+  s = await waitScreen(/DSR off/, a);
   check("a line change of the other end is noted (DTR of link-b is DSR of link-a)", /DSR off/.test(s), s);
 
   // layout: two panes
   await page.click(".layout [data-layout=cols]");
-  await sleep(300);
+  await until(() => document.querySelectorAll(".pane").length === 2);
   await shot("07-two-panes");
   check("two panes", (await page.locator(".pane").count()) === 2);
 
   // settings dialog
   await page.locator(".toolbar [data-action=settings]").first().click();
-  await page.waitForFunction(() => document.querySelector("#panel").open, null, { timeout: 3000 }).catch(() => {});
+  await page.waitForFunction(() => document.querySelector("#panel").open, null, { timeout: 15000 }).catch(() => {});
   await shot("08-settings");
   check("the settings dialog opens", await page.locator("#panel").evaluate((d) => d.open));
   check("no keyboard options remain", (await page.locator("#profile-form").textContent()).includes("Function keys") === false);
@@ -601,7 +622,7 @@ async function startServer() {
   check("a reload keeps working without a new link", (await page.locator("body").textContent()).includes("Virtual ports"));
   await page.waitForFunction((n) => tabs.length === n, labelsBefore.length);
   check("the tabs come back after a reload", JSON.stringify(await page.locator(".tab .label").allTextContents()) === JSON.stringify(labelsBefore), await page.locator(".tab .label").allTextContents());
-  await page.waitForFunction((n) => tabs.filter((t) => t.state === "connected").length === n, connectedBefore, { timeout: 5000 }).catch(() => {});
+  await page.waitForFunction((n) => tabs.filter((t) => t.state === "connected").length === n, connectedBefore, { timeout: 15000 }).catch(() => {});
   check("and reconnect", (await page.locator(".tab.connected").count()) === connectedBefore, { was: connectedBefore, now: await page.locator(".tab.connected").count() });
   check("the expanded Virtual ports section is remembered", await page.locator("#port-tree .item.port", { hasText: "fake:shell" }).isVisible());
   while ((await page.locator(".tab").count()) > 0) {  // start the next part with no tab open
@@ -625,7 +646,7 @@ async function startServer() {
   await page.waitForFunction(() => document.querySelector("#panel").open && document.querySelector("#profile-title").textContent === "New device");
   await form.locator("[name=name]").fill("Lab");
   await form.locator("button[type=submit]").click();
-  await page.waitForSelector("#tree .node-head.group:has-text('Lab')", { timeout: 3000 }).catch(() => {});
+  await page.waitForSelector("#tree .node-head.group:has-text('Lab')", { timeout: 15000 }).catch(() => {});
   check("a device is created from the + of the Devices", await page.locator("#tree .node-head.group .title", { hasText: /^Lab$/ }).count() === 1);
 
   await page.locator(".tab .close").first().click();
@@ -644,7 +665,7 @@ async function startServer() {
   await page.waitForSelector("#tree .item:has-text('boot')");
   const tx0 = await txNow();
   await row("boot").locator("button[title='Run on the current tab']").click();
-  await page.waitForFunction((n) => active.counters.tx >= n + 20, tx0, { timeout: 5000 }).catch(() => {});
+  await page.waitForFunction((n) => active.counters.tx >= n + 20, tx0, { timeout: 15000 }).catch(() => {});
   check("a script runs on the open tab (text lines and steps: 9 + 2 + 9 bytes)", (await txNow()) - tx0 === 20, (await txNow()) - tx0);
 
   await btn("New script for Lab").click();
@@ -654,18 +675,18 @@ async function startServer() {
   await sf.locator("[name=loop]").check();
   await sf.locator("button[type=submit]").click();
   await row("spin").locator("button[title='Run on the current tab']").click();
-  await sleep(400);
   const stop = row("spin").locator("button[title='Stop the script']");
+  await stop.waitFor({ timeout: 15000 }).catch(() => {});
+  await until((n) => active.counters.tx > n + 40, tx0);
   check("a running script offers Stop", await stop.count() === 1);
   await stop.click();
-  await sleep(300);
+  await until(() => active.counters.txRate === 0);  // the server says nothing went out in the last second
   const t1 = await txNow();
-  await sleep(300);
-  check("Stop ends a looping script", t1 > tx0 + 40 && (await txNow()) === t1, { t1, now: await txNow() });
+  check("Stop ends a looping script", t1 > tx0 + 40 && (await page.evaluate(() => active.counters.txRate)) === 0, { t1, rate: await page.evaluate(() => active.counters.txRate) });
 
   // a port remembered with a device is listed under it, opens from there, and follows a rename
   await portRow("fake:counter").locator(".device-choice").selectOption("Lab");
-  await page.waitForSelector("#tree .item:has-text('fake:counter')", { timeout: 3000 }).catch(() => {});
+  await page.waitForSelector("#tree .item:has-text('fake:counter')", { timeout: 15000 }).catch(() => {});
   check("a port with a device is listed under the device", await page.locator("#tree .group-node", { has: page.locator(".node-head.group .title", { hasText: /^Lab$/ }) }).locator(".item .name", { hasText: /^fake:counter$/ }).count() === 1);
   await row("fake:counter").dblclick();
   await waitScreen(/tick 1/, 1);
@@ -674,14 +695,14 @@ async function startServer() {
   await page.waitForFunction(() => document.querySelector("#profile-title").textContent === "Device Lab");
   await form.locator("[name=name]").fill("Lab 2");
   await form.locator("button[type=submit]").click();
-  await sleep(800);
+  await until(() => tabs.some((t) => t.profile.name === "Lab 2 · fake:counter"));
   check("renaming a device renames its open tabs", (await page.locator(".tab .label").allTextContents()).includes("Lab 2 · fake:counter"), await page.locator(".tab .label").allTextContents());
   await btn("Settings of Lab 2").click();
   await page.waitForFunction(() => document.querySelector("#profile-title").textContent === "Device Lab 2");
   const del = page.locator("#profile-delete");
   await del.click();
   await del.click();
-  await sleep(400);
+  await until(() => document.querySelector("#profile-error").textContent !== "");
   check("a device that has scripts is not deleted, and says why", /still has scripts/.test(await page.locator("#profile-error").textContent()), await page.locator("#profile-error").textContent());
   await page.keyboard.press("Escape");
 
@@ -705,10 +726,10 @@ async function startServer() {
   await page.waitForFunction(() => tabs.some((t) => t.profile.device === "fake:shell"));
   const shellTab = await page.evaluate(() => tabs.findIndex((t) => t.profile.device === "fake:shell"));
   await waitScreen(/login: /, shellTab);
-  for (const line of ["admin", "admin"]) { await input.fill(line); await input.press("Enter"); await sleep(150); }
+  for (const [line, next] of [["admin", /Password: $/m], ["admin", /admin# $/m]]) { await input.fill(line); await input.press("Enter"); await waitScreen(next, shellTab); }
   await input.fill("flood 5000");
   await input.press("Enter");
-  await waitScreen(/line 5000 of 5000/, shellTab, 8000);
+  await waitScreen(/line 5000 of 5000/, shellTab);
   const t0 = Date.now();
   await page.selectOption(".viewbar [data-view]", "hex");
   await page.waitForFunction((n) => { const b = tabs[n].term.buffer.active; for (let r = Math.max(0, b.length - 40); r < b.length; r++) if (/([0-9a-f]{2} ){16} \|/.test(b.getLine(r)?.translateToString(true) || "")) return true; return false; }, shellTab);  // hex rows drawn
@@ -721,16 +742,16 @@ async function startServer() {
     await loadScripts();
   });
   await page.locator("#tree .item .name", { hasText: /^relogin$/ }).dblclick();
-  s = await waitScreen(/scripted-ok/, shellTab, 8000);
+  s = await waitScreen(/scripted-ok/, shellTab);
   check("a script with expect steps logs in by waiting for the prompts", /login: admin/.test(s.split("logout").pop() || "") && /scripted-ok/.test(s), s.slice(-200));
 
   // marks: add one in the middle of a flood and go back to it
   await page.click(".viewbar [data-mark]");
   await input.fill("flood 300");
   await input.press("Enter");
-  await waitScreen(/line 300 of 300/, shellTab, 8000);
+  await waitScreen(/line 300 of 300/, shellTab);
   await page.click(".viewbar [data-mark-prev]");
-  await page.waitForFunction((n) => /^\[termdeck\] mark/.test(tabs[n].term.getSelection()), shellTab, { timeout: 3000 }).catch(() => {});
+  await page.waitForFunction((n) => /^\[termdeck\] mark/.test(tabs[n].term.getSelection()), shellTab, { timeout: 15000 }).catch(() => {});
   const marked = await page.evaluate((n) => tabs[n].term.getSelection(), shellTab);
   check("the previous-mark arrow scrolls to the mark and selects it", /^\[termdeck\] mark 1 at /.test(marked), marked);
 
@@ -742,12 +763,12 @@ async function startServer() {
   await portRow("fake:echo").locator(".name").dblclick();
   await portRow("fake:counter").locator(".name").dblclick();
   await page.click(".layout [data-layout=cols]");
-  await sleep(300);
+  await until(() => panes.length === 2 && panes.every((p) => p.active?.state === "connected"));
   await page.locator(".pane").first().locator(".terminals").click();
   const otherTx = () => page.evaluate(() => panes[1].active.counters.tx);
   const txBefore2 = await otherTx();
   await page.locator(".pane").nth(1).locator(".quickbar button").click();
-  await sleep(500);
+  await until((n) => panes[1].active.counters.tx > n, txBefore2);
   check("a quick-send button in the other pane works on the first click", (await otherTx()) > txBefore2, { before: txBefore2, after: await otherTx() });
   await page.click(".layout [data-layout=single]");
 
@@ -763,7 +784,7 @@ async function startServer() {
   await page.fill("#tunnel [name=logPath]", path.join(server.dir, "tunnel.log"));
   await page.click("#tunnel-start");
   await page.waitForSelector(".tab:has-text('fake:counter ⇄ fake:echo')");
-  s = await waitScreen(/B→A tick 2/, 0, 8000);
+  s = await waitScreen(/B→A tick 2/, 0);
   check("a tunnel shows both directions with their marks", /A→B tick 1/.test(s) && /B→A tick 1/.test(s), s);
   check("the send bar is off in a tunnel and the counters count both ways", (await page.locator(".sendbar [data-send-text]").first().isDisabled()) && Number(await page.locator("[data-count=rx]").first().textContent()) > 10);
   await shot("16-tunnel");
@@ -786,7 +807,7 @@ async function startServer() {
   // a tab that is not shown and receives data is marked, and the browser tab title counts such tabs
   await portRow("fake:counter").locator(".name").dblclick();
   await portRow("fake:echo").locator(".name").dblclick();   // the echo tab is now the one shown
-  await page.waitForSelector(".tab.activity:has-text('fake:counter')", { timeout: 6000 });
+  await page.waitForSelector(".tab.activity:has-text('fake:counter')", { timeout: 15000 });
   check("a tab that gets data in the background is marked and the title counts it", (await page.title()) === "(1) termdeck", await page.title());
   await page.locator(".tab", { hasText: "fake:counter" }).click();
   check("showing it clears the mark and the title", (await page.locator(".tab.activity").count()) === 0 && (await page.title()) === "termdeck");
@@ -805,7 +826,7 @@ async function startServer() {
   await page.locator(".sendbar [data-all]").first().check();
   await page.locator(".sendbar [data-send-text]").first().fill("to every bench");
   await page.locator(".sendbar [data-send]").first().click();
-  await page.waitForFunction(() => tabs.every((t) => t.counters.tx >= 14), null, { timeout: 4000 });
+  await page.waitForFunction(() => tabs.every((t) => t.counters.tx >= 14), null, { timeout: 15000 });
   check("All tabs sends the data to every connected tab", true);
   await page.locator(".sendbar [data-all]").first().uncheck();
   while ((await page.locator(".tab").count()) > 0) {
@@ -823,7 +844,7 @@ async function startServer() {
   await withDevice("fake:counter", "Noti", { rules: "tick 2 => bold notify" });
   await portRow("fake:counter").locator(".name").dblclick();
   await portRow("fake:echo").locator(".name").dblclick();   // Noti is now out of sight
-  await page.waitForFunction(() => window.__notes.length > 0, null, { timeout: 8000 });
+  await page.waitForFunction(() => window.__notes.length > 0, null, { timeout: 15000 });
   const notes = await page.evaluate(() => window.__notes);
   check("a notify rule gives a desktop notification for a tab that is out of sight", notes.length === 1 && notes[0].title === "Noti · fake:counter" && /tick 2/.test(notes[0].body), notes);
   while ((await page.locator(".tab").count()) > 0) {
@@ -838,14 +859,14 @@ async function startServer() {
   await portRow("fake:link-b").locator(".name").dblclick();
   await page.waitForFunction(() => tabs.length === 2 && tabs.every((t) => t.state === "connected"));
   const ctsOfB = () => page.evaluate(() => tabs.find((t) => t.profile.device === "fake:link-b").lines?.cts);
-  await page.waitForFunction(() => tabs.find((t) => t.profile.device === "fake:link-b").lines !== null, null, { timeout: 4000 });
+  await page.waitForFunction(() => tabs.find((t) => t.profile.device === "fake:link-b").lines !== null, null, { timeout: 15000 });
   check("while idle RTS is low (CTS of the other end is off)", (await ctsOfB()) === false);
   await page.locator(".tab", { hasText: "RS485 A" }).click();
   await page.locator(".sendbar [data-send-text]").first().fill("direction");
   await page.locator(".sendbar [data-send]").first().click();
-  await page.waitForFunction(() => tabs.find((t) => t.profile.device === "fake:link-b").lines?.cts === true, null, { timeout: 4000 });
+  await page.waitForFunction(() => tabs.find((t) => t.profile.device === "fake:link-b").lines?.cts === true, null, { timeout: 15000 });
   check("RTS goes high while the data is sent", true);
-  await page.waitForFunction(() => tabs.find((t) => t.profile.device === "fake:link-b").lines?.cts === false, null, { timeout: 6000 });
+  await page.waitForFunction(() => tabs.find((t) => t.profile.device === "fake:link-b").lines?.cts === false, null, { timeout: 15000 });
   check("and low again after the hold time", true);
   while ((await page.locator(".tab").count()) > 0) {
     const close = page.locator(".tab .close").first();

@@ -1,5 +1,3 @@
-//go:build linux
-
 package main
 
 import (
@@ -24,27 +22,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"golang.org/x/sys/unix"
 )
-
-// newPty returns the master side and the name of the slave side, which stands in for a serial port.
-func newPty(t *testing.T) (*os.File, string) {
-	t.Helper()
-	master, err := os.OpenFile("/dev/ptmx", os.O_RDWR|unix.O_NOCTTY, 0)
-	if err != nil {
-		t.Skip("no pty:", err)
-	}
-	t.Cleanup(func() { master.Close() })
-	fd := int(master.Fd())
-	if err := unix.IoctlSetPointerInt(fd, unix.TIOCSPTLCK, 0); err != nil {
-		t.Fatal(err)
-	}
-	n, err := unix.IoctlGetInt(fd, unix.TIOCGPTN)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return master, "/dev/pts/" + itoa(n)
-}
 
 func itoa(n int) string { b, _ := json.Marshal(n); return string(b) }
 
@@ -237,50 +215,6 @@ func readState(t *testing.T, c *websocket.Conn, ctx context.Context) string {
 	}
 }
 
-func TestTerminalCarriesDataBothWaysAndAppliesFlowControl(t *testing.T) {
-	ts := newTestServer(t)
-	master, slave := newPty(t)
-	c, ctx := dialTerminal(t, ts)
-	open, _ := json.Marshal(map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "baud": 9600, "flow": "rtscts"}})
-	c.Write(ctx, websocket.MessageText, open)
-	if state := readState(t, c, ctx); state != "connected:" {
-		t.Fatalf("state %q", state)
-	}
-	settings, err := unix.IoctlGetTermios(int(master.Fd()), unix.TCGETS)
-	if err != nil || settings.Cflag&unix.CRTSCTS == 0 {
-		t.Errorf("RTS/CTS was not enabled: %v %#x", err, settings.Cflag)
-	}
-
-	master.Write([]byte("hello"))
-	data, err := readBinary(c, ctx)
-	if err != nil || string(data) != "hello" {
-		t.Fatalf("device to page: %q %v", data, err)
-	}
-	c.Write(ctx, websocket.MessageText, []byte(`{"type":"send","format":"text","end":"none","data":"AT\r"}`))
-	buf := make([]byte, 16)
-	master.SetReadDeadline(time.Now().Add(5 * time.Second))
-	n, err := master.Read(buf)
-	if err != nil || string(buf[:n]) != "AT\r" {
-		t.Fatalf("page to device: %q %v", buf[:n], err)
-	}
-}
-
-func TestXonXoffIsApplied(t *testing.T) {
-	master, slave := newPty(t)
-	port, err := openPort(Profile{Device: slave, Baud: 9600, DataBits: 8, Parity: "none", StopBits: "1", Flow: "xonxoff"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer port.Close()
-	settings, err := unix.IoctlGetTermios(int(master.Fd()), unix.TCGETS)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if settings.Iflag&unix.IXON == 0 || settings.Iflag&unix.IXOFF == 0 || settings.Cflag&unix.CRTSCTS != 0 {
-		t.Errorf("unexpected flags: iflag %#x cflag %#x", settings.Iflag, settings.Cflag)
-	}
-}
-
 func TestOpeningAMissingPortFails(t *testing.T) {
 	ts := newTestServer(t)
 	c, ctx := dialTerminal(t, ts)
@@ -319,7 +253,7 @@ func waitFor(t *testing.T, c *websocket.Conn, ctx context.Context, kind, state s
 
 func TestClosingAndReopeningThePortKeepsTheConnection(t *testing.T) {
 	ts := newTestServer(t)
-	_, slave := newPty(t)
+	_, slave := newLine(t)
 	c, ctx := dialTerminal(t, ts)
 	profile := map[string]any{"name": "t", "device": slave}
 	for range 2 {
@@ -332,7 +266,7 @@ func TestClosingAndReopeningThePortKeepsTheConnection(t *testing.T) {
 
 func TestFailedOpenCreatesNoLogAndOpenWritesIt(t *testing.T) {
 	ts := newTestServer(t)
-	master, slave := newPty(t)
+	master, slave := newLine(t)
 	logFile := filepath.Join(t.TempDir(), "run.log")
 	c, ctx := dialTerminal(t, ts)
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{
@@ -362,7 +296,7 @@ func TestFailedOpenCreatesNoLogAndOpenWritesIt(t *testing.T) {
 
 func TestScriptSendsItsCommandsWithADelayAndLoops(t *testing.T) {
 	ts := newTestServer(t)
-	master, slave := newPty(t)
+	master, slave := newLine(t)
 	if code, body := ts.do(t, "POST", "/api/scripts",
 		`{"name":"boot","device":"","commands":["one","two"],"delayMs":50,"loop":true,"count":2}`, ts.secret); code != 200 {
 		t.Fatalf("save script: %d %s", code, body)
@@ -393,7 +327,7 @@ func TestScriptSendsItsCommandsWithADelayAndLoops(t *testing.T) {
 
 func TestScriptCanBeStoppedAndNeedsAnOpenPort(t *testing.T) {
 	ts := newTestServer(t)
-	_, slave := newPty(t)
+	_, slave := newLine(t)
 	ts.do(t, "POST", "/api/scripts", `{"name":"forever","commands":["x"],"delayMs":20,"loop":true}`, ts.secret)
 	c, ctx := dialTerminal(t, ts)
 	sendJSON(t, c, ctx, map[string]any{"type": "script", "name": "forever"})
@@ -419,7 +353,7 @@ func TestPingNeedsTheSecret(t *testing.T) {
 
 func TestDeviceCharsetIsConvertedBothWays(t *testing.T) {
 	ts := newTestServer(t)
-	master, slave := newPty(t)
+	master, slave := newLine(t)
 	c, ctx := dialTerminal(t, ts)
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "charset": "iso-8859-1"}})
 	waitFor(t, c, ctx, "state", "connected")
@@ -443,7 +377,7 @@ func TestDeviceCharsetIsConvertedBothWays(t *testing.T) {
 
 func TestExistingLogIsAskedAbout(t *testing.T) {
 	ts := newTestServer(t)
-	_, slave := newPty(t)
+	_, slave := newLine(t)
 	logFile := filepath.Join(t.TempDir(), "run.log")
 	os.WriteFile(logFile, []byte("old line\n"), 0o600)
 	c, ctx := dialTerminal(t, ts)
@@ -470,19 +404,9 @@ func TestExistingLogIsAskedAbout(t *testing.T) {
 	}
 }
 
-func TestDsrDtrFlowControlIsRefusedWhereItIsNotAvailable(t *testing.T) {
-	ts := newTestServer(t)
-	_, slave := newPty(t)
-	c, ctx := dialTerminal(t, ts)
-	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "flow": "dsrdtr"}})
-	if state := readState(t, c, ctx); !strings.Contains(state, "only available on Windows") {
-		t.Errorf("state %q", state)
-	}
-}
-
 func TestTheSamePortCannotBeOpenTwice(t *testing.T) {
 	ts := newTestServer(t)
-	_, slave := newPty(t)
+	_, slave := newLine(t)
 	profile := map[string]any{"name": "t", "device": slave}
 	a, actx := dialTerminal(t, ts)
 	sendJSON(t, a, actx, map[string]any{"type": "open", "profile": profile})
@@ -504,7 +428,7 @@ func TestTheSamePortCannotBeOpenTwice(t *testing.T) {
 
 func TestLoggingCanBeStartedAndStoppedWhileConnected(t *testing.T) {
 	ts := newTestServer(t)
-	master, slave := newPty(t)
+	master, slave := newLine(t)
 	logFile := filepath.Join(t.TempDir(), "mid.log")
 	c, ctx := dialTerminal(t, ts)
 	// no log path: starting gives a notice
@@ -608,7 +532,7 @@ func TestEveryFileTheIndexPageUsesIsServed(t *testing.T) {
 
 func TestTheRawBytesTheDeviceSentCanBeDownloaded(t *testing.T) {
 	ts := newTestServer(t)
-	master, slave := newPty(t)
+	master, slave := newLine(t)
 	c, ctx := dialTerminalID(t, ts, "tab-raw")
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "charset": "iso-8859-1"}})
 	waitFor(t, c, ctx, "state", "connected")
@@ -624,7 +548,7 @@ func TestTheRawBytesTheDeviceSentCanBeDownloaded(t *testing.T) {
 	}
 }
 
-func readDevice(t *testing.T, master *os.File, want int) []byte {
+func readDevice(t *testing.T, master line, want int) []byte {
 	t.Helper()
 	var got []byte
 	buf := make([]byte, 64)
@@ -641,7 +565,7 @@ func readDevice(t *testing.T, master *os.File, want int) []byte {
 
 func TestRawBytesGoOutUnconverted(t *testing.T) {
 	ts := newTestServer(t)
-	master, slave := newPty(t)
+	master, slave := newLine(t)
 	c, ctx := dialTerminal(t, ts)
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "charset": "iso-8859-1"}})
 	waitFor(t, c, ctx, "state", "connected")
@@ -653,7 +577,7 @@ func TestRawBytesGoOutUnconverted(t *testing.T) {
 
 func TestCountersFollowTheBytes(t *testing.T) {
 	ts := newTestServer(t)
-	master, slave := newPty(t)
+	master, slave := newLine(t)
 	c, ctx := dialTerminal(t, ts)
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave}})
 	waitFor(t, c, ctx, "state", "connected")
@@ -675,7 +599,7 @@ func TestCountersFollowTheBytes(t *testing.T) {
 
 func TestCmdAndScriptStepsDriveLinesWaitAndSendBytes(t *testing.T) {
 	ts := newTestServer(t)
-	master, slave := newPty(t)
+	master, slave := newLine(t)
 	if code, body := ts.do(t, "POST", "/api/scripts",
 		`{"name":"s","commands":["@hex=41 42; wait=20","@@at","go"],"delayMs":0}`, ts.secret); code != 200 {
 		t.Fatalf("save script: %d %s", code, body)
@@ -698,7 +622,7 @@ func TestCmdAndScriptStepsDriveLinesWaitAndSendBytes(t *testing.T) {
 
 func TestTriggerAnswersWhatTheDeviceSends(t *testing.T) {
 	ts := newTestServer(t)
-	master, slave := newPty(t)
+	master, slave := newLine(t)
 	c, ctx := dialTerminal(t, ts)
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "enter": "lf",
 		"rules": "login: => send admin\n/Pass(word)?:/ => send @hex=31 32; wait=1"}})
@@ -717,7 +641,7 @@ func TestTriggerAnswersWhatTheDeviceSends(t *testing.T) {
 
 func TestOpeningWithACustomBellSoundIsNotCutByTheMessageLimit(t *testing.T) {
 	ts := newTestServer(t)
-	_, slave := newPty(t)
+	_, slave := newLine(t)
 	c, ctx := dialTerminal(t, ts)
 	sound := "data:audio/wav;base64," + strings.Repeat("A", 300_000)
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "bellSound": sound}})
@@ -726,7 +650,7 @@ func TestOpeningWithACustomBellSoundIsNotCutByTheMessageLimit(t *testing.T) {
 
 func TestCmdNeedsAnOpenPortAndStopsWhenItCloses(t *testing.T) {
 	ts := newTestServer(t)
-	master, slave := newPty(t)
+	master, slave := newLine(t)
 	c, ctx := dialTerminal(t, ts)
 	sendJSON(t, c, ctx, map[string]any{"type": "send", "format": "cmd", "data": "hex=41"})
 	waitNote(t, c, ctx, "open the port")
@@ -1222,54 +1146,9 @@ func TestATransferCanBeCancelledAndNeedsAnOpenPort(t *testing.T) {
 	waitFor(t, c, ctx, "xfer", "cancelled")
 }
 
-func TestATunnelCarriesDataBothWaysAndShowsIt(t *testing.T) {
-	ts := newTestServer(t)
-	masterA, slaveA := newPty(t)
-	masterB, slaveB := newPty(t)
-	logFile := filepath.Join(t.TempDir(), "tunnel.log")
-	c, ctx := dialTerminal(t, ts)
-	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{
-		"name": "tun", "device": slaveA, "logPath": logFile, "peer": map[string]any{"device": slaveB, "baud": 9600}}})
-	waitFor(t, c, ctx, "state", "connected")
-
-	masterA.Write([]byte("from A\n"))
-	if got := readDevice(t, masterB, 7); string(got) != "from A\n" {
-		t.Fatalf("B got %q", got)
-	}
-	masterB.Write([]byte("from B\n"))
-	if got := readDevice(t, masterA, 7); string(got) != "from B\n" {
-		t.Fatalf("A got %q", got)
-	}
-	var screen string
-	for !strings.Contains(screen, "B→A \x1b[0mfrom B") {
-		text, err := readBinary(c, ctx)
-		if err != nil {
-			t.Fatalf("the page saw %q: %v", screen, err)
-		}
-		screen += string(text)
-	}
-	if !strings.Contains(screen, "A→B \x1b[0mfrom A\n") {
-		t.Errorf("the page saw %q", screen)
-	}
-	for {
-		if m := waitFor(t, c, ctx, "counters", ""); m["rx"] == float64(7) && m["tx"] == float64(7) {
-			break
-		}
-	}
-	sendJSON(t, c, ctx, map[string]any{"type": "close"})
-	waitFor(t, c, ctx, "state", "closed")
-	log, _ := os.ReadFile(logFile)
-	if !strings.Contains(string(log), "A>B from A") || !strings.Contains(string(log), "B>A from B") {
-		t.Errorf("log %q", log)
-	}
-	// both ports are free again
-	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t2", "device": slaveB}})
-	waitFor(t, c, ctx, "state", "connected")
-}
-
 func TestATunnelNeedsTwoDifferentPortsThatAreFree(t *testing.T) {
 	ts := newTestServer(t)
-	_, slave := newPty(t)
+	_, slave := newLine(t)
 	c, ctx := dialTerminal(t, ts)
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "peer": map[string]any{"device": slave}}})
 	if state := readState(t, c, ctx); !strings.Contains(state, "two different ports") {

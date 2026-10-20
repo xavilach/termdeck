@@ -332,6 +332,21 @@ const tab = () => run("tabs[0]", "x");
   allOne.ws.sent.length = 0; allTwo.ws.sent.length = 0;
   allBar("[data-all]").checked = false; allBar("[data-send-text]").value = "only one"; allBar("[data-send]").click();
   check("and without it only to the shown one", allOne.ws.sent.some((m) => m.type === "send") && !allTwo.ws.sent.some((m) => m.type === "send"));
+
+  // a tab shown gives the keys to its terminal a frame later, but not if the send bar was focused meanwhile
+  const nextFrame = () => new Promise((resolve) => w.requestAnimationFrame(resolve));
+  let termFocused = 0;
+  allTwo.term.focus = () => { termFocused++; };
+  w.document.activeElement.blur();  // a click on a tab takes the focus from the send bar
+  run("activate(tabs.find((t) => t.profile.name === 'all two'))", "x");
+  await nextFrame();
+  check("a tab that is shown gives the keys to its terminal", termFocused === 1, termFocused);
+  run("activate(tabs.find((t) => t.profile.name === 'all one'))", "x");
+  w.document.activeElement.blur();
+  run("activate(tabs.find((t) => t.profile.name === 'all two')); showLines()", "x");  // what a click on the tab does
+  allTwo.pane.sendbar.querySelector("[data-send-text]").focus();
+  await nextFrame();
+  check("but typing in the send bar at once keeps the keys there", termFocused === 1 && w.document.activeElement === allTwo.pane.sendbar.querySelector("[data-send-text]"), termFocused);
   run("closeTab(tabs.find((t) => t.profile.name === 'all one')); closeTab(tabs.find((t) => t.profile.name === 'all two'))", "x");
 
   // notifications for lines that match a notify rule, only while the tab is not in sight
