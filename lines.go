@@ -83,6 +83,23 @@ func (t *termSession) noteLines(before, now *serial.ModemStatusBits) {
 	}
 }
 
+// setBaud changes the speed of the open port, and notes it.
+func (t *termSession) setBaud(baud int) error {
+	t.mu.Lock()
+	port := t.port
+	t.profile.Baud = baud
+	profile := t.profile
+	t.mu.Unlock()
+	if port == nil {
+		return fmt.Errorf("the port is closed")
+	}
+	if err := port.SetMode(serialMode(profile)); err != nil {
+		return fmt.Errorf("baud %d: %w", baud, err)
+	}
+	t.note(fmt.Sprintf("baud %d", baud))
+	return nil
+}
+
 // setLine drives DTR or RTS.
 func (t *termSession) setLine(line string, value bool) {
 	t.mu.Lock()
@@ -111,7 +128,8 @@ func (t *termSession) setLine(line string, value bool) {
 	}
 }
 
-func (t *termSession) sendBreak() {
+// sendBreak holds the line in the break state for d.
+func (t *termSession) sendBreak(d time.Duration) {
 	t.mu.Lock()
 	port := t.port
 	t.mu.Unlock()
@@ -119,7 +137,7 @@ func (t *termSession) sendBreak() {
 	case port == nil:
 		t.note("break failed: the port is closed")
 	default:
-		if err := port.Break(250 * time.Millisecond); err != nil {
+		if err := port.Break(d); err != nil {
 			t.note("break failed: " + err.Error())
 		} else {
 			t.note("break sent")

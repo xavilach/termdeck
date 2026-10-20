@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 	"termdeck/internal/serial"
 	"testing"
@@ -186,7 +189,7 @@ func TestTerminalCarriesDataBothWaysAndAppliesFlowControl(t *testing.T) {
 	if err != nil || string(data) != "hello" {
 		t.Fatalf("device to page: %q %v", data, err)
 	}
-	c.Write(ctx, websocket.MessageText, []byte(`{"type":"input","data":"AT\r"}`))
+	c.Write(ctx, websocket.MessageText, []byte(`{"type":"send","format":"text","end":"none","data":"AT\r"}`))
 	buf := make([]byte, 16)
 	master.SetReadDeadline(time.Now().Add(5 * time.Second))
 	n, err := master.Read(buf)
@@ -274,7 +277,7 @@ func TestFailedOpenCreatesNoLogAndOpenWritesIt(t *testing.T) {
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{
 		"name": "t", "device": slave, "logPath": logFile, "logRxMarker": "RX ", "logTxMarker": "TX "}})
 	waitFor(t, c, ctx, "state", "connected")
-	sendJSON(t, c, ctx, map[string]any{"type": "input", "data": "hi\r"})
+	sendJSON(t, c, ctx, map[string]any{"type": "send", "format": "text", "end": "none", "data": "hi\r"})
 	master.Write([]byte("yo\r\n"))
 	deadline := time.Now().Add(5 * time.Second)
 	for {
@@ -387,7 +390,7 @@ func TestDeviceCharsetIsConvertedBothWays(t *testing.T) {
 		}
 		got = append(got, data...)
 	}
-	sendJSON(t, c, ctx, map[string]any{"type": "input", "data": "é€\r"})
+	sendJSON(t, c, ctx, map[string]any{"type": "send", "format": "text", "end": "none", "data": "é€\r"})
 	buf := make([]byte, 16)
 	master.SetReadDeadline(time.Now().Add(5 * time.Second))
 	n, err := master.Read(buf)
@@ -643,11 +646,11 @@ func TestCmdAndScriptStepsDriveLinesWaitAndSendBytes(t *testing.T) {
 	if got := readDevice(t, master, len("AB@at\ngo\n")); string(got) != "AB@at\ngo\n" {
 		t.Errorf("sent %q", got)
 	}
-	sendJSON(t, c, ctx, map[string]any{"type": "steps", "data": "dtr=0; rts=0; hex=0d"})
+	sendJSON(t, c, ctx, map[string]any{"type": "send", "format": "cmd", "data": "dtr=0; rts=0; hex=0d"})
 	if got := readDevice(t, master, 1); string(got) != "\r" {
 		t.Errorf("sent %q", got)
 	}
-	sendJSON(t, c, ctx, map[string]any{"type": "steps", "data": "nonsense"})
+	sendJSON(t, c, ctx, map[string]any{"type": "send", "format": "cmd", "data": "nonsense"})
 	waitNote(t, c, ctx, "nonsense")
 }
 
@@ -683,11 +686,11 @@ func TestCmdNeedsAnOpenPortAndStopsWhenItCloses(t *testing.T) {
 	ts := newTestServer(t)
 	master, slave := newPty(t)
 	c, ctx := dialTerminal(t, ts)
-	sendJSON(t, c, ctx, map[string]any{"type": "steps", "data": "hex=41"})
+	sendJSON(t, c, ctx, map[string]any{"type": "send", "format": "cmd", "data": "hex=41"})
 	waitNote(t, c, ctx, "open the port")
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave}})
 	waitFor(t, c, ctx, "state", "connected")
-	sendJSON(t, c, ctx, map[string]any{"type": "steps", "data": "wait=300; hex=42"})
+	sendJSON(t, c, ctx, map[string]any{"type": "send", "format": "cmd", "data": "wait=300; hex=42"})
 	sendJSON(t, c, ctx, map[string]any{"type": "close"})
 	waitFor(t, c, ctx, "state", "closed")
 	master.SetReadDeadline(time.Now().Add(600 * time.Millisecond))
@@ -851,7 +854,7 @@ func TestAReloadedPageFindsItsSessionAsItWas(t *testing.T) {
 	c, ctx := dialTerminalID(t, ts, "tab-1")
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo"}})
 	waitFor(t, c, ctx, "state", "connected")
-	sendJSON(t, c, ctx, map[string]any{"type": "input", "data": "before reload\n"})
+	sendJSON(t, c, ctx, map[string]any{"type": "send", "format": "text", "end": "none", "data": "before reload\n"})
 	if text := readFor(t, c, ctx, 300*time.Millisecond); !strings.Contains(text, "before reload") {
 		t.Fatalf("echo %q", text)
 	}
@@ -867,7 +870,7 @@ func TestAReloadedPageFindsItsSessionAsItWas(t *testing.T) {
 	if text, _ := collectUntil(t, c, ctx, "replayed", ""); !strings.Contains(text, "before reload") {
 		t.Errorf("the records were not shown again: %q", text)
 	}
-	sendJSON(t, c, ctx, map[string]any{"type": "input", "data": "after\n"})
+	sendJSON(t, c, ctx, map[string]any{"type": "send", "format": "text", "end": "none", "data": "after\n"})
 	if text := readFor(t, c, ctx, 300*time.Millisecond); !strings.Contains(text, "after") {
 		t.Errorf("the port is not open any more: %q", text)
 	}
@@ -1345,7 +1348,7 @@ func TestAnExpectThatDoesNotComeStopsTheScriptWithAnError(t *testing.T) {
 	if !strings.Contains(m["message"].(string), "never-comes") || strings.Contains(text, "after") {
 		t.Errorf("message %v, echoed %q", m, text)
 	}
-	sendJSON(t, c, ctx, map[string]any{"type": "steps", "data": "timeout=50; expect=zzz"})
+	sendJSON(t, c, ctx, map[string]any{"type": "send", "format": "cmd", "data": "timeout=50; expect=zzz"})
 	waitNote(t, c, ctx, "zzz")
 	if text := readFor(t, c, ctx, 200*time.Millisecond); strings.Contains(text, "after") {
 		t.Error("the line after the failed expect was sent")
@@ -1377,12 +1380,14 @@ func randomMessages(t *testing.T, seed int64) {
 	messages := []func() map[string]any{
 		func() map[string]any { return map[string]any{"type": "open", "profile": profile()} },
 		func() map[string]any { return map[string]any{"type": "close"} },
-		func() map[string]any { return map[string]any{"type": "input", "data": pick("", "hello\r", "\x00\xff")} },
+		func() map[string]any {
+			return map[string]any{"type": "send", "format": "text", "end": "none", "data": pick("", "hello\r", "\x00\xff")}
+		},
 		func() map[string]any {
 			return map[string]any{"type": "raw", "bytes": []byte(pick("", "abc", "\x00\x01\x02").(string))}
 		},
 		func() map[string]any {
-			return map[string]any{"type": "steps", "data": pick("dtr=1", "wait=5", "hex=zz", "expect=x; timeout=20", "", "rts=0;;")}
+			return map[string]any{"type": "send", "format": "cmd", "data": pick("dtr=1", "wait=5", "hex=zz", "expect=x; timeout=20", "", "rts=0;;")}
 		},
 		func() map[string]any { return map[string]any{"type": "break"} },
 		func() map[string]any { return map[string]any{"type": "flush"} },
@@ -1457,4 +1462,53 @@ func TestATunnelReconnectsWhenAPortComesBack(t *testing.T) {
 	if seen := statesUntil(t, c, ctx, "connected", 6*time.Second); len(seen) != 1 {
 		t.Errorf("a quiet reconnect says nothing while it fails, but saw %v", seen)
 	}
+}
+
+// The page must offer the choices the server accepts (Profile.Normalize, the steps, the checks).
+func TestTheFormOffersTheChoicesTheServerAccepts(t *testing.T) {
+	page, _ := webFiles.ReadFile("web/index.html")
+	selects := regexp.MustCompile(`(?s)<select ([^>]*)>(.*?)</select>`).FindAllSubmatch(page, -1)
+	option := regexp.MustCompile(`<option(?: value="([^"]*)")?[^>]*>([^<]*)<`)
+	ints := func(list []int) (out []string) {
+		for _, n := range list {
+			out = append(out, strconv.Itoa(n))
+		}
+		return
+	}
+	want := map[string][]string{`name="dataBits"`: ints(dataBitsS), `name="parity"`: parities, `name="stopBits"`: stopBits, `name="flow"`: flows,
+		`name="enter"`: enters, `name="rtsMode"`: rtsModes, `name="view"`: views, `name="newLine"`: newLines, `name="timeMode"`: timeModes,
+		`name="logExisting"`: existings, `name="bell"`: bells, `name="theme"`: themes, `name="cursor"`: cursors, `name="rightClick"`: rightClicks,
+		`name="bold"`: bolds, "data-view": views, "data-nl": newLines, "data-time-mode": timeModes, "data-send-type": quickTypes,
+		"data-send-check": checkNames(), "data-send-end": {"none", "cr", "lf", "crlf", "custom"}}
+	seen := map[string]bool{}
+	for _, sel := range selects {
+		for key, choices := range want {
+			if !strings.Contains(string(sel[1]), key) {
+				continue
+			}
+			seen[key] = true
+			var got []string
+			for _, m := range option.FindAllSubmatch(sel[2], -1) {
+				if strings.Contains(string(m[0]), "value=") {
+					got = append(got, string(m[1]))
+				} else {
+					got = append(got, string(m[2])) // <option>8</option>: the value is the text
+				}
+			}
+			if fmt.Sprint(sortedCopy(got)) != fmt.Sprint(sortedCopy(choices)) {
+				t.Errorf("%s offers %v, the server accepts %v", key, got, choices)
+			}
+		}
+	}
+	for key := range want {
+		if !seen[key] {
+			t.Errorf("no select %s in the page", key)
+		}
+	}
+}
+
+func sortedCopy(list []string) []string {
+	out := append([]string(nil), list...)
+	sort.Strings(out)
+	return out
 }

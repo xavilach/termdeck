@@ -1,34 +1,34 @@
 package main
 
-// Checks: bytes added after data to check it (the Check of the send bar, the check of a frame). The same
-// kinds and results as Format.CHECKS in the page; testdata/checks.json holds the cases both check.
+// Checks: bytes added after data to check it (the check step, the Check of the send bar, the check of a
+// frame). testdata/checks.json holds known results.
 
 type checkKind struct {
-	name, label string
-	size        int
-	make        func([]byte) []byte
+	name string
+	size int
+	make func([]byte) []byte
 }
 
 var checkKinds = []checkKind{
-	{"sum8", "Sum (1 byte)", 1, func(b []byte) []byte {
+	{"sum8", 1, func(b []byte) []byte {
 		var s byte
 		for _, x := range b {
 			s += x
 		}
 		return []byte{s}
 	}},
-	{"xor8", "XOR (1 byte)", 1, func(b []byte) []byte {
+	{"xor8", 1, func(b []byte) []byte {
 		var s byte
 		for _, x := range b {
 			s ^= x
 		}
 		return []byte{s}
 	}},
-	{"crc8", "CRC-8", 1, func(b []byte) []byte { return bigEndian(crc(b, 8, 0x07, 0, false, 0), 1) }},
-	{"crc16modbus", "CRC-16 Modbus (low byte first)", 2, func(b []byte) []byte { return littleEndian(crc(b, 16, 0x8005, 0xffff, true, 0), 2) }},
-	{"crc16ccitt", "CRC-16 CCITT (high byte first)", 2, func(b []byte) []byte { return bigEndian(crc(b, 16, 0x1021, 0xffff, false, 0), 2) }},
-	{"crc16xmodem", "CRC-16 XMODEM (high byte first)", 2, func(b []byte) []byte { return bigEndian(crc(b, 16, 0x1021, 0, false, 0), 2) }},
-	{"crc32", "CRC-32 (low byte first)", 4, func(b []byte) []byte {
+	{"crc8", 1, func(b []byte) []byte { return bigEndian(crc(b, 8, 0x07, 0, false, 0), 1) }},
+	{"crc16modbus", 2, func(b []byte) []byte { return littleEndian(crc(b, 16, 0x8005, 0xffff, true, 0), 2) }},
+	{"crc16ccitt", 2, func(b []byte) []byte { return bigEndian(crc(b, 16, 0x1021, 0xffff, false, 0), 2) }},
+	{"crc16xmodem", 2, func(b []byte) []byte { return bigEndian(crc(b, 16, 0x1021, 0, false, 0), 2) }},
+	{"crc32", 4, func(b []byte) []byte {
 		return littleEndian(crc(b, 32, 0x04c11db7, 0xffffffff, true, 0xffffffff), 4)
 	}},
 }

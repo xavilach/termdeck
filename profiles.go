@@ -316,7 +316,7 @@ func (s *Script) Normalize() error {
 		return errors.New("a script needs at least one command")
 	}
 	for _, command := range s.Commands {
-		if _, _, err := scriptSteps(command); err != nil {
+		if _, err := scriptSteps(command); err != nil {
 			return fmt.Errorf("script line %q: %w", command, err)
 		}
 	}

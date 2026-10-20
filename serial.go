@@ -54,10 +54,20 @@ func openPort(p Profile) (serial.Port, error) {
 	if isFake(p.Device) {
 		return openFake(p.Device, asserted(p.DTR), asserted(p.RTS))
 	}
-	mode := &serial.Mode{BaudRate: p.Baud, DataBits: p.DataBits}
+	mode := serialMode(p)
 	if !asserted(p.DTR) || !asserted(p.RTS) { // the default (both asserted) needs no call, which some ports refuse
 		mode.InitialStatusBits = &serial.ModemOutputBits{DTR: asserted(p.DTR), RTS: asserted(p.RTS)}
 	}
+	port, err := serial.Open(p.Device, mode)
+	if err != nil {
+		return nil, fmt.Errorf("cannot open %s: %s", p.Device, openAdvice(err, runtime.GOOS))
+	}
+	return port, nil
+}
+
+// serialMode is the speed, framing and flow control of a profile.
+func serialMode(p Profile) *serial.Mode {
+	mode := &serial.Mode{BaudRate: p.Baud, DataBits: p.DataBits}
 	switch p.Parity {
 	case "even":
 		mode.Parity = serial.EvenParity
@@ -82,11 +92,7 @@ func openPort(p Profile) (serial.Port, error) {
 	case "dsrdtr":
 		mode.FlowControl = serial.DsrDtrFlowControl
 	}
-	port, err := serial.Open(p.Device, mode)
-	if err != nil {
-		return nil, fmt.Errorf("cannot open %s: %s", p.Device, openAdvice(err, runtime.GOOS))
-	}
-	return port, nil
+	return mode
 }
 
 // openAdvice says what a failure to open a port probably means, and what to do about it.

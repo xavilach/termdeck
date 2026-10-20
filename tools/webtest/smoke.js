@@ -115,21 +115,25 @@ const tab = () => run("tabs[0]", "x");
   const input = q("[data-send-text]"); const send = q("[data-send]");
   const typ = q("[data-send-type]");
   input.value = "AT\\r"; send.click();
-  const sent1 = ws.sent.filter((m) => m.type === "input");
-  check("text send uses End (session Enter = LF) and unescapes", sent1.length === 1 && sent1[0].data === "AT\r\n", sent1);
+  const sent1 = ws.sent.filter((m) => m.type === "send");
+  check("text goes to the server as typed, with End (the session's Enter, LF)", sent1.length === 1 && sent1[0].format === "text" && sent1[0].data === "AT\\r" && sent1[0].end === "lf", sent1);
   check("input cleared after send", input.value === "");
   // End selector
   const end = q("[data-send-end]"); end.value = "none"; fire(end, "change");
   input.value = "x"; send.click();
-  check("End none sends nothing extra", lastOf(ws, "input").data === "x");
+  check("End none", lastOf(ws, "send").end === "none" && lastOf(ws, "send").data === "x");
   end.value = "custom"; fire(end, "change"); const ec = q("[data-send-end-custom]"); ec.value = "\\x03;"; fire(ec, "input");
   input.value = "y"; send.click();
-  check("custom End", lastOf(ws, "input").data === "y\x03;", lastOf(ws, "input"));
+  check("custom End", lastOf(ws, "send").end === "custom" && lastOf(ws, "send").endCustom === "\\x03;", lastOf(ws, "send"));
   // hex type
   typ.value = "hex"; fire(typ, "change");
   input.value = "41 42"; end.value = "crlf"; fire(end, "change"); send.click();
-  const raw = lastOf(ws, "raw");
-  check("hex send raw with CRLF", raw && Buffer.from(raw.bytes, "base64").toString("hex") === "41420d0a", raw);
+  const hexSend = lastOf(ws, "send");
+  check("hex goes with its End", hexSend.format === "hex" && hexSend.data === "41 42" && hexSend.end === "crlf", hexSend);
+  const typos = ws.sent.length;
+  input.value = "4"; send.click();
+  check("a hex mistake is told at once and nothing is sent", ws.sent.length === typos && input.value === "4");
+  input.value = "";
   // the history keeps type and data, and survives a reload (localStorage)
   check("sent data is remembered with its type", run("tabs[0].sent.length", "x") >= 3 && run("tabs[0].sent.some((e) => e.type === 'hex' && e.text === '41 42')", "x"));
   check("and stored for the session", run("JSON.parse(localStorage.getItem('termdeck.history.p')).length", "x") >= 3);
@@ -147,14 +151,14 @@ const tab = () => run("tabs[0]", "x");
   input.dispatchEvent(be); check("binary refuses 2", be.defaultPrevented);
   // auto send
   typ.value = "text"; fire(typ, "change"); input.value = "ping"; end.value = "none"; fire(end, "change");
-  const before = ws.sent.filter((m) => m.type === "input").length;
+  const before = ws.sent.filter((m) => m.type === "send").length;
   q("[data-auto-ms]").value = "10"; const auto = q("[data-auto]"); auto.checked = true; fire(auto, "change");
   await sleep(80);
-  const after = ws.sent.filter((m) => m.type === "input").length;
+  const after = ws.sent.filter((m) => m.type === "send").length;
   check("auto send repeats and keeps input", after - before >= 3 && input.value === "ping", { before, after });
   auto.checked = false; fire(auto, "change"); await sleep(40);
-  const stopped = ws.sent.filter((m) => m.type === "input").length; await sleep(40);
-  check("auto send stops", ws.sent.filter((m) => m.type === "input").length === stopped);
+  const stopped = ws.sent.filter((m) => m.type === "send").length; await sleep(40);
+  check("auto send stops", ws.sent.filter((m) => m.type === "send").length === stopped);
   // disconnect stops auto + disables bar
   auto.checked = true; fire(auto, "change");
   json(ws, { type: "state", state: "ended", message: "gone" });
@@ -239,8 +243,8 @@ const tab = () => run("tabs[0]", "x");
   q("[data-auto-ms]").value = "10"; auto.checked = true; fire(auto, "change");
   const job = { stop: false }; t.job = job;
   run("closeTab(tabs[0])", "x");
-  const n0 = ws.sent.filter((m) => m.type === "input").length; await sleep(60);
-  check("closing a tab stops auto send and a file job, and ends the session", ws.sent.filter((m) => m.type === "input").length === n0 && job.stop === true && run("tabs.length", "x") === 0 && ws.sent.some((m) => m.type === "end"));
+  const n0 = ws.sent.filter((m) => m.type === "send").length; await sleep(60);
+  check("closing a tab stops auto send and a file job, and ends the session", ws.sent.filter((m) => m.type === "send").length === n0 && job.stop === true && run("tabs.length", "x") === 0 && ws.sent.some((m) => m.type === "end"));
 
   // style snapshot for refactoring the style sheet: SNAPSHOT=file node smoke.js
   if (process.env.SNAPSHOT) {
@@ -289,10 +293,10 @@ const tab = () => run("tabs[0]", "x");
   allOne.ws.sent.length = 0; allTwo.ws.sent.length = 0;
   const allBar = (selector) => allOne.pane.sendbar.querySelector(selector);  // the pane may not be the first one
   allBar("[data-send-text]").value = "to all"; allBar("[data-all]").checked = true; allBar("[data-send]").click();
-  check("with All tabs the data goes to every connected tab", allOne.ws.sent.some((m) => m.type === "input" && m.data.startsWith("to all")) && allTwo.ws.sent.some((m) => m.type === "input" && m.data.startsWith("to all")));
+  check("with All tabs the data goes to every connected tab", allOne.ws.sent.some((m) => m.type === "send" && m.data.startsWith("to all")) && allTwo.ws.sent.some((m) => m.type === "send" && m.data.startsWith("to all")));
   allOne.ws.sent.length = 0; allTwo.ws.sent.length = 0;
   allBar("[data-all]").checked = false; allBar("[data-send-text]").value = "only one"; allBar("[data-send]").click();
-  check("and without it only to the shown one", allOne.ws.sent.some((m) => m.type === "input") && !allTwo.ws.sent.some((m) => m.type === "input"));
+  check("and without it only to the shown one", allOne.ws.sent.some((m) => m.type === "send") && !allTwo.ws.sent.some((m) => m.type === "send"));
   run("closeTab(tabs.find((t) => t.profile.name === 'all one')); closeTab(tabs.find((t) => t.profile.name === 'all two'))", "x");
 
   // notifications for lines that match a notify rule, only while the tab is not in sight
@@ -316,8 +320,8 @@ const tab = () => run("tabs[0]", "x");
   q("[data-send-check]").value = "xor8"; fire(q("[data-send-check]"), "change");
   const fromCheck = checkWs.sent.length;
   q("[data-send-text]").value = "01 02 04"; q("[data-send]").click();
-  const checked = checkWs.sent.slice(fromCheck).find((m) => m.type === "raw");
-  check("a check is added after hex data (XOR of 01 02 04 is 07)", checked && Buffer.from(checked.bytes, "base64").toString("hex") === "010204070a", checked);  // the data, its check, then the End (LF)
+  const checked = checkWs.sent.slice(fromCheck).find((m) => m.type === "send");
+  check("the check goes with hex data", checked && checked.format === "hex" && checked.data === "01 02 04" && checked.check === "xor8" && checked.end === "lf", checked);
   q("[data-send-check]").value = "none"; fire(q("[data-send-check]"), "change");
   q("[data-send-type]").value = "text"; fire(q("[data-send-type]"), "change");
 
@@ -357,7 +361,7 @@ const tab = () => run("tabs[0]", "x");
   const live = [...w.document.querySelectorAll(".quickbar button")];  // drawn again when the state changed
   live[0].click(); live[1].click(); live[2].click();
   const sentNow = qws.sent.slice(quickFrom);
-  check("a button sends its data: text with the session's Enter, hex as it is, steps", sentNow[0].type === "input" && sentNow[0].data === "hi there\n" && sentNow[1].type === "raw" && Buffer.from(sentNow[1].bytes, "base64").toString() === "AB" && sentNow[2].type === "steps" && sentNow[2].data === "dtr=0; wait=1", sentNow);
+  check("a button asks the session for its quick send, by name", sentNow.map((m) => m.type + ":" + m.name).join(",") === "quick:Hello,quick:Raw,quick:Wiggle", sentNow);
   json(qws, { type: "state", state: "ended", message: "" });
   check("the buttons are disabled when the port is closed", [...w.document.querySelectorAll(".quickbar button")].every((b) => b.disabled));
   json(qws, { type: "state", state: "connected", message: "" });

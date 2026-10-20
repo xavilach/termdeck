@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/fs"
 	"math/rand"
 	"path/filepath"
@@ -214,17 +216,49 @@ func TestPortsAreSortedNaturally(t *testing.T) {
 	}
 }
 
+// stepsText describes steps in a few words, for the tests.
+func stepsText(steps []step) string {
+	var out []string
+	for _, s := range steps {
+		switch s.kind {
+		case "text":
+			out = append(out, "text="+escapeText(s.bytes))
+		case "hex", "dec", "bin":
+			out = append(out, s.kind+"="+strings.ToUpper(hex.EncodeToString(s.bytes)))
+		case "end":
+			if s.value == "enter" {
+				out = append(out, "end=enter")
+			} else {
+				out = append(out, "end="+strings.ToUpper(hex.EncodeToString(s.bytes)))
+			}
+		case "check", "file", "mark":
+			out = append(out, s.kind+"="+s.value)
+		case "dtr", "rts", "log":
+			out = append(out, fmt.Sprintf("%s=%d", s.kind, map[bool]int{false: 0, true: 1}[s.on]))
+		case "wait", "timeout", "break":
+			out = append(out, fmt.Sprintf("%s=%d", s.kind, s.ms))
+		case "baud":
+			out = append(out, fmt.Sprintf("baud=%d", s.n))
+		case "expect":
+			out = append(out, "expect="+s.pattern.Text)
+		}
+	}
+	return strings.Join(out, " ")
+}
+
 func TestQuickSendsAreParsedAndValidated(t *testing.T) {
 	good := "# resets\nReset | hex | 41 42 | end=cr\nHello | text | AT+GMR\\r\nLines | dec | 1, 2 ,255\nBits | bin | 01000001 10\nWiggle | cmd | dtr=0; wait=100; dtr=1\nPipe | text | a | b | end=lf\n"
 	got, err := parseQuickSends(good)
 	if err != nil || len(got) != 6 {
 		t.Fatalf("%v %+v", err, got)
 	}
-	if got[0].End != "cr" || got[0].Data != "41 42" || got[1].End != "" || got[5].Data != "a | b" || got[5].End != "lf" {
-		t.Errorf("parsed %+v", got)
+	for i, want := range []string{"hex=4142 end=0D", "text=AT+GMR\\r end=enter", "dec=0102FF end=", "bin=4102 end=", "dtr=0 wait=100 dtr=1", "text=a | b end=0A"} {
+		if s := stepsText(got[i].steps); s != want {
+			t.Errorf("%s: %q, want %q", got[i].Name, s, want)
+		}
 	}
 	withCheck, err := parseQuickSends("Modbus | hex | 01 03 00 00 00 01 | check=crc16modbus | end=none")
-	if err != nil || withCheck[0].Check != "crc16modbus" || withCheck[0].End != "none" || withCheck[0].Data != "01 03 00 00 00 01" {
+	if err != nil || stepsText(withCheck[0].steps) != "hex=010300000001 check=crc16modbus end=" {
 		t.Errorf("%v %+v", err, withCheck)
 	}
 	for _, bad := range []string{"x | hex | 41 | check=crc99", "no bars", "x | float | 1", " | text | a", "x | hex | 4", "x | dec | 256", "x | bin | 102", "x | cmd | speed=1", "x | text | a | end=never", strings.Repeat("n", 41) + " | text | a"} {

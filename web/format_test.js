@@ -69,20 +69,6 @@ test("seriesNames", () => {
   assert.deepEqual(F.seriesNames(""), []);
 });
 
-test("checksums match the published check values of 123456789", () => {
-  const data = [...Buffer.from("123456789")];
-  const hex = (kind) => F.checksum(kind, data).map((b) => b.toString(16).padStart(2, "0")).join("");
-  assert.equal(hex("sum8"), "dd");
-  assert.equal(hex("xor8"), "31");   // 0x31 ^ 0x32 ^ ... ^ 0x39
-  assert.equal(hex("crc8"), "f4");
-  assert.equal(hex("crc16modbus"), "374b");  // 0x4B37, low byte first
-  assert.equal(hex("crc16ccitt"), "29b1");
-  assert.equal(hex("crc16xmodem"), "31c3");
-  assert.equal(hex("crc32"), "2639f4cb");    // 0xCBF43926, low byte first
-  assert.deepEqual(F.checksum("none", data), []);
-  assert.deepEqual(F.checksum("crc16modbus", []), [0xff, 0xff]);
-});
-
 test("b64", () => {
   assert.equal(F.b64(Uint8Array.from([0, 255, 65])), "AP9B");
   assert.equal(F.b64(new Uint8Array(20000).fill(65)).length, Math.ceil(20000 / 3) * 4);
@@ -123,7 +109,3 @@ test("a decimal group is never more than 255", () => {
 });
 
 
-test("checks follow the table the server checks too", () => {
-  const cases = JSON.parse(require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "testdata", "checks.json"), "utf8"));
-  for (const c of cases) assert.equal(Buffer.from(F.checksum(c.check, [...Buffer.from(c.data, "hex")])).toString("hex").toUpperCase(), c.want, `${c.check} ${c.data}`);
-});

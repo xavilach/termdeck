@@ -4,44 +4,181 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 )
 
 const maxRepliesPerSecond = 20
 
-// What a session sends on its own: script lines, steps typed in Cmd and replies to triggers.
+// What a session sends: the send bar, quick sends, script lines, Cmd and trigger replies, all as steps.
 
-// runSteps does the steps in order. It returns nil when all were done, the error of the context when
-// it ended, or what went wrong (an expect that did not come in time).
-func (t *termSession) runSteps(ctx context.Context, steps []step) error {
+// stepRun is how steps run: in a script, an expect looks at the answer to what was sent just before it.
+type stepRun struct {
+	script bool
+}
+
+// runSteps does the steps in order. Byte steps that follow each other go out as one write. It returns nil
+// when all were done, the error of the context when it ended, or what went wrong (an expect that did not
+// come in time, a file that cannot be read).
+func (t *termSession) runSteps(ctx context.Context, steps []step, how stepRun) error {
+	t.mu.Lock()
+	enter, codec := []byte(enterBytes[t.profile.Enter]), t.codec
+	t.mu.Unlock()
 	timeout := defaultExpectTimeout
+	var out, typed []byte // what goes out together, and how it was typed when it is text only
+	text, checkFrom := true, 0
+	flush := func() {
+		if len(out) == 0 {
+			return
+		}
+		if how.script {
+			t.expectClear() // an expect after this sees the answer to it
+		}
+		shown := sentText(typed)
+		if !text {
+			shown = []byte(hexText(out))
+		}
+		t.sendData(out, shown)
+		out, typed, text, checkFrom = nil, nil, true, 0
+	}
 	for _, s := range steps {
 		switch s.kind {
-		case "dtr", "rts":
-			t.setLine(s.kind, s.on)
-		case "hex":
-			t.writeRaw(s.bytes)
-		case "timeout":
-			timeout = time.Duration(s.ms) * time.Millisecond
-		case "expect":
-			if err := t.expect(ctx, s.pattern, timeout); err != nil {
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				return fmt.Errorf("waited %v for %q: %w", timeout, s.pattern.Text, err)
+		case "text":
+			out, typed = append(out, codec.ToDevice(s.bytes)...), append(typed, s.bytes...)
+		case "hex", "dec", "bin":
+			out, text = append(out, s.bytes...), false
+		case "end":
+			end := s.bytes
+			if s.value == "enter" {
+				end = enter
 			}
-		case "wait":
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(time.Duration(s.ms) * time.Millisecond):
+			out, typed = append(out, end...), append(typed, end...)
+		case "check":
+			out, text = append(out, checksum(s.value, out[checkFrom:])...), false
+			checkFrom = len(out)
+		default:
+			flush()
+			if err := t.runStep(ctx, s, &timeout); err != nil {
+				return err
 			}
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 	}
+	flush()
 	return nil
+}
+
+// runStep does a step that is not bytes to send.
+func (t *termSession) runStep(ctx context.Context, s step, timeout *time.Duration) error {
+	switch s.kind {
+	case "dtr", "rts":
+		t.setLine(s.kind, s.on)
+	case "timeout":
+		*timeout = time.Duration(s.ms) * time.Millisecond
+	case "expect":
+		if err := t.expect(ctx, s.pattern, *timeout); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return fmt.Errorf("waited %v for %q: %w", *timeout, s.pattern.Text, err)
+		}
+	case "wait":
+		return sleepCtx(ctx, time.Duration(s.ms)*time.Millisecond)
+	case "break":
+		t.sendBreak(time.Duration(s.ms) * time.Millisecond)
+	case "baud":
+		return t.setBaud(s.n)
+	case "file":
+		return t.sendFile(s.value)
+	case "log":
+		t.setLogging(s.on)
+	case "mark":
+		t.markWith(s.value)
+	}
+	return nil
+}
+
+func sleepCtx(ctx context.Context, d time.Duration) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(d):
+		return nil
+	}
+}
+
+// maxFileStep is the largest file a file step sends.
+const maxFileStep = 64 << 20
+
+// sendFile sends the content of a file on this computer, as it is.
+func (t *termSession) sendFile(path string) error {
+	info, err := os.Stat(path)
+	if err == nil && info.Size() > maxFileStep {
+		err = fmt.Errorf("it is bigger than %d MB", maxFileStep>>20)
+	}
+	var data []byte
+	if err == nil {
+		data, err = os.ReadFile(path)
+	}
+	if err != nil {
+		return fmt.Errorf("file %s: %w", path, err)
+	}
+	t.sendData(data, []byte(fmt.Sprintf("file %s (%d bytes)", filepath.Base(path), len(data))))
+	return nil
+}
+
+// blocks says whether steps take time (and run in the background) or only send.
+func blocks(steps []step) bool {
+	for _, s := range steps {
+		if !oneOf(s.kind, []string{"text", "hex", "dec", "bin", "end", "check", "dtr", "rts", "mark", "log"}) {
+			return true
+		}
+	}
+	return false
+}
+
+// runPayload sends what the send bar or a quick send asked for: at once, in order with what was sent before,
+// or in the background when it waits.
+func (t *termSession) runPayload(steps []step) {
+	t.mu.Lock()
+	ctx := t.runCtx
+	t.mu.Unlock()
+	if ctx == nil {
+		t.notice("open the port first")
+		return
+	}
+	if !blocks(steps) {
+		t.reportSteps(ctx, t.runSteps(ctx, steps, stepRun{}))
+		return
+	}
+	go func() { t.reportSteps(ctx, t.runSteps(ctx, steps, stepRun{})) }()
+}
+
+// sendBar sends what the send bar holds: data of a format, its check and its end.
+func (t *termSession) sendBar(m clientMessage) {
+	steps, err := payload(m.Format, m.Data, m.Check, endStep(m.End, m.EndCustom))
+	if err != nil {
+		t.notice(err.Error())
+		return
+	}
+	t.runPayload(steps)
+}
+
+// sendQuick sends the quick send of the session with that name.
+func (t *termSession) sendQuick(name string) {
+	t.mu.Lock()
+	quick, _ := parseQuickSends(t.profile.QuickSends) // checked by Normalize
+	t.mu.Unlock()
+	for _, q := range quick {
+		if q.Name == name {
+			t.runPayload(q.steps)
+			return
+		}
+	}
+	t.notice("no quick send named " + name)
 }
 
 // match looks for the triggers in what the device sent and answers them. It returns the end of the data, to
@@ -50,9 +187,6 @@ func (t *termSession) match(ctx context.Context, triggers []trigger, window, tex
 	if len(triggers) == 0 {
 		return nil
 	}
-	t.mu.Lock()
-	enter := enterBytes[t.profile.Enter]
-	t.mu.Unlock()
 	window = append(window, text...)
 	for fired := true; fired; {
 		fired = false
@@ -60,7 +194,7 @@ func (t *termSession) match(ctx context.Context, triggers []trigger, window, tex
 			if loc := tr.pattern.FindIndex(window); loc != nil {
 				window = window[loc[1]:]
 				fired = true
-				t.answer(ctx, tr, enter)
+				t.answer(ctx, tr)
 				break
 			}
 		}
@@ -72,7 +206,7 @@ func (t *termSession) match(ctx context.Context, triggers []trigger, window, tex
 }
 
 // answer sends the reply of a trigger in the background, in order with the others. Too many waiting are dropped.
-func (t *termSession) answer(ctx context.Context, tr trigger, enter string) {
+func (t *termSession) answer(ctx context.Context, tr trigger) {
 	if t.looping() {
 		return
 	}
@@ -89,11 +223,7 @@ func (t *termSession) answer(ctx context.Context, tr trigger, enter string) {
 			return
 		}
 		t.note("trigger: " + tr.pattern.Text)
-		if tr.steps != nil {
-			t.reportSteps(ctx, t.runSteps(ctx, tr.steps))
-			return
-		}
-		t.write([]byte(tr.reply + enter))
+		t.reportSteps(ctx, t.runSteps(ctx, tr.steps, stepRun{}))
 	}()
 }
 
@@ -111,7 +241,6 @@ func (t *termSession) runScript(name string) {
 		ctx, cancel = context.WithCancel(t.ctx)
 		t.stopRun = cancel
 	}
-	enter := enterBytes[t.profile.Enter]
 	t.mu.Unlock()
 	switch {
 	case err != nil:
@@ -123,7 +252,7 @@ func (t *termSession) runScript(name string) {
 	}
 	t.scriptState(name, "running", "")
 	go func() {
-		failure := t.scriptRounds(ctx, script, enter) // what stopped the script, besides a Stop
+		failure := t.scriptRounds(ctx, script) // what stopped the script, besides a Stop
 		switch {
 		case failure != nil:
 			t.scriptState(name, "error", failure.Error())
@@ -156,7 +285,7 @@ func (t *termSession) scriptState(name, state, message string) {
 
 // scriptRounds sends the commands of the script, pausing after each, once or as many rounds as it asks for.
 // It returns what went wrong (an expect that did not come), or nil when it ended or was stopped.
-func (t *termSession) scriptRounds(ctx context.Context, script Script, enter string) error {
+func (t *termSession) scriptRounds(ctx context.Context, script Script) error {
 	pause := func() bool {
 		select {
 		case <-ctx.Done():
@@ -170,7 +299,8 @@ func (t *termSession) scriptRounds(ctx context.Context, script Script, enter str
 			if ctx.Err() != nil {
 				return nil
 			}
-			if err := t.runCommand(ctx, command, enter); err != nil {
+			steps, _ := scriptSteps(command) // checked when the script was saved
+			if err := t.runSteps(ctx, steps, stepRun{script: true}); err != nil && ctx.Err() == nil {
 				return err
 			}
 			last := i == len(script.Commands)-1 && (!script.Loop || (script.Count > 0 && round >= script.Count))
@@ -179,37 +309,6 @@ func (t *termSession) scriptRounds(ctx context.Context, script Script, enter str
 			}
 		}
 	}
-}
-
-// runCommand does one line of a script: steps, or text sent with the line end.
-func (t *termSession) runCommand(ctx context.Context, command, enter string) error {
-	if steps, isSteps, _ := scriptSteps(command); isSteps {
-		if err := t.runSteps(ctx, steps); err != nil && ctx.Err() == nil {
-			return err
-		}
-		return nil
-	}
-	command = scriptText(command)
-	t.expectClear() // an expect after this line sees the answer to it
-	t.write([]byte(command + enter))
-	return nil
-}
-
-// runCmd does the steps typed in the Cmd input ("dtr=1; wait=500; dtr=0") in the background.
-func (t *termSession) runCmd(text string) {
-	steps, err := parseSteps(text)
-	if err != nil {
-		t.notice(err.Error())
-		return
-	}
-	t.mu.Lock()
-	ctx := t.runCtx
-	t.mu.Unlock()
-	if ctx == nil {
-		t.notice("open the port first")
-		return
-	}
-	go func() { t.reportSteps(ctx, t.runSteps(ctx, steps)) }()
 }
 
 func (t *termSession) stopScript() {

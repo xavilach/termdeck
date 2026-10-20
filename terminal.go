@@ -29,6 +29,11 @@ type clientMessage struct {
 	Action  string       `json:"action"` // xmodem: send, receive or cancel
 	OneK    bool         `json:"oneK"`   // xmodem: blocks of 1024 bytes instead of 128
 	Proto   string       `json:"proto"`  // xmodem (the default) or ymodem: the name and the exact size travel with the file
+
+	Format    string `json:"format"`    // send: text, hex, dec, bin or cmd
+	Check     string `json:"check"`     // send: the check added after the data
+	End       string `json:"end"`       // send: none, cr, lf, crlf, enter or custom
+	EndCustom string `json:"endCustom"` // send: the end when it is custom, written like text
 }
 
 // termSession is one tab: its port, its records and what it sends. It lives on the server, so a reload of the
@@ -378,13 +383,9 @@ func sentText(data []byte) []byte {
 	return []byte(escapeText(data))
 }
 
-// recordSent puts what went out in the stream: text as typed, bytes as hex.
-func (t *termSession) recordSent(out, data []byte, raw bool) {
-	text := sentText(data)
-	if raw {
-		text = []byte(hexText(out))
-	}
-	t.emit(record{at: time.Now(), src: srcTx, raw: out, text: text})
+// recordSent puts what went out in the stream, with how it shows.
+func (t *termSession) recordSent(out, shown []byte) {
+	t.emit(record{at: time.Now(), src: srcTx, raw: out, text: shown})
 }
 
 // ---------------------------------------------------------------- the port
@@ -638,28 +639,28 @@ func (t *termSession) close() bool {
 }
 
 // write sends text to the device, in its character set, and records it as sent.
-func (t *termSession) write(data []byte) { t.sendData(data, false) }
+func (t *termSession) write(text []byte) {
+	t.mu.Lock()
+	codec := t.codec
+	t.mu.Unlock()
+	t.sendData(codec.ToDevice(text), sentText(text))
+}
 
 // writeRaw sends bytes to the device as they are.
-func (t *termSession) writeRaw(data []byte) { t.sendData(data, true) }
+func (t *termSession) writeRaw(data []byte) { t.sendData(data, []byte(hexText(data))) }
 
-func (t *termSession) sendData(data []byte, raw bool) {
+// sendData sends bytes to the device (through the slow writer when the session has delays), and records
+// them as sent, shown as shown.
+func (t *termSession) sendData(out, shown []byte) {
 	t.mu.Lock()
-	port, codec := t.port, t.codec
+	port, queue, ctx := t.port, t.outQ, t.runCtx
 	t.mu.Unlock()
 	if port == nil {
 		return
 	}
-	out := data
-	if !raw {
-		out = codec.ToDevice(data)
-	}
-	t.mu.Lock()
-	queue, ctx := t.outQ, t.runCtx
-	t.mu.Unlock()
 	if queue != nil { // slow send: the writer sends it
 		select {
-		case queue <- outItem{out, data, raw}:
+		case queue <- outItem{out, shown}:
 		case <-ctx.Done():
 		}
 		return
@@ -670,13 +671,14 @@ func (t *termSession) sendData(data []byte, raw bool) {
 	t.writeMu.Unlock()
 	if err == nil {
 		t.tx.Add(int64(n))
-		t.recordSent(out, data, raw)
+		t.recordSent(out, shown)
 	}
 }
 
 // terminal serves the page of one tab: GET /api/terminal?id=<the tab's id>. The page sends JSON: hello (its
 // settings and view: the session sends its state and shows its records again), view, profile, open, close,
-// input, raw, steps, flush, mark, clear, note, xmodem, break, script, stop, log, line, end (the tab is closed).
+// send (the send bar: format, data, check, end), quick (a quick send, by name), raw (bytes of a file), flush,
+// mark, clear, note, xmodem, break, script, stop, log, line, end (the tab is closed).
 // The session sends its screen as binary messages (text for the terminal) and JSON: session, state, reset and
 // replayed (around a redraw), logging, logexists, lines, counters, points, notify, script, xfer.
 func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
@@ -730,12 +732,19 @@ func (t *termSession) hello(m clientMessage) {
 }
 
 // mark puts a numbered mark in the stream, to find a moment again.
-func (t *termSession) mark() {
+func (t *termSession) mark() { t.markWith("") }
+
+// markWith puts a numbered mark in the stream, with a few words after it when there are some.
+func (t *termSession) markWith(words string) {
 	t.mu.Lock()
 	t.marks++
 	n := t.marks
 	t.mu.Unlock()
-	t.note(fmt.Sprintf("mark %d at %s", n, time.Now().Format("15:04:05")))
+	text := fmt.Sprintf("mark %d at %s", n, time.Now().Format("15:04:05"))
+	if words != "" {
+		text += ": " + words
+	}
+	t.note(text)
 }
 
 // rs485 is the direction control of the open port, and its delay.
@@ -773,13 +782,13 @@ var messageHandlers = map[string]func(t *termSession, m clientMessage){
 		t.sendState("closed", "port closed")
 	},
 	"end":           func(t *termSession, m clientMessage) { go t.end() },
-	"input":         func(t *termSession, m clientMessage) { t.write([]byte(m.Data)) },
+	"send":          func(t *termSession, m clientMessage) { t.sendBar(m) },
+	"quick":         func(t *termSession, m clientMessage) { t.sendQuick(m.Name) },
 	"raw":           func(t *termSession, m clientMessage) { t.writeRaw(m.Bytes) },
-	"steps":         func(t *termSession, m clientMessage) { t.runCmd(m.Data) },
 	"resetcounters": func(t *termSession, m clientMessage) { t.resetCounters() },
 	"clear":         func(t *termSession, m clientMessage) { t.clearRecords() },
 	"note":          func(t *termSession, m clientMessage) { t.note(m.Data) },
-	"break":         func(t *termSession, m clientMessage) { t.sendBreak() },
+	"break":         func(t *termSession, m clientMessage) { t.sendBreak(250 * time.Millisecond) },
 	"script":        func(t *termSession, m clientMessage) { t.runScript(m.Name) },
 	"stop":          func(t *termSession, m clientMessage) { t.stopScript() },
 	"flush":         func(t *termSession, m clientMessage) { t.flushOut() },

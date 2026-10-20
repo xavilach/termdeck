@@ -126,7 +126,7 @@
         <select data-send-end><option value="none">None</option><option value="cr">CR</option><option value="lf">LF</option><option value="crlf">CR LF</option><option value="custom">Custom</option></select>
         <input data-send-end-custom hidden spellcheck="false" placeholder="\r\n" aria-label="Custom end"></label>
       <label class="check-hint" title="Bytes added after the data to check it: a sum, an XOR or a CRC. For Hex, Decimal and Binary only. The check bytes come before the End.">Check
-        <select data-send-check><option value="none">None</option></select></label>
+        <select data-send-check><option value="none">None</option><option value="sum8">Sum (1 byte)</option><option value="xor8">XOR (1 byte)</option><option value="crc8">CRC-8</option><option value="crc16modbus">CRC-16 Modbus (low byte first)</option><option value="crc16ccitt">CRC-16 CCITT (high byte first)</option><option value="crc16xmodem">CRC-16 XMODEM (high byte first)</option><option value="crc32">CRC-32 (low byte first)</option></select></label>
       <label class="check broadcast" title="Send to every connected tab, not only this one: for several devices at once. Quick sends and Auto go to all of them too."><input type="checkbox" data-all> All tabs</label>
       <label class="check auto" title="Send the data again and again, every so many milliseconds, until you untick it, change tab or the port closes. The input is kept while it runs."><input type="checkbox" data-auto> Auto</label>
       <input type="number" data-auto-ms min="10" max="3600000" step="100" value="1000" title="Milliseconds between two automatic sends" aria-label="Milliseconds between automatic sends"><span class="muted">ms</span>
@@ -319,7 +319,7 @@
             <label title="The name this session has in the list on the left, for example &quot;Router console&quot; or &quot;Dev board&quot;.">Name <input name="name" required spellcheck="false"></label>
             <label title="Sessions and scripts are organised in groups, like folders. A script is offered only for sessions of its group. Leave empty (or type General) to keep it in the General group.">Group <input name="group" list="groups" spellcheck="false" placeholder="General"></label>
           </div>
-          <label title="The commands to send, one per line. The Enter key chosen in the session is added to each one, so write only the text, for example &quot;help&quot;. A line starting with @ is made of steps instead, separated by semicolons: dtr=0 or 1, rts=0 or 1, wait=milliseconds, hex=bytes. Example: @dtr=1; wait=500; dtr=0. To send text that starts with @, write @@. Empty lines at the end are ignored.">Commands
+          <label title="The commands to send, one per line. The Enter key chosen in the session is added to each one, so write only the text, for example &quot;help&quot;. A line starting with @ is made of steps instead, separated by semicolons (see Help, Steps): text, hex, end, check, dtr, rts, break, wait, expect, baud, file, log, mark. Example: @dtr=1; wait=500; dtr=0. To send text that starts with @, write @@. Empty lines at the end are ignored.">Commands
             <textarea name="commands" rows="10" spellcheck="false" required></textarea></label>
           <div class="grid">
             <label title="Waiting time after each command before the next one is sent, in milliseconds (1000 = 1 second). Give the device time to answer.">Pause (ms) <input name="delayMs" type="number" min="0" max="3600000" value="1000"></label>
@@ -370,7 +370,7 @@
       <label>Data bits <select name="dataBits"><option>8</option><option>7</option><option>6</option><option>5</option></select></label>
       <label>Parity <select name="parity"><option value="none">None</option><option value="even">Even</option><option value="odd">Odd</option><option value="mark">Mark</option><option value="space">Space</option></select></label>
       <label>Stop bits <select name="stopBits"><option>1</option><option>1.5</option><option>2</option></select></label>
-      <label>Flow control <select name="flow"><option value="none">None</option><option value="rtscts">RTS/CTS</option><option value="xonxoff">XON/XOFF</option></select></label>
+      <label>Flow control <select name="flow"><option value="none">None</option><option value="rtscts">RTS/CTS</option><option value="xonxoff">XON/XOFF</option><option value="dsrdtr">DSR/DTR (Windows only)</option></select></label>
     </div>
     <label title="Where to save both directions, one line each, marked A&gt;B and B&gt;A. Leave empty for no log. {name}, {date} and {time} are replaced.">Log file <input name="logPath" spellcheck="false" placeholder="logs/tunnel-{date}.log"></label>
     <p id="tunnel-error" class="problem" hidden></p>
@@ -385,8 +385,9 @@
     <kbd>Ctrl+Shift+C</kbd> copy · <kbd>V</kbd> paste into the send bar · <kbd>L</kbd> clear · <kbd>F</kbd> find. In the send bar: <kbd>Enter</kbd> sends, <kbd>↑</kbd>/<kbd>↓</kbd> recall, <kbd>Alt+T</kbd>/<kbd>H</kbd>/<kbd>D</kbd>/<kbd>B</kbd> choose Text, Hex, Decimal, Binary.</p>
     <h3>Sending</h3>
     <p>Only the send bar sends; the output is read-only. Text accepts <code>\r \n \t \0 \\ \xNN</code>. Hex, Decimal and Binary refuse wrong characters and group the digits. <b>Cmd</b> takes steps (below). <b>End</b> is added after the data (None, CR, LF, CR LF, Custom); <b>Check</b> adds a sum, XOR or CRC after byte data. <b>Auto</b> sends again every N ms. <b>File…</b> sends a file as it is.</p>
-    <h3>Steps (Cmd, scripts, trigger replies)</h3>
-    <p><code>dtr=1; wait=500; dtr=0; rts=1; hex=0D 0A</code>. <code>expect=login:</code> (or <code>/regex/</code>) waits until the device has sent it, for up to 10 s, or as long as the last <code>timeout=3000</code> says; the script stops with an error if it does not come. The device's answer to the line a script sent is what expect looks at. In a script, a line that starts with <code>@</code> is steps; <code>@@</code> sends a literal <code>@</code>.</p>
+    <h3>Steps (Cmd, scripts, trigger replies, quick sends)</h3>
+    <p>Everything termdeck sends is steps, separated by <code>;</code>: <code>text=AT\r</code> (a <code>;</code> in text is <code>\x3B</code>) · <code>hex=0D 0A</code> · <code>dec=13 10</code> · <code>bin=00001101</code> · <code>end=crlf</code> (cr, lf, crlf, enter, none, or text) · <code>check=crc16modbus</code> (over the bytes since the start or the last check) · <code>dtr=1</code> · <code>rts=0</code> · <code>break=250</code> · <code>wait=500</code> · <code>expect=login:</code> (or <code>/regex/</code>) waits until the device has sent it, for up to 10 s or as long as the last <code>timeout=3000</code> says · <code>baud=9600</code> · <code>file=C:\fw.bin</code> (a file on this computer) · <code>log=on</code> · <code>mark=flashing</code>. Bytes that follow each other go out together and show as one sent line.</p>
+    <p>A script line, a trigger reply and the Text of the send bar are text sent with the Enter key; a line that starts with <code>@</code> is steps (<code>@@</code> sends a literal <code>@</code>). In a script, expect looks at the answer to what was sent just before it.</p>
     <h3>Settings with one rule per line</h3>
     <ul>
       <li><b>Triggers</b>: <code>login: =&gt; admin</code> · <code>/Password:/ =&gt; @hex=31 32</code></li>

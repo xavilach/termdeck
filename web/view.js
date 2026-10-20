@@ -62,7 +62,7 @@ function bell(tab) {
 // The server keeps the records of the tab and draws them for its view (text or hex, times, new line at...):
 // the page writes what it sends into the terminal. A view change asks the server to draw everything again.
 
-const { ENC, unescapeText, textBytes, NEWLINES, parseNumbers, parseQuickSends, seriesNames, CHECKS, checksum, ALLOWED, clean, groupDigits, formatBytes, b64 } = Format;
+const { ENC, unescapeText, parseNumbers, parseQuickSends, seriesNames, ALLOWED, clean, groupDigits, formatBytes, b64 } = Format;
 const viewOf = (p) => ({ mode: p.view || "text", stamps: !!p.timestamps, timeMode: p.timeMode || "clock", pause: p.linePauseMs || 0, ctrl: !!p.showControl, filter: p.filter || "",
                                     nl: p.newLine || "terminal", nlCustom: p.newLineCustom || "" });
 
