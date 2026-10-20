@@ -12,7 +12,7 @@ import (
 )
 
 // version is set when building a release: go build -ldflags "-X main.version=1.2.0"
-var version = "1.1.0"
+var version = "2.0.0"
 
 func openBrowser(url string) {
 	var cmd *exec.Cmd
