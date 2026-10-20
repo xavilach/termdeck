@@ -29,6 +29,26 @@ function boldOptions(profile) {
 }
 
 let lastBeep = 0;
+
+// A sound: the session's bell sound, or a short beep. A burst of them is one sound.
+function playSound(tab) {
+  if (tab.quiet || Date.now() - lastBeep < 300) return;
+  lastBeep = Date.now();
+  if (tab.profile.bellSound) {
+    new Audio(tab.profile.bellSound).play().catch(() => {});
+    return;
+  }
+  try {
+    const audio = new AudioContext();
+    const tone = audio.createOscillator();
+    tone.frequency.value = 880;
+    tone.connect(audio.destination);
+    tone.start();
+    tone.stop(audio.currentTime + 0.12);
+    tone.onended = () => audio.close();
+  } catch { /* no audio */ }
+}
+
 function bell(tab) {
   if (tab.quiet) return;
   const mode = tab.profile.bell || "visual";
@@ -40,29 +60,14 @@ function bell(tab) {
     tab.belled = true;
     tab.tabEl.classList.add("belled");
   }
-  if ((mode === "sound" || mode === "both") && Date.now() - lastBeep > 300) {  // a burst of bells is one beep
-    lastBeep = Date.now();
-    if (tab.profile.bellSound) {
-      new Audio(tab.profile.bellSound).play().catch(() => {});
-      return;
-    }
-    try {
-      const audio = new AudioContext();
-      const tone = audio.createOscillator();
-      tone.frequency.value = 880;
-      tone.connect(audio.destination);
-      tone.start();
-      tone.stop(audio.currentTime + 0.12);
-      tone.onended = () => audio.close();
-    } catch { /* no audio */ }
-  }
+  if (mode === "sound" || mode === "both") playSound(tab);
 }
 
 // ---------------------------------------------------------------- what is shown
 // The server keeps the records of the tab and draws them for its view (text or hex, times, new line at...):
 // the page writes what it sends into the terminal. A view change asks the server to draw everything again.
 
-const { ENC, unescapeText, parseNumbers, parseQuickSends, seriesNames, ALLOWED, clean, groupDigits, formatBytes, b64 } = Format;
+const { ENC, unescapeText, parseNumbers, ALLOWED, clean, groupDigits, formatBytes, b64 } = Format;
 const viewOf = (p) => ({ mode: p.view || "text", stamps: !!p.timestamps, timeMode: p.timeMode || "clock", pause: p.linePauseMs || 0, ctrl: !!p.showControl, filter: p.filter || "",
                                     nl: p.newLine || "terminal", nlCustom: p.newLineCustom || "" });
 

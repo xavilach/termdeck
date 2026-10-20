@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// Steps: everything termdeck sends is a list of steps. The send bar, quick sends, script lines, Cmd and
-// trigger replies all become steps, and run the same way (automation.go).
+// Steps: everything termdeck sends is a list of steps. The send bar, script lines, Cmd and the send of a
+// rule all become steps, and run the same way (automation.go).
 //
 //	text=hello\r   text, typed with \r \n \t \0 \\ \xNN (a ; is written \x3B), in the device's character set
 //	hex=0D 0A      bytes; dec=13 10 and bin=00001101 too
@@ -197,14 +197,17 @@ func parseNumberWords(text string, base int) ([]byte, error) {
 	return out, nil
 }
 
+// sendFormats are the types of the send bar.
+var sendFormats = []string{"text", "hex", "dec", "bin", "cmd"}
+
 // payload is what the send bar (or a quick send) sends as steps: data of a format, then its check and its end.
 // The format is text, hex, dec, bin or cmd (data is then steps, and has no check or end).
 func payload(format, data, check string, end step) ([]step, error) {
 	if format == "cmd" {
 		return parseSteps(data)
 	}
-	if !oneOf(format, []string{"text", "hex", "dec", "bin"}) {
-		return nil, fmt.Errorf("the type is one of text, hex, dec, bin, cmd")
+	if !oneOf(format, sendFormats) {
+		return nil, fmt.Errorf("the type is one of %s", strings.Join(sendFormats, ", "))
 	}
 	if format == "text" {
 		data = strings.ReplaceAll(data, ";", `\x3B`) // a payload is not split at semicolons
@@ -240,100 +243,4 @@ func scriptSteps(command string) ([]step, error) {
 		return parseSteps(command[1:])
 	}
 	return []step{{kind: "text", bytes: []byte(strings.TrimPrefix(command, "@"))}, {kind: "end", value: "enter"}}, nil
-}
-
-// trigger sends a reply when the pattern shows up in what the device sends.
-type trigger struct {
-	pattern Pattern
-	steps   []step
-}
-
-// parseTriggers reads lines "pattern => reply". The pattern is text (any case), or /regex/. The reply is a
-// script line: text (sent with the session's Enter key) or "@" and steps. Empty lines and # notes are skipped.
-func parseTriggers(text string) ([]trigger, error) {
-	var out []trigger
-	for _, line := range strings.Split(text, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		pattern, reply, ok := strings.Cut(line, "=>")
-		pattern, reply = strings.TrimSpace(pattern), strings.TrimSpace(reply)
-		if !ok || pattern == "" {
-			return nil, fmt.Errorf("trigger %q: use  text => reply", line)
-		}
-		p, err := ParsePattern(pattern)
-		if err != nil {
-			return nil, fmt.Errorf("trigger: %w", err)
-		}
-		steps, err := scriptSteps(reply)
-		if err != nil {
-			return nil, fmt.Errorf("trigger %q: %w", pattern, err)
-		}
-		out = append(out, trigger{pattern: p, steps: steps})
-	}
-	return out, nil
-}
-
-// quickSend is a button of the send bar: a name and what it sends.
-type quickSend struct {
-	Name  string
-	steps []step
-}
-
-var (
-	quickTypes  = []string{"text", "hex", "dec", "bin", "cmd"}
-	quickOption = regexp.MustCompile(`^\s*(end|check)=(\w+)\s*$`)
-)
-
-// parseQuickSends reads lines "name | type | data" with options after the data ("| end=cr", "| check=crc16modbus").
-// The type is text, hex, dec, bin or cmd. The end is the Enter key of the session for text and none for the
-// others when it is left out. Empty lines and lines starting with # are skipped.
-func parseQuickSends(text string) ([]quickSend, error) {
-	var out []quickSend
-	for _, line := range strings.Split(text, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.Split(line, "|")
-		if len(parts) < 3 {
-			return nil, fmt.Errorf("quick send %q: use  name | type | data", line)
-		}
-		name, kind := strings.TrimSpace(parts[0]), strings.ToLower(strings.TrimSpace(parts[1]))
-		end, check := "", ""
-		for len(parts) > 3 {
-			m := quickOption.FindStringSubmatch(parts[len(parts)-1])
-			if m == nil {
-				break
-			}
-			if m[1] == "end" {
-				end = m[2]
-			} else {
-				check = m[2]
-			}
-			parts = parts[:len(parts)-1]
-		}
-		data := strings.TrimSpace(strings.Join(parts[2:], "|"))
-		if name == "" || len(name) > 40 {
-			return nil, fmt.Errorf("quick send %q: the name is 1 to 40 characters", line)
-		}
-		if !oneOf(kind, quickTypes) {
-			return nil, fmt.Errorf("quick send %q: the type is one of %s", name, strings.Join(quickTypes, ", "))
-		}
-		switch {
-		case end == "" && kind == "text", end == "session":
-			end = "enter"
-		case end == "":
-			end = "none"
-		case !oneOf(end, []string{"none", "cr", "lf", "crlf"}):
-			return nil, fmt.Errorf("quick send %q: the end is one of session, none, cr, lf, crlf", name)
-		}
-		steps, err := payload(kind, data, check, endStep(end, ""))
-		if err != nil {
-			return nil, fmt.Errorf("quick send %q: %w", name, err)
-		}
-		out = append(out, quickSend{Name: name, steps: steps})
-	}
-	return out, nil
 }

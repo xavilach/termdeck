@@ -31,17 +31,17 @@ func TestPatternsMatchTheSharedTable(t *testing.T) {
 	}
 }
 
-func TestATriggerOrAnExpectWrittenAsTextIgnoresCase(t *testing.T) {
-	triggers, err := parseTriggers("login: => admin")
-	if err != nil || triggers[0].pattern.FindIndex([]byte("Login: ")) == nil {
-		t.Error("the trigger did not match Login:")
+func TestARuleOrAnExpectWrittenAsTextIgnoresCase(t *testing.T) {
+	rules, err := parseRules("login: => send admin")
+	if err != nil || rules[0].pattern.FindIndex([]byte("Login: ")) == nil {
+		t.Error("the rule did not match Login:")
 	}
 	steps, err := parseSteps("expect=password")
 	if err != nil || !steps[0].pattern.MatchString("Password:") {
 		t.Error("expect did not match Password:")
 	}
-	specs, _ := parseGraphSeries("Temp | temperature: | DEGC")
-	if got := extractValues("Temperature: 21 degC", specs); len(got) != 1 || got[0].Value != 21 {
+	rules, _ = parseRules("TEMPERATURE: => graph Temp")
+	if got := graphValues(rules, "Temperature: 21 degC"); len(got) != 1 || got[0].Value != 21 {
 		t.Errorf("graph: %v", got)
 	}
 }

@@ -30,16 +30,17 @@ Press Help (left column, Alt+Shift+H) for the keys and the syntax of the setting
 
 - View: Text, Hex, Decimal, Binary, Frames. New line at (Terminal, CR, LF, CR LF, Custom, None), filter (text, `/regex/`, `!hide`); under More: control characters, time (clock or since the last line), new line after a pause, Copy, Save. Changing them redraws the data kept (8 MB, on the server): nothing is lost. The screen and the log are drawn the same way.
 - Frames: bytes cut into frames by a description (`sync`, `size`, `end`, `header`, `check`), one line each, OK or BAD.
-- Highlights (`ERROR = red+bold`; add `notify` for a desktop notification while the tab is out of sight), Graph of numbers taken from lines (`Temp | Temperature: | degC`), Marks (Alt+Shift+M), Freeze, Copy, Save text / raw, Find (Ctrl+Shift+F), Rx counter.
+- Graph of numbers taken from lines (a rule: `Temperature: => graph Temp`), Marks (Alt+Shift+M), Freeze, Copy, Save text / raw, Find (Ctrl+Shift+F), Rx counter.
 - The lines are read-only.
 
 ## Send (the bar below)
 
-- Text, Hex, Decimal, Binary or Cmd (steps: `dtr=1; wait=500; hex=0D 0A; expect=login:`; `expect` waits for what the device says, so scripts can log in or flash step by step). End, Check (sum, XOR, CRC), Auto, history, files, quick-send buttons.
+- Text, Hex, Decimal, Binary or Cmd (steps: `dtr=1; wait=500; hex=0D 0A; expect=login:`; `expect` waits for what the device says, so scripts can log in or flash step by step). End, Check (sum, XOR, CRC), Auto, history, files, the buttons of the rules.
 - All tabs: send the same data to every connected tab (a test bench); Open all (▶▶) opens every port of a device.
 - Transfer: XMODEM and YMODEM, send or receive (checked against lrzsz).
 - What runs over time (a script, Auto, a file, a transfer) shows in the toolbar with its progress and a Stop; it goes on while the page reloads or another tab is shown.
-- Scripts, triggers (`login: => admin`, paused when they loop) and quick sends are rules, one per line. A pattern is the same everywhere: text in any case, `/regex/` as written, `/regex/i`.
+- Rules, one per line, `when => do`: what a session does by itself. When: a pattern in what the device sends, `on connect`, `on disconnect`, `every 2s`, `button Name`, `idle 30s`, `on CTS` (DSR, DCD, RI), `bad frame`. Do: colours, `hide`, `notify`, `sound`, `graph Name`, `log on|off`, then `send` (a script line), `run` (a script), `mark` or `note`. For example `ERROR => red bold notify`, `login: => send admin`, `button Reset => send @dtr=0; wait=100; dtr=1`. Rules that send in a loop are paused.
+- A pattern is the same everywhere: text in any case, `/regex/` as written, `/regex/i`.
 
 ## Tools
 

@@ -240,7 +240,7 @@ function openTab(profile, { connect: doConnect = true, id = newTabId(), view = n
   if (openElsewhere(profile)) return;
   const pane = focusPane || panes[0];
   const tab = { id, profile, port, device, pane, state: "closed", ws: null, fontSize: profile.fontSize || 14, script: null, jobs: [], view: view || viewOf(profile),
-                sendEnd: { mode: profile.enter || "cr", custom: "" }, sendCheck: "none", counters: { rx: 0, tx: 0 }, sent: loadHistory(port || profile.name), sentAt: 0, graph: newGraph(profile) };
+                sendEnd: { mode: profile.enter || "cr", custom: "" }, sendCheck: "none", counters: { rx: 0, tx: 0 }, sent: loadHistory(port || profile.name), sentAt: 0, graph: newGraph(), buttons: [] };
   tab.sentAt = tab.sent.length;
   newTerminal(tab);
   newTabElement(tab);

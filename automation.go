@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -169,34 +170,102 @@ func (t *termSession) sendBar(m clientMessage) {
 	t.runPayload(steps)
 }
 
-// sendQuick sends the quick send of the session with that name.
-func (t *termSession) sendQuick(name string) {
-	t.mu.Lock()
-	quick, _ := parseQuickSends(t.profile.QuickSends) // checked by Normalize
-	t.mu.Unlock()
-	for _, q := range quick {
-		if q.Name == name {
-			t.runPayload(q.steps)
-			return
+// ---------------------------------------------------------------- rules (see rules.go)
+
+// hasRule says whether a rule waits for this moment.
+func hasRule(rules []rule, when string) bool {
+	for _, r := range rules {
+		if r.when == when {
+			return true
 		}
 	}
-	t.notice("no quick send named " + name)
+	return false
 }
 
-// match looks for the triggers in what the device sent and answers them. It returns the end of the data, to
-// look at again with the next chunk.
-func (t *termSession) match(ctx context.Context, triggers []trigger, window, text []byte) []byte {
-	if len(triggers) == 0 {
+func hasRuleNamed(rules []rule, when, name string) bool {
+	for _, r := range rules {
+		if r.when == when && strings.EqualFold(r.name, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func (t *termSession) ruleList() []rule {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.rules
+}
+
+// fire does what the rules that wait for this moment say (name: the button, or the line).
+func (t *termSession) fire(when, name, context string) {
+	t.mu.Lock()
+	rules, ctx := t.rules, t.runCtx
+	t.mu.Unlock()
+	if ctx == nil || ctx.Err() != nil {
+		ctx = t.ctx // after a disconnect: notes, marks and alerts only
+	}
+	for _, r := range rules {
+		if r.when == when && (name == "" || strings.EqualFold(r.name, name)) {
+			t.act(ctx, r, context)
+		}
+	}
+}
+
+// startRules does the "on connect" rules, and starts the "every" rules as jobs of the port.
+func (t *termSession) startRules() {
+	t.fire("connect", "", "")
+	for _, r := range t.ruleList() {
+		if r.when != "every" {
+			continue
+		}
+		r := r
+		t.startJob("rule", r.text, 0, func(ctx context.Context, j *job) error {
+			for round := int64(1); ; round++ {
+				if err := sleepCtx(ctx, r.every); err != nil {
+					return nil
+				}
+				t.act(ctx, r, "")
+				t.progress(j, round)
+			}
+		})
+	}
+}
+
+// pressButton does what the rule of a button says.
+func (t *termSession) pressButton(name string) {
+	if !hasRuleNamed(t.ruleList(), "button", name) {
+		t.notice("no button named " + name)
+		return
+	}
+	t.fire("button", name, "")
+}
+
+// matchRules looks for the patterns of the rules in what the device sent, and does what they say as soon
+// as the text is there. It returns the end of the data, to look at again with the next chunk.
+func (t *termSession) matchRules(ctx context.Context, window, text []byte) []byte {
+	t.mu.Lock()
+	t.lastRx = time.Now()
+	clear(t.idleFired)
+	t.mu.Unlock()
+	var rules []rule
+	for _, r := range t.ruleList() {
+		if r.when == "match" && (r.act != "" || r.log != "") {
+			rules = append(rules, r)
+		}
+	}
+	if len(rules) == 0 {
 		return nil
 	}
 	window = append(window, text...)
 	for fired := true; fired; {
 		fired = false
-		for _, tr := range triggers {
-			if loc := tr.pattern.FindIndex(window); loc != nil {
+		for _, r := range rules {
+			if loc := r.pattern.FindIndex(window); loc != nil {
+				match := string(window[loc[0]:loc[1]])
 				window = window[loc[1]:]
 				fired = true
-				t.answer(ctx, tr)
+				t.act(ctx, r, match)
 				break
 			}
 		}
@@ -207,14 +276,77 @@ func (t *termSession) match(ctx context.Context, triggers []trigger, window, tex
 	return window
 }
 
-// answer sends the reply of a trigger in the background, in order with the others. Too many waiting are dropped.
-func (t *termSession) answer(ctx context.Context, tr trigger) {
-	if t.looping() {
+// lineRules: a complete line that matches a rule with notify or sound tells the page.
+func (t *termSession) lineRules(rules []rule, line string) {
+	for _, r := range rules {
+		if r.when == "match" && (r.notify || r.sound) && r.pattern.MatchString(line) {
+			t.alert(r, line)
+		}
+	}
+}
+
+// alert asks the page for a desktop notification or a sound.
+func (t *termSession) alert(r rule, text string) {
+	if text == "" {
+		text = r.text
+	}
+	if r.notify {
+		t.sendJSON(map[string]string{"type": "notify", "text": text})
+	}
+	if r.sound {
+		t.sendJSON(map[string]string{"type": "sound"})
+	}
+}
+
+// frameRules gives the received bytes to the frames, for the rules on bad frames.
+func (t *termSession) frameRules(raw []byte) {
+	t.mu.Lock()
+	framer := t.framer
+	t.mu.Unlock()
+	if framer == nil {
+		return
+	}
+	for _, row := range framer.feed(raw) {
+		if row.checked && !row.ok {
+			t.fire("frame", "", "bad frame "+frameLine(framer.spec, row))
+		}
+	}
+}
+
+// idleRules fire the "idle" rules whose time without data has come, once each until data comes again.
+func (t *termSession) idleRules(now time.Time) {
+	t.mu.Lock()
+	ctx := t.runCtx
+	var due []rule
+	if t.port != nil && ctx != nil {
+		for i, r := range t.rules {
+			if r.when == "idle" && now.Sub(t.lastRx) >= r.every && !t.idleFired[i] {
+				t.idleFired[i] = true
+				due = append(due, r)
+			}
+		}
+	}
+	t.mu.Unlock()
+	for _, r := range due {
+		t.act(ctx, r, fmt.Sprintf("nothing received for %v", r.every))
+	}
+}
+
+// act does what a rule says, in the background, in order with the others. Too many waiting are dropped,
+// and rules that send in a loop (each send making the device send what fires it again) are paused.
+func (t *termSession) act(ctx context.Context, r rule, context string) {
+	if r.when != "match" {
+		t.alert(r, context) // a line that matches alerts by itself, with the whole line (lineRules)
+	}
+	if r.act == "" && r.log == "" {
+		return
+	}
+	if (r.act == "send" || r.act == "run") && t.looping() {
 		return
 	}
 	if t.pending.Add(1) > maxPendingReplies {
 		t.pending.Add(-1)
-		t.notice("trigger replies are backed up: dropped " + tr.pattern.Text)
+		t.notice("rules are backed up: dropped " + r.text)
 		return
 	}
 	go func() {
@@ -224,8 +356,20 @@ func (t *termSession) answer(ctx context.Context, tr trigger) {
 		if ctx.Err() != nil {
 			return
 		}
-		t.note("trigger: " + tr.pattern.Text)
-		t.reportSteps(ctx, t.runSteps(ctx, tr.steps, stepRun{}))
+		if r.log != "" {
+			t.setLogging(r.log == "on")
+		}
+		switch r.act {
+		case "send":
+			t.note("rule: " + r.text)
+			t.reportSteps(ctx, t.runSteps(ctx, r.sent, stepRun{}))
+		case "run":
+			t.runScript(r.arg)
+		case "mark":
+			t.markWith(strings.TrimSpace(r.arg + " " + context))
+		case "note":
+			t.note(strings.TrimSpace(r.arg + " " + context))
+		}
 	}()
 }
 
@@ -262,9 +406,9 @@ func (t *termSession) scriptRounds(ctx context.Context, j *job, script Script) e
 	}
 }
 
-// looping notes a reply and says whether the triggers are in a loop: a reply that makes the device send
-// what triggers it again (an echo, say) would go on for ever. After too many replies in a second the
-// triggers are paused until the port is opened again.
+// looping notes a send of a rule and says whether the rules are in a loop: a reply that makes the device
+// send what fires it again (an echo, say) would go on for ever. After too many sends in a second the
+// rules are paused until the port is opened again.
 func (t *termSession) looping() bool {
 	t.trigMu.Lock()
 	defer t.trigMu.Unlock()
@@ -283,7 +427,7 @@ func (t *termSession) looping() bool {
 		return false
 	}
 	t.triggersPaused = true
-	t.notice("triggers paused: more than 20 replies in a second, a loop? Open the port again to resume.")
+	t.notice("rules paused: more than 20 sends in a second, a loop? Open the port again to resume.")
 	return true
 }
 

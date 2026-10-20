@@ -241,7 +241,7 @@ async function startServer() {
   // the same port is never opened twice: free fake:shell first
   await page.locator(".tab", { hasText: "fake:shell" }).locator(".close").click();
   await page.locator(".tab", { hasText: "fake:shell" }).locator(".close").click();
-  // a device made in the dialog: triggers, markers, local echo and a log; then a port opens with it
+  // a device made in the dialog: rules, markers, local echo and a log; then a port opens with it
   await page.keyboard.press("Alt+Shift+N");
   await page.waitForFunction(() => document.querySelector("#panel").open && document.querySelector("#profile-title").textContent === "New device");
   const form = page.locator("#profile-form");
@@ -253,9 +253,8 @@ async function startServer() {
   await form.locator("[name=txMarker]").fill("TX ");
   await formPage("log");
   await form.locator("[name=logPath]").fill(path.join(server.dir, "auto-login.log"));
-  await formPage("send");
-  await form.locator("[name=triggers]").fill("login: => admin\n/Password:/ => admin");
-  await form.locator("[name=quickSends]").fill("Hello | text | echo quick\nHex | hex | 65 63 68 6f 20 68 71 0d | end=none");
+  await formPage("rules");
+  await form.locator("[name=rules]").fill("login: => send admin\n/Password:/ => send admin\nbutton Hello => send echo quick\nbutton Hex => send @hex=65 63 68 6f 20 68 71 0d");
   await form.locator("button[type=submit]").click();
   await page.waitForSelector("#tree .node-head.group:has-text('Auto login')", { timeout: 3000 }).catch(() => {});
   check("the device is saved and listed", await page.locator("#tree .node-head.group", { hasText: "Auto login" }).count() === 1, await page.locator("#profile-error").textContent());
@@ -266,12 +265,12 @@ async function startServer() {
   check("a port opens with the device chosen for it", await page.locator(".tab", { hasText: "Auto login · fake:shell" }).count() === 1, await page.locator(".tab .label").allTextContents());
   const autoTab = (await page.locator(".tab .label").allTextContents()).indexOf("Auto login · fake:shell");
   s = await waitScreen(/admin# /, autoTab);
-  check("triggers log in by themselves", /Welcome/.test(s), s);
+  check("rules log in by themselves", /Welcome/.test(s), s);
   check("Rx and Tx markers and local echo", /^RX login: /m.test(s) && /^TX admin/m.test(s), s);
   await page.locator(".quickbar button", { hasText: "Hello" }).click();
   await page.locator(".quickbar button", { hasText: "Hex" }).click();
   s = await waitScreen(/hq/, autoTab);
-  check("quick send buttons send text with the Enter key and hex as it is", /^RX quick/m.test(s) && /^RX hq/m.test(s), s);
+  check("the buttons of the rules send text with the Enter key and steps as they are", /^RX quick/m.test(s) && /^RX hq/m.test(s), s);
   await shot("12-quick-sends");
   await page.locator(".sendbar [data-send-text]").first().fill("draft for this tab");
   await page.locator(".tab", { hasText: "fake:counter" }).click();
@@ -329,7 +328,7 @@ async function startServer() {
   // graph: numbers of the received lines drawn as lines (the counter port is free for it first)
   await page.locator(".tab", { hasText: "fake:counter" }).locator(".close").click();
   await page.locator(".tab", { hasText: "fake:counter" }).locator(".close").click();
-  await withDevice("fake:counter", "Graphed", { graphSeries: "Temp | temp=\nTick | tick " });
+  await withDevice("fake:counter", "Graphed", { rules: "temp= => graph Temp\ntick => graph Tick" });
   await portRow("fake:counter").locator(".name").dblclick();
   await page.waitForSelector(".tab:has-text('Graphed · fake:counter')");
   await page.click(".viewbar [data-graph]");
@@ -408,8 +407,8 @@ async function startServer() {
   await page.locator(".tab", { hasText: "fake:echo" }).locator(".close").click();
   await page.locator(".tab", { hasText: "fake:echo" }).locator(".close").click();
 
-  // highlights and the filter in the real terminal: the cell colours of the lines
-  await withDevice("fake:counter", "Coloured", { highlights: "tick 2 = red" });
+  // a rule that colours lines, and the filter, in the real terminal: the cell colours of the lines
+  await withDevice("fake:counter", "Coloured", { rules: "tick 2 => red" });
   await portRow("fake:counter").locator(".name").dblclick();
   await page.waitForSelector(".tab:has-text('Coloured')");
   const colouredTab = (await page.locator(".tab .label").allTextContents()).indexOf("Coloured · fake:counter");
@@ -428,8 +427,8 @@ async function startServer() {
   await page.keyboard.press("Alt+Shift+N");
   await page.waitForFunction(() => document.querySelector("#panel").open && document.querySelector("#profile-title").textContent === "New device");
   check("the settings dialog opens on the Port page", await form.locator(".form-page[data-form-page=port]").isVisible() && !(await form.locator(".form-page[data-form-page=send]").isVisible()));
-  await formPage("send");
-  check("a page shows its settings and hides the others", await form.locator("[name=triggers]").isVisible() && !(await form.locator("[name=baud]").isVisible()));
+  await formPage("rules");
+  check("a page shows its settings and hides the others", await form.locator("[name=rules]").isVisible() && !(await form.locator("[name=baud]").isVisible()));
   await page.keyboard.press("Escape");
   await page.keyboard.press("Alt+Shift+N");
   await page.waitForFunction(() => document.querySelector("#panel").open && document.querySelector("#profile-title").textContent === "New device");
@@ -469,7 +468,7 @@ async function startServer() {
 
   // help
   await page.keyboard.press("Alt+Shift+H");
-  check("Alt+Shift+H opens the help", await page.locator("#help").evaluate((d) => d.open) && /Triggers/.test(await page.locator("#help").textContent()));
+  check("Alt+Shift+H opens the help", await page.locator("#help").evaluate((d) => d.open) && /Rules/.test(await page.locator("#help").textContent()));
   await page.waitForFunction(() => document.querySelector("#about").textContent !== "", null, { timeout: 3000 }).catch(() => {});
   check("the help says which version runs and where the settings are", /termdeck 1\.\d+\.\d+ on \w+\. Settings are kept in .*home/.test(await page.locator("#about").textContent()), await page.locator("#about").textContent());
   await shot("14-help");
@@ -547,7 +546,8 @@ async function startServer() {
   await page.click("#xmodem-close");
 
   // the line changes the device drives show as notes: DTR of one end is DSR of the other
-  await page.evaluate((i) => { tabs[i].profile.noteLines = true; sendMessage(tabs[i], { type: "profile", profile: tabs[i].profile }); }, a);
+  await page.evaluate((i) => { tabs[i].profile.rules = "on DSR => note"; sendMessage(tabs[i], { type: "profile", profile: tabs[i].profile }); sendMessage(tabs[i], { type: "open", profile: tabs[i].profile }); }, a);
+  await sleep(800);  // the port opens again with the rule, and its lines are seen once
   await page.locator(".tab", { hasText: "fake:link-b" }).click();
   await page.click("[data-action=line-dtr]");
   s = await waitScreen(/DSR off/, a, 4000);
@@ -595,7 +595,7 @@ async function startServer() {
     if (await page.locator(".tab .close.confirm").count()) await close.click();
   }
   await page.click(".layout [data-layout=single]");
-  await withDevice("fake:shell", "");  // back to Generic: the triggers of Auto login would answer the prompts below
+  await withDevice("fake:shell", "");  // back to Generic: the rules of Auto login would answer the prompts below
   await portRow("fake:shell").locator(".name").dblclick();
   await waitScreen(/login: /);   // the port was released when its tab was closed, and can be opened again
   await input.focus();
@@ -722,8 +722,8 @@ async function startServer() {
   // a button in the pane that does not have the focus works on the first click (the page must not
   // draw it again while the mouse button is down)
   await closeAll();
-  await withDevice("fake:echo", "QA", { quickSends: "Hi | text | hello A" });
-  await withDevice("fake:counter", "QB", { quickSends: "Yo | text | hello B" });
+  await withDevice("fake:echo", "QA", { rules: "button Hi => send hello A" });
+  await withDevice("fake:counter", "QB", { rules: "button Yo => send hello B" });
   await portRow("fake:echo").locator(".name").dblclick();
   await portRow("fake:counter").locator(".name").dblclick();
   await page.click(".layout [data-layout=cols]");
@@ -805,7 +805,7 @@ async function startServer() {
     window.__notes = [];
     window.Notification = class { constructor(title, options) { window.__notes.push({ title, body: options.body }); } static get permission() { return "granted"; } };
   });
-  await withDevice("fake:counter", "Noti", { highlights: "tick 2 = bold+notify" });
+  await withDevice("fake:counter", "Noti", { rules: "tick 2 => bold notify" });
   await portRow("fake:counter").locator(".name").dblclick();
   await portRow("fake:echo").locator(".name").dblclick();   // Noti is now out of sight
   await page.waitForFunction(() => window.__notes.length > 0, null, { timeout: 8000 });

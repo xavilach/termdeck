@@ -206,7 +206,6 @@ function applyProfile(tab, p, device = tab.device) {
   o.theme = terminalTheme(p);
   Object.assign(o, boldOptions(p));
   tab.view = viewOf(p);
-  updateGraphSpecs(tab);
   syncBars(tab.pane);
   sendMessage(tab, { type: "profile", profile: p });
   redraw(tab);

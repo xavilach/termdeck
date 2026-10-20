@@ -40,9 +40,9 @@ func TestTheSendBarAndScriptLinesBecomeSteps(t *testing.T) {
 			t.Errorf("%q: %v %s", line, err, stepsText(steps))
 		}
 	}
-	triggers, _ := parseTriggers("login: => admin\npass => @hex=31")
-	if stepsText(triggers[0].steps) != "text=admin end=enter" || stepsText(triggers[1].steps) != "hex=31" {
-		t.Errorf("trigger replies are script lines: %+v", triggers)
+	rules, _ := parseRules("login: => send admin\npass => send @hex=31")
+	if stepsText(rules[0].sent) != "text=admin end=enter" || stepsText(rules[1].sent) != "hex=31" {
+		t.Errorf("what a rule sends is a script line: %+v", rules)
 	}
 }
 

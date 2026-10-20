@@ -298,7 +298,7 @@ const tab = () => run("tabs[0]", "x");
   check("a session that is already open is not opened again", !mainWs.sent.some((m) => m.type === "open") && run("tabs[0].state", "x") === "connected");
 
   // graph: the server sends the numbers it found in the lines
-  run("applyProfile(tabs[0], { ...tabs[0].profile, graphSeries: 'Temp | Temperature: | degC\\nTick | tick ' })", "x");
+  json(mainWs, { type: "rules", buttons: [], series: ["Temp", "Tick"] });  // what the rules of the settings make
   json(mainWs, { type: "points", t: 5000, values: [{ name: "Temp", value: 26.1 }] });
   json(mainWs, { type: "points", t: 5100, values: [{ name: "Tick", value: 7 }, { name: "Temp", value: 26.3 }] });
   const gs = run("[...tabs[0].graph.series].map(([n, p]) => n + ':' + p.map((x) => x.v).join(','))", "x");
@@ -328,7 +328,7 @@ const tab = () => run("tabs[0]", "x");
   // notifications for lines that match a notify rule, only while the tab is not in sight
   const sent = [];
   w.Notification = class { constructor(title, options) { sent.push({ title, body: options.body }); } static get permission() { return "granted"; } };
-  run("openTab({ ...window.__profile, name: 'noisy', device: 'COM71', highlights: 'FAULT = red+notify' }); openTab({ ...window.__profile, name: 'quiet', device: 'COM72' })", "x");
+  run("openTab({ ...window.__profile, name: 'noisy', device: 'COM71', rules: 'FAULT => red notify' }); openTab({ ...window.__profile, name: 'quiet', device: 'COM72' })", "x");
   const noisy = run("tabs.find((t) => t.profile.name === 'noisy')", "x");
   await sleep(10);
   run("activate(tabs.find((t) => t.profile.name === 'noisy'))", "x");
@@ -378,21 +378,21 @@ const tab = () => run("tabs[0]", "x");
   check("the arrows go to the next and the previous mark", afterNext === 90 && afterPrev === 10, { afterNext, afterPrev });
 
   // quick sends: buttons from the session settings
-  run("applyProfile(tabs[0], { ...tabs[0].profile, quickSends: 'Hello | text | hi there\\n# note\\nRaw | hex | 41 42 | end=none\\nWiggle | cmd | dtr=0; wait=1' })", "x");
+  json(mainWs, { type: "rules", buttons: ["Hello", "Raw", "Wiggle"], series: [] });
   const qws = mainWs;
   const quick = [...w.document.querySelectorAll(".quickbar button")];
-  check("quick sends make buttons", quick.map((b) => b.textContent).join(",") === "Hello,Raw,Wiggle" && !q(".quickbar").hidden, quick.map((b) => b.textContent));
+  check("the buttons of the rules show above the send bar", quick.map((b) => b.textContent).join(",") === "Hello,Raw,Wiggle" && !q(".quickbar").hidden, quick.map((b) => b.textContent));
   json(qws, { type: "state", state: "connected", message: "" });
   const quickFrom = qws.sent.length;
   const live = [...w.document.querySelectorAll(".quickbar button")];  // drawn again when the state changed
   live[0].click(); live[1].click(); live[2].click();
   const sentNow = qws.sent.slice(quickFrom);
-  check("a button asks the session for its quick send, by name", sentNow.map((m) => m.type + ":" + m.name).join(",") === "quick:Hello,quick:Raw,quick:Wiggle", sentNow);
+  check("a button asks the session to do what its rule says, by name", sentNow.map((m) => m.type + ":" + m.name).join(",") === "button:Hello,button:Raw,button:Wiggle", sentNow);
   json(qws, { type: "state", state: "ended", message: "" });
   check("the buttons are disabled when the port is closed", [...w.document.querySelectorAll(".quickbar button")].every((b) => b.disabled));
   json(qws, { type: "state", state: "connected", message: "" });
-  run("applyProfile(tabs[0], { ...tabs[0].profile, quickSends: '' })", "x");
-  check("no quick sends, no bar", q(".quickbar").hidden === true);
+  json(mainWs, { type: "rules", buttons: [], series: [] });
+  check("no buttons, no bar", q(".quickbar").hidden === true);
 
   // the state while the page waits for a port to come back
   json(qws, { type: "state", state: "reconnecting", message: "read error" });

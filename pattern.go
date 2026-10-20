@@ -48,8 +48,9 @@ func regexBody(text string) (body, flags string, ok bool) {
 	return "", "", false
 }
 
-func (p Pattern) FindIndex(b []byte) []int             { return p.re.FindIndex(b) }
-func (p Pattern) MatchString(s string) bool            { return p.re.MatchString(s) }
-func (p Pattern) FindStringSubmatch(s string) []string { return p.re.FindStringSubmatch(s) }
-func (p Pattern) FindStringIndex(s string) []int       { return p.re.FindStringIndex(s) }
-func (p Pattern) IsRegex() bool                        { _, _, ok := regexBody(p.Text); return ok }
+func (p Pattern) FindIndex(b []byte) []int               { return p.re.FindIndex(b) }
+func (p Pattern) MatchString(s string) bool              { return p.re.MatchString(s) }
+func (p Pattern) FindStringSubmatch(s string) []string   { return p.re.FindStringSubmatch(s) }
+func (p Pattern) FindStringIndex(s string) []int         { return p.re.FindStringIndex(s) }
+func (p Pattern) FindStringSubmatchIndex(s string) []int { return p.re.FindStringSubmatchIndex(s) }
+func (p Pattern) IsRegex() bool                          { _, _, ok := regexBody(p.Text); return ok }

@@ -23,7 +23,6 @@ type Profile struct {
 	StopBits  string   `json:"stopBits"`  // 1, 1.5, 2
 	Flow      string   `json:"flow"`      // none, rtscts, xonxoff
 	Enter     string   `json:"enter"`     // what the Enter key sends: cr, lf, crlf
-	NoteLines bool     `json:"noteLines"` // write a note in the output when CTS, DSR, DCD or RI change
 	Peer      *Profile `json:"peer"`      // the second port of a tunnel: what one port receives is written to the other
 	Reconnect bool     `json:"reconnect"` // open the port again when it comes back after it went away
 	LocalEcho bool     `json:"localEcho"`
@@ -35,7 +34,6 @@ type Profile struct {
 	// What the page does with the text (rarer options, behind "Advanced").
 	ImplicitCR bool   `json:"implicitCR"` // a LF received also returns the cursor to the start of the line
 	ImplicitLF bool   `json:"implicitLF"` // a CR received also moves down a line
-	Answerback string `json:"answerback"` // sent when the device sends ENQ (Ctrl+E); empty sends nothing
 	Colours    string `json:"colours"`    // NAME=#rrggbb per line, over the theme
 	Bold       string `json:"bold"`       // how bold text shows: colour, font or both
 
@@ -75,21 +73,18 @@ type Profile struct {
 	// How received data is shown at first (the toolbar changes it for an open tab).
 	View          string `json:"view"`          // text, hex, dec or bin
 	Timestamps    bool   `json:"timestamps"`    // start each line with the time
-	GraphSeries   string `json:"graphSeries"`   // lines "name | prefix | suffix" or "name | /regex/": numbers to draw as lines
-	QuickSends    string `json:"quickSends"`    // lines "name | type | data": buttons of the send bar
+	Rules         string `json:"rules"`         // lines "when => do": what the session does by itself (rules.go)
 	RTSMode       string `json:"rtsMode"`       // RS-485 direction: off, or RTS high (or low) while sending
 	RTSDelayMs    int    `json:"rtsDelayMs"`    // how long RTS stays in the sending state after the last byte
 	CharDelayMs   int    `json:"charDelayMs"`   // slow send: pause after each character sent
 	LineDelayMs   int    `json:"lineDelayMs"`   // slow send: extra pause after a CR or LF sent
 	FrameSpec     string `json:"frameSpec"`     // how the Frames view cuts the bytes into frames (sync, size, end, header, check)
-	Highlights    string `json:"highlights"`    // lines "pattern = colour": colour the received lines that match
 	Filter        string `json:"filter"`        // show only the lines that match (text or /regex/); ! in front hides them instead
 	TimeMode      string `json:"timeMode"`      // what the time shows: clock or delta (since the line before)
 	NewLine       string `json:"newLine"`       // what ends a received line: terminal, cr, lf, crlf, custom or none
 	NewLineCustom string `json:"newLineCustom"` // the sequence for custom, with \r \n \t \xNN written out
 	ShowControl   bool   `json:"showControl"`   // show CR, LF and other control characters as <CR>, <LF>, <ESC>...
 	LinePauseMs   int    `json:"linePauseMs"`   // start a new line after this pause in the data; 0 means never
-	Triggers      string `json:"triggers"`      // lines "text => reply": send the reply when the text is received
 }
 
 var (
@@ -210,9 +205,6 @@ func (p *Profile) normalizeLimits() error {
 			return err
 		}
 	}
-	if len(p.Answerback) > 255 {
-		return errors.New("the answerback is limited to 255 characters")
-	}
 	if len(p.NewLineCustom) > 64 {
 		return errors.New("the custom new line is limited to 64 characters")
 	}
@@ -227,11 +219,8 @@ func (p *Profile) normalizeRules() error {
 	for _, check := range []func() error{
 		func() error { return checkColours(p.Colours) },
 		func() error { return checkFrameSpec(p.FrameSpec) },
-		func() error { return checkHighlights(p.Highlights) },
 		func() error { return checkFilter(p.Filter) },
-		func() error { _, err := parseGraphSeries(p.GraphSeries); return err },
-		func() error { _, err := parseQuickSends(p.QuickSends); return err },
-		func() error { _, err := parseTriggers(p.Triggers); return err },
+		func() error { return checkRules(p.Rules) },
 	} {
 		if err := check(); err != nil {
 			return err

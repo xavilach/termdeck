@@ -1,14 +1,13 @@
 "use strict";
 
-// The graph: numbers the server found in the received lines (settings: "name | prefix | suffix" or
-// "name | /regex/"), kept as points over time and drawn as lines over the output.
+// The graph: numbers the server found in the received lines (rules with "graph Name"), kept as points over
+// time and drawn as lines over the output.
 
 const GRAPH_COLOURS = ["#5b9dff", "#e5a83a", "#3fbf7f", "#c48bff", "#ef7ba8", "#4dd0e1", "#ff8a65", "#a5d6a7"];
 const GRAPH_MAX_POINTS = 20000;
 const GRAPH_MARGIN = { left: 56, right: 10, top: 8, bottom: 20 };
 
-const newGraph = (profile) => ({ names: seriesNames(profile.graphSeries), series: new Map(), windowSec: 60, each: false });
-const updateGraphSpecs = (tab) => { tab.graph.names = seriesNames(tab.profile.graphSeries); };
+const newGraph = () => ({ names: [], series: new Map(), windowSec: 60, each: false });
 
 function addPoint(graph, name, t, value) {
   if (!graph.series.has(name)) graph.series.set(name, []);
@@ -80,7 +79,7 @@ function drawGraph(tab) {
   ctx.fillStyle = colour("--muted");
   const graph = tab.graph;
   if (!graph.names.length) {
-    ctx.fillText("No series. Add lines such as  Temp | Temperature: | degC  on the Receive page (Graph) in the settings of the session.", 12, 22);
+    ctx.fillText("No series. Add a rule such as  Temperature: => graph Temp  on the Rules page of the settings.", 12, 22);
     return;
   }
   const { shown, all, from, to } = graphView(graph, Date.now());

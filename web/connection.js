@@ -24,6 +24,13 @@ const MESSAGES = {
   lines(tab, m) { tab.lines = m; REFRESH(tab); },
   points: receivePoints,
   notify: (tab, m) => notifyLine(tab, m.text),
+  sound: (tab) => playSound(tab),
+  // the buttons and the graph series the rules of the settings make
+  rules(tab, m) {
+    tab.buttons = m.buttons;
+    tab.graph.names = m.series;
+    if (tab === tab.pane.active) { showQuick(tab.pane); syncGraph(tab.pane); }
+  },
   xfer: receiveTransfer,
   counters(tab, m) { tab.counters = m; updateCounters(tab); },
   jobs: (tab, m) => setJobs(tab, m.jobs),

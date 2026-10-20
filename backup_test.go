@@ -9,7 +9,7 @@ import (
 
 func TestSettingsCanBeExportedAndImportedElsewhere(t *testing.T) {
 	a := newTestServer(t)
-	a.do(t, "POST", "/api/devices", `{"name":"Board","settings":{"quickSends":"Hi | text | hello"}}`, a.secret)
+	a.do(t, "POST", "/api/devices", `{"name":"Board","settings":{"rules":"button Hi => send hello"}}`, a.secret)
 	a.do(t, "PUT", "/api/portentries", `{"port":"COM3","device":"Board","settings":{"baud":9600}}`, a.secret)
 	a.do(t, "POST", "/api/scripts", `{"name":"boot","device":"Board","commands":["one","@wait=5"]}`, a.secret)
 	code, exported := a.do(t, "GET", "/api/export", "", a.secret)

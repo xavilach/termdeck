@@ -123,24 +123,6 @@ func TestChecksMatchTheSharedTable(t *testing.T) {
 	}
 }
 
-func TestHighlightsPickAStyleAndCanNotify(t *testing.T) {
-	rules, err := parseHighlights("# c\nERROR = red+bold\n/warn(ing)?/ = orange\nok = green\nreboot = notify")
-	if err != nil || len(rules) != 4 {
-		t.Fatal(err, len(rules))
-	}
-	for line, want := range map[string]string{"an ERROR happened": "31;1", "warning: low": "38;5;208", "all OK": "32", "nothing": "", "reboot now": ""} {
-		if got := styleOf(rules, line); got != want {
-			t.Errorf("%q: got %q, want %q", line, got, want)
-		}
-	}
-	if !notifies(rules, "reboot now") || notifies(rules, "all ok") {
-		t.Error("notify")
-	}
-	if got := plainLine([]byte("\x1b[1mERROR\x1b[0m\r\n")); got != "ERROR" {
-		t.Errorf("the colours the device sent do not get in the way: %q", got)
-	}
-}
-
 func TestTheFilterShowsOrHidesLines(t *testing.T) {
 	show, _ := parseFilter("tick")
 	hide, _ := parseFilter("!heartbeat")
@@ -302,8 +284,8 @@ func TestTheNumberViewsShowRowsOfBytesWithTheirText(t *testing.T) {
 }
 
 func TestTheFilterAndHighlightsWorkOnWholeLines(t *testing.T) {
-	f := screenFormat(Profile{Highlights: "ERROR = red"}, viewSettings{Mode: "text", Filter: "!tick"})
-	got := render(f, rx("tick 1\r\nan ER", 0), rx("ROR\r\nok\r\n", 1))
+	f := screenFormat(Profile{Rules: "ERROR => red\nheartbeat => hide"}, viewSettings{Mode: "text", Filter: "!tick"})
+	got := render(f, rx("tick 1\r\nan ER", 0), rx("ROR\r\nheartbeat\r\nok\r\n", 1))
 	if got != "\x1b[31man ERROR\x1b[0m\r\nok\r\n" {
 		t.Errorf("got %q", got)
 	}
@@ -315,13 +297,6 @@ func TestTheFilterAndHighlightsWorkOnWholeLines(t *testing.T) {
 	r.idle(at0.Add(lineIdle))
 	if out := string(r.take()); out != "login: " {
 		t.Errorf("then shows after a pause: %q", out)
-	}
-	var notified []string
-	r = newRenderer(screenFormat(Profile{Highlights: "FAULT = notify"}, viewSettings{Mode: "text"}))
-	r.onNotify = func(line string) { notified = append(notified, line) }
-	r.add(rx("a FAULT here\r\nfine\r\n", 0))
-	if len(notified) != 1 || notified[0] != "a FAULT here" {
-		t.Errorf("notified %q", notified)
 	}
 }
 

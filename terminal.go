@@ -67,11 +67,14 @@ type termSession struct {
 
 	writeMu sync.Mutex // one command at a time reaches the port
 
-	opMu          sync.Mutex   // one open at a time
-	answers       chan string  // the page's answer about an existing log file
-	codec         *Codec       // device character set; nil for UTF-8
-	rx, tx        atomic.Int64 // bytes received and sent since the port opened
-	triggers      []trigger
+	opMu          sync.Mutex      // one open at a time
+	answers       chan string     // the page's answer about an existing log file
+	codec         *Codec          // device character set; nil for UTF-8
+	rx, tx        atomic.Int64    // bytes received and sent since the port opened
+	rules         []rule          // what the session does by itself, from its settings
+	framer        *frameParser    // the frames of what the device sends, for the rules on bad frames
+	lastRx        time.Time       // when the device last sent something, for the idle rules
+	idleFired     map[int]bool    // the idle rules that fired since then
 	replyMu       sync.Mutex      // trigger replies go out one at a time, in order
 	pending       atomic.Int32    // trigger replies waiting or running
 	runCtx        context.Context // ends when the port closes: for steps typed in Cmd and trigger replies
@@ -94,8 +97,7 @@ type termSession struct {
 	view     viewSettings
 	viewSet  bool      // the page told its view; until then the view follows the settings
 	screen   *renderer // the tab's view of the records
-	lines    *renderer // the received lines as the session cuts them, for the graph
-	graph    []graphSpec
+	lines    *renderer // the received lines as the session cuts them, for the graph and the rules
 }
 
 const (
@@ -210,9 +212,15 @@ func (t *termSession) sendJSON(v any) {
 // sendState tells the page the state of the port, and notes it in the stream.
 func (t *termSession) sendState(state, message string) {
 	t.mu.Lock()
+	was := t.state
 	t.state = state
 	profile := t.profile
 	t.mu.Unlock()
+	defer func() {
+		if was == "connected" && state != "connected" {
+			t.fire("disconnect", "", message)
+		}
+	}()
 	t.sendJSON(map[string]string{"type": "state", "state": state, "message": message})
 	switch state {
 	case "failed", "ended":
@@ -287,6 +295,7 @@ func (t *termSession) tick() {
 		case <-t.ctx.Done():
 			return
 		case now := <-time.After(100 * time.Millisecond):
+			t.idleRules(now)
 			t.streamMu.Lock()
 			t.screen.idle(now)
 			t.lines.idle(now)
@@ -306,7 +315,6 @@ func (t *termSession) newScreen() *renderer {
 		t.view = viewOf(profile)
 	}
 	r := newRenderer(screenFormat(profile, t.view))
-	r.onNotify = func(line string) { t.sendJSON(map[string]string{"type": "notify", "text": line}) }
 	return r
 }
 
@@ -314,12 +322,16 @@ func (t *termSession) newLines() *renderer {
 	t.mu.Lock()
 	profile := t.profile
 	t.mu.Unlock()
-	t.graph, _ = parseGraphSeries(profile.GraphSeries) // checked by Normalize
+	rules, _ := parseRules(profile.Rules) // checked by Normalize
 	r := newRenderer(linesFormat(profile))
 	r.onLine = func(src, line string, at time.Time) {
-		if values := extractValues(line, t.graph); len(values) > 0 && src == srcRx {
+		if src != srcRx || r.replaying {
+			return
+		}
+		if values := graphValues(rules, line); len(values) > 0 {
 			t.sendJSON(map[string]any{"type": "points", "t": at.UnixMilli(), "values": values})
 		}
+		t.lineRules(rules, line)
 	}
 	return r
 }
@@ -333,12 +345,13 @@ func (t *termSession) redraw() {
 	defer t.streamMu.Unlock()
 	t.screen = t.newScreen()
 	t.lines = t.newLines()
-	t.screen.replaying = true
+	t.screen.replaying, t.lines.replaying = true, true
 	for _, rec := range t.hist.records {
 		t.screen.add(rec)
 		t.lines.add(rec)
 	}
 	t.lines.take()
+	t.lines.replaying = false
 	t.screen.idle(time.Now())
 	t.screen.replaying = false
 	out := t.screen.take()
@@ -376,6 +389,16 @@ func (t *termSession) setProfile(p Profile) {
 	t.mu.Lock()
 	t.profile, t.hasProfile = p, true
 	t.mu.Unlock()
+	t.sendRuleNames()
+}
+
+// sendRuleNames tells the page the buttons and the graph series the rules of the settings make.
+func (t *termSession) sendRuleNames() {
+	t.mu.Lock()
+	rules, _ := parseRules(t.profile.Rules) // checked by Normalize
+	t.mu.Unlock()
+	buttons, series := ruleNames(rules)
+	t.sendJSON(map[string]any{"type": "rules", "buttons": append([]string{}, buttons...), "series": append([]string{}, series...)})
 }
 
 // sentText is how a line that was sent shows: the text, without its line end, with control characters escaped.
@@ -443,7 +466,11 @@ func (t *termSession) openPort(profile Profile, reconnecting bool) bool {
 	if profile.RTSMode == "high" || profile.RTSMode == "low" {
 		port.SetRTS(rs485Idle(profile.RTSMode)) // listening until something is sent
 	}
-	t.triggers, _ = parseTriggers(profile.Triggers) // checked by Normalize
+	t.rules, _ = parseRules(profile.Rules) // checked by Normalize
+	t.framer, t.lastRx, t.idleFired = nil, time.Now(), map[int]bool{}
+	if spec, err := parseFrameSpec(profile.FrameSpec); err == nil && spec != nil && hasRule(t.rules, "frame") {
+		t.framer = &frameParser{spec: spec}
+	}
 	t.runCtx, t.runStop = context.WithCancel(t.ctx)
 	t.startWriter(profile, t.runCtx)
 	t.trigMu.Lock()
@@ -459,9 +486,10 @@ func (t *termSession) openPort(profile Profile, reconnecting bool) bool {
 	if logErr != nil {
 		t.notice("log not written: " + logErr.Error())
 	}
-	go t.read(gen, port, t.codec, t.triggers, t.runCtx)
+	go t.read(gen, port, t.codec, t.runCtx)
 	go t.watchLines(gen, port, asserted(profile.DTR), asserted(profile.RTS))
 	go t.watchCounters(gen)
+	t.startRules()
 	return true
 }
 
@@ -471,6 +499,7 @@ func (t *termSession) useProfile(p Profile) {
 	before, _ := json.Marshal(t.profile)
 	t.profile, t.hasProfile = p, true
 	t.mu.Unlock()
+	t.sendRuleNames()
 	if after, _ := json.Marshal(p); string(after) != string(before) {
 		t.redraw()
 	}
@@ -494,9 +523,9 @@ func (t *termSession) askAboutLog(profile Profile) string {
 	return "none"
 }
 
-func (t *termSession) read(gen int, port serial.Port, codec *Codec, triggers []trigger, ctx context.Context) {
+func (t *termSession) read(gen int, port serial.Port, codec *Codec, ctx context.Context) {
 	buf := make([]byte, 4096)
-	var window []byte // the end of what the device sent, to match triggers across chunks
+	var window []byte // the end of what the device sent, to match the rules across chunks
 	for {
 		n, err := port.Read(buf)
 		if n > 0 && t.feedTransfer(buf[:n]) {
@@ -508,8 +537,8 @@ func (t *termSession) read(gen int, port serial.Port, codec *Codec, triggers []t
 			t.expectFeed(text)
 			t.emit(record{at: time.Now(), src: srcRx, raw: raw, text: text})
 			t.stopLogOnError()
-			t.answerENQ(raw)
-			window = t.match(ctx, triggers, window, text)
+			window = t.matchRules(ctx, window, text)
+			t.frameRules(raw)
 		}
 		if err != nil || n == 0 {
 			t.mu.Lock()
@@ -531,19 +560,6 @@ func (t *termSession) read(gen int, port serial.Port, codec *Codec, triggers []t
 					t.sendState("ended", message)
 				}
 			}
-			return
-		}
-	}
-}
-
-// answerENQ sends the answerback of the session when the device asks who we are (ENQ, Ctrl+E).
-func (t *termSession) answerENQ(raw []byte) {
-	t.mu.Lock()
-	answer := t.profile.Answerback
-	t.mu.Unlock()
-	for _, b := range raw {
-		if b == 5 && answer != "" {
-			t.write([]byte(answer))
 			return
 		}
 	}
@@ -693,7 +709,7 @@ func (t *termSession) sendDataWait(out, shown []byte, wait bool) {
 
 // terminal serves the page of one tab: GET /api/terminal?id=<the tab's id>. The page sends JSON: hello (its
 // settings and view: the session sends its state and shows its records again), view, profile, open, close,
-// send (the send bar: format, data, check, end), quick (a quick send, by name), auto (the same, every ms),
+// send (the send bar: format, data, check, end), button (of a rule, by name), auto (the send bar, every ms),
 // file (a file to send), raw (bytes), flush, mark, clear, note, xmodem, break, script, stop (every job),
 // stopjob, log, line, end (the tab is closed).
 // The session sends its screen as binary messages (text for the terminal) and JSON: session, state, reset and
@@ -748,6 +764,7 @@ func (t *termSession) hello(m clientMessage) {
 	// port that opens must not be overtaken by these
 	t.sendJSON(map[string]any{"type": "counters", "rx": t.rx.Load(), "tx": t.tx.Load()})
 	t.sendJSON(info)
+	t.sendRuleNames()
 	t.redraw()
 }
 
@@ -803,7 +820,7 @@ var messageHandlers = map[string]func(t *termSession, m clientMessage){
 	},
 	"end":           func(t *termSession, m clientMessage) { go t.end() },
 	"send":          func(t *termSession, m clientMessage) { t.sendBar(m) },
-	"quick":         func(t *termSession, m clientMessage) { t.sendQuick(m.Name) },
+	"button":        func(t *termSession, m clientMessage) { t.pressButton(m.Name) },
 	"raw":           func(t *termSession, m clientMessage) { t.writeRaw(m.Bytes) },
 	"resetcounters": func(t *termSession, m clientMessage) { t.resetCounters() },
 	"clear":         func(t *termSession, m clientMessage) { t.clearRecords() },

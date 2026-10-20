@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNormalizeDefaultsAndErrors(t *testing.T) {
@@ -105,7 +106,7 @@ func TestAScriptOfGenericIsForEveryPort(t *testing.T) {
 }
 
 func TestPuttyStyleOptionsAreValidated(t *testing.T) {
-	good := Profile{Device: "x", Bold: "font", RightClick: "paste", Answerback: "termdeck",
+	good := Profile{Device: "x", Bold: "font", RightClick: "paste",
 		Colours: "background=#101820\n\nforeground = #AABBCC\nbrightRed=#ff0000"}
 	if err := good.Normalize(); err != nil {
 		t.Fatal(err)
@@ -121,7 +122,7 @@ func TestPuttyStyleOptionsAreValidated(t *testing.T) {
 	for _, bad := range []Profile{
 		{Device: "x", Bold: "huge"}, {Device: "x", RightClick: "menu"},
 		{Device: "x", Colours: "background=blue"}, {Device: "x", Colours: "sky=#112233"}, {Device: "x", Colours: "background"},
-		{Device: "x", Answerback: strings.Repeat("a", 300)}, {Device: "x", BellSound: "http://example.invalid/a.mp3"},
+		{Device: "x", BellSound: "http://example.invalid/a.mp3"},
 	} {
 		if err := bad.Normalize(); err == nil {
 			t.Errorf("%+v should be refused", bad)
@@ -133,7 +134,7 @@ func TestPuttyStyleOptionsAreValidated(t *testing.T) {
 	}
 }
 
-func TestStepsAndTriggersAreValidated(t *testing.T) {
+func TestStepsAndRulesAreValidated(t *testing.T) {
 	for _, bad := range []string{"@dtr=2", "@wait=-1", "@hex=0", "@hex=zz", "@speed=1", "@dtr"} {
 		sc := Script{Name: "s", Commands: []string{bad}}
 		if sc.Normalize() == nil {
@@ -144,13 +145,13 @@ func TestStepsAndTriggersAreValidated(t *testing.T) {
 	if err := good.Normalize(); err != nil {
 		t.Error(err)
 	}
-	for _, bad := range []string{"no arrow", " => reply", "/(/ => x", "a => @wait=x"} {
-		p := Profile{Device: "x", Triggers: bad}
+	for _, bad := range []string{"no arrow", " => send x", "/(/ => send x", "a => send @wait=x"} {
+		p := Profile{Device: "x", Rules: bad}
 		if p.Normalize() == nil {
-			t.Errorf("trigger %q should be refused", bad)
+			t.Errorf("rule %q should be refused", bad)
 		}
 	}
-	p := Profile{Device: "x", Triggers: "# comment\nlogin: => root\n/a+/ => @wait=1", View: "hex", LinePauseMs: 100}
+	p := Profile{Device: "x", Rules: "# comment\nlogin: => send root\n/a+/ => send @wait=1", View: "hex", LinePauseMs: 100}
 	if err := p.Normalize(); err != nil {
 		t.Error(err)
 	}
@@ -182,17 +183,23 @@ func FuzzParseSteps(f *testing.F) {
 	})
 }
 
-func FuzzParseTriggers(f *testing.F) {
-	for _, seed := range []string{"login: => admin", "/a+/ => @wait=1", "# c", "=>", "/(/ => x", "a => @hex=zz", "//=>x", "/ / => y"} {
+func FuzzParseRules(f *testing.F) {
+	for _, seed := range []string{"login: => send admin", "/a+/ => send @wait=1", "# c", "=>", "/(/ => send x", "a => send @hex=zz", "//=>red", "/ / => hide",
+		"every 1s => mark", "button A => send a", "on cts => note", "x => graph T", "idle 2m => sound"} {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, text string) {
-		triggers, err := parseTriggers(text)
+		rules, err := parseRules(text)
 		if err != nil {
 			return
 		}
-		for _, tr := range triggers {
-			tr.pattern.FindIndex([]byte("some text the device sent"))
+		for _, r := range rules {
+			if r.when == "match" {
+				r.pattern.FindIndex([]byte("some text the device sent"))
+			}
+			if (r.when == "every" || r.when == "idle") && r.every < 10*time.Millisecond {
+				t.Fatalf("%q: every %v", text, r.every)
+			}
 		}
 	})
 }
@@ -237,32 +244,6 @@ func stepsText(steps []step) string {
 		}
 	}
 	return strings.Join(out, " ")
-}
-
-func TestQuickSendsAreParsedAndValidated(t *testing.T) {
-	good := "# resets\nReset | hex | 41 42 | end=cr\nHello | text | AT+GMR\\r\nLines | dec | 1, 2 ,255\nBits | bin | 01000001 10\nWiggle | cmd | dtr=0; wait=100; dtr=1\nPipe | text | a | b | end=lf\n"
-	got, err := parseQuickSends(good)
-	if err != nil || len(got) != 6 {
-		t.Fatalf("%v %+v", err, got)
-	}
-	for i, want := range []string{"hex=4142 end=0D", "text=AT+GMR\\r end=enter", "dec=0102FF end=", "bin=4102 end=", "dtr=0 wait=100 dtr=1", "text=a | b end=0A"} {
-		if s := stepsText(got[i].steps); s != want {
-			t.Errorf("%s: %q, want %q", got[i].Name, s, want)
-		}
-	}
-	withCheck, err := parseQuickSends("Modbus | hex | 01 03 00 00 00 01 | check=crc16modbus | end=none")
-	if err != nil || stepsText(withCheck[0].steps) != "hex=010300000001 check=crc16modbus end=" {
-		t.Errorf("%v %+v", err, withCheck)
-	}
-	for _, bad := range []string{"x | hex | 41 | check=crc99", "no bars", "x | float | 1", " | text | a", "x | hex | 4", "x | dec | 256", "x | bin | 102", "x | cmd | speed=1", "x | text | a | end=never", strings.Repeat("n", 41) + " | text | a"} {
-		if _, err := parseQuickSends(bad); err == nil {
-			t.Errorf("%q should be refused", bad)
-		}
-	}
-	p := Profile{Device: "x", QuickSends: "bad"}
-	if p.Normalize() == nil {
-		t.Error("a profile with a bad quick send was accepted")
-	}
 }
 
 func TestExpectAndTimeoutSteps(t *testing.T) {

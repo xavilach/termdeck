@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"termdeck/internal/serial"
@@ -61,12 +62,9 @@ func (t *termSession) watchLines(gen int, port serial.Port, dtr, rts bool) {
 	}
 }
 
-// noteLines notes the lines of the device that changed, when the session asks for it.
+// noteLines does what the rules say when a line of the device changes ("on CTS => note").
 func (t *termSession) noteLines(before, now *serial.ModemStatusBits) {
-	t.mu.Lock()
-	wanted := t.profile.NoteLines
-	t.mu.Unlock()
-	if before == nil || !wanted {
+	if before == nil {
 		return
 	}
 	for _, l := range []struct {
@@ -78,7 +76,7 @@ func (t *termSession) noteLines(before, now *serial.ModemStatusBits) {
 			if l.now {
 				state = "on"
 			}
-			t.note(l.name + " " + state)
+			t.fire("line", strings.ToLower(l.name), l.name+" "+state)
 		}
 	}
 }

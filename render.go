@@ -41,7 +41,7 @@ type format struct {
 	printable  bool              // escape sequences and control characters are left out of the text
 	implicitLF bool              // a CR received also moves down a line
 	noMouse    bool              // the device cannot switch on mouse reports
-	highlights []highlight
+	rules      []rule            // the rules that colour or hide lines
 	filter     *lineFilter
 	frames     *frameSpec
 	framesErr  error
@@ -56,7 +56,12 @@ func screenFormat(p Profile, view viewSettings) format {
 	}
 	f := format{view: view, ansi: true, showTx: p.LocalEcho, implicitLF: p.ImplicitLF, noMouse: p.NoMouseReport,
 		markers: map[string]string{srcRx: p.RxMarker, srcTx: p.TxMarker, srcA2B: "\x1b[32mA→B \x1b[0m", srcB2A: "\x1b[36mB→A \x1b[0m"}}
-	f.highlights, _ = parseHighlights(p.Highlights) // checked by Normalize
+	rules, _ := parseRules(p.Rules) // checked by Normalize
+	for _, r := range rules {
+		if r.when == "match" && (r.sgr != "" || r.hide) {
+			f.rules = append(f.rules, r)
+		}
+	}
 	f.filter, _ = parseFilter(view.Filter)
 	f.frames, f.framesErr = parseFrameSpec(p.FrameSpec)
 	return f
@@ -103,8 +108,7 @@ type renderer struct {
 	warned    bool
 	replaying bool
 
-	onLine   func(src, line string, at time.Time) // a received line is complete (line mode)
-	onNotify func(line string)                    // a line matched a highlight that asks for a notification
+	onLine func(src, line string, at time.Time) // a received line is complete (line mode)
 }
 
 func newRenderer(f format) *renderer {
@@ -152,7 +156,7 @@ func (r *renderer) idle(now time.Time) {
 
 // lineMode: lines are handled whole (filter, highlights, printable text, the lines of the graph).
 func (r *renderer) lineMode() bool {
-	return !r.f.ansi || r.f.filter != nil || len(r.f.highlights) > 0
+	return !r.f.ansi || r.f.filter != nil || len(r.f.rules) > 0
 }
 
 func (r *renderer) head(src string, at time.Time) string {
@@ -413,7 +417,7 @@ func (r *renderer) flushPending() {
 	r.line(line, r.lastSrc, r.pendingAt, false)
 }
 
-// line shows one line (or the start of one, waiting too long for its end) through the filter and the highlights.
+// line shows one line (or the start of one, waiting too long for its end) through the filter and the rules.
 func (r *renderer) line(line []byte, src string, at time.Time, complete bool) {
 	if src == "" {
 		src = srcRx
@@ -436,10 +440,10 @@ func (r *renderer) line(line []byte, src string, at time.Time, complete bool) {
 		r.writeLines(append(body, end...), src, at)
 		return
 	}
-	if !r.replaying && r.onNotify != nil && notifies(r.f.highlights, plain) {
-		r.onNotify(plain)
+	sgr, hide := styleOfLine(r.f.rules, plain)
+	if hide {
+		return
 	}
-	sgr := styleOf(r.f.highlights, plain)
 	if sgr == "" {
 		r.writeLines(line, src, at)
 		return

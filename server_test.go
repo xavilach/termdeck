@@ -125,7 +125,7 @@ func TestTheLayersMakeTheSettingsOfAPort(t *testing.T) {
 		}
 	}
 	put("PUT", "/api/devices/Generic", `{"name":"Generic","settings":{"fontSize":16,"baud":9600}}`)
-	put("POST", "/api/devices", `{"name":"Board","settings":{"baud":57600,"enter":"lf","quickSends":"Hi | text | hello"}}`)
+	put("POST", "/api/devices", `{"name":"Board","settings":{"baud":57600,"enter":"lf","rules":"button Hi => send hello"}}`)
 	put("PUT", "/api/portentries", `{"port":"COM3","device":"Board","settings":{"flow":"rtscts"}}`)
 	layers := func(query string) map[string]any {
 		_, out := ts.do(t, "GET", "/api/layers?"+query, "", ts.secret)
@@ -701,7 +701,7 @@ func TestTriggerAnswersWhatTheDeviceSends(t *testing.T) {
 	master, slave := newPty(t)
 	c, ctx := dialTerminal(t, ts)
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "enter": "lf",
-		"triggers": "login: => admin\n/Pass(word)?:/ => @hex=31 32; wait=1"}})
+		"rules": "login: => send admin\n/Pass(word)?:/ => send @hex=31 32; wait=1"}})
 	waitFor(t, c, ctx, "state", "connected")
 	master.Write([]byte("lo"))
 	time.Sleep(50 * time.Millisecond)
@@ -862,7 +862,7 @@ func TestOpeningAndClosingPortsManyTimesLeavesNoGoroutinesBehind(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	before := runtime.NumGoroutine()
 	for i := 0; i < 40; i++ {
-		sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:counter", "triggers": "x => y"}})
+		sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:counter", "rules": "x => send y"}})
 		waitFor(t, c, ctx, "state", "connected")
 		sendJSON(t, c, ctx, map[string]any{"type": "close"})
 		waitFor(t, c, ctx, "state", "closed")
@@ -949,13 +949,13 @@ func TestALogThatFailsStopsAndTellsThePage(t *testing.T) {
 	}
 }
 
-func TestATriggerThatTriggersItselfIsPaused(t *testing.T) {
+func TestARuleThatFiresItselfIsPaused(t *testing.T) {
 	ts := newTestServer(t)
 	c, ctx := dialTerminal(t, ts)
-	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo", "enter": "lf", "triggers": "a => a"}})
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo", "enter": "lf", "rules": "a => send a"}})
 	waitFor(t, c, ctx, "state", "connected")
 	sendJSON(t, c, ctx, map[string]any{"type": "raw", "bytes": []byte("a")})
-	if n := waitNote(t, c, ctx, "triggers"); !strings.Contains(n, "triggers paused") {
+	if n := waitNote(t, c, ctx, "rules paused"); !strings.Contains(n, "rules paused") {
 		t.Errorf("notice %v", n)
 	}
 }
@@ -1098,7 +1098,7 @@ func resetFlaky() {
 func TestTheServerSendsTheGraphPoints(t *testing.T) {
 	ts := newTestServer(t)
 	c, ctx := dialTerminal(t, ts)
-	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo", "graphSeries": "T | t=\nH | /h=([0-9.]+)%/"}})
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo", "rules": "t= => graph T\n/h=([0-9.]+)%/ => graph H"}})
 	waitFor(t, c, ctx, "state", "connected")
 	sendJSON(t, c, ctx, map[string]any{"type": "raw", "bytes": []byte("t=21.5 h=40%\r\nt=22")})
 	m := waitFor(t, c, ctx, "points", "")
@@ -1433,7 +1433,7 @@ func randomMessages(t *testing.T, seed int64) {
 	devices := []any{"fake:echo", "fake:shell", "fake:counter", "fake:binary", "fake:link-a", "fake:link-b", "fake:flaky", "nothing", "", "COM99"}
 	profile := func() map[string]any {
 		p := map[string]any{"name": "r", "device": pick(devices...), "baud": pick(9600, 0, -5, 115200, 99999999),
-			"triggers": pick("", "a => b", "/(/ => x", "x => @wait=1; hex=41"), "graphSeries": pick("", "A | a=", "bad"), "charDelayMs": pick(0, 1, 5, -1),
+			"rules": pick("", "a => send b", "/(/ => send x", "x => send @wait=1; hex=41", "a= => graph A", "bad", "every 10ms => send @hex=41", "on cts => note"), "charDelayMs": pick(0, 1, 5, -1),
 			"rtsMode": pick("", "off", "high", "low", "sideways"), "reconnect": pick(true, false), "charset": pick("utf-8", "cp437", "nope"),
 			"view": pick("text", "hex", "frames", "x"), "frameSpec": pick("", "size = 4", "bad"), "logPath": pick("", "/dev/null")}
 		if rng.Intn(4) == 0 {
@@ -1542,7 +1542,7 @@ func TestTheFormOffersTheChoicesTheServerAccepts(t *testing.T) {
 	want := map[string][]string{`name="dataBits"`: ints(dataBitsS), `name="parity"`: parities, `name="stopBits"`: stopBits, `name="flow"`: flows,
 		`name="enter"`: enters, `name="rtsMode"`: rtsModes, `name="view"`: views, `name="newLine"`: newLines, `name="timeMode"`: timeModes,
 		`name="logExisting"`: existings, `name="bell"`: bells, `name="theme"`: themes, `name="cursor"`: cursors, `name="rightClick"`: rightClicks,
-		`name="bold"`: bolds, "data-view": views, "data-nl": newLines, "data-time-mode": timeModes, "data-send-type": quickTypes,
+		`name="bold"`: bolds, "data-view": views, "data-nl": newLines, "data-time-mode": timeModes, "data-send-type": sendFormats,
 		"data-send-check": checkNames(), "data-send-end": {"none", "cr", "lf", "crlf", "custom"}}
 	seen := map[string]bool{}
 	for _, sel := range selects {
