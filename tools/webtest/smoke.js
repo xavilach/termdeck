@@ -173,20 +173,24 @@ const tab = () => run("tabs[0]", "x");
   // invalid char filtering
   const be = new w.InputEvent("beforeinput", { data: "2", inputType: "insertText", cancelable: true, bubbles: true });
   input.dispatchEvent(be); check("binary refuses 2", be.defaultPrevented);
-  // auto send
+  // auto send: a job on the server
   typ.value = "text"; fire(typ, "change"); input.value = "ping"; end.value = "none"; fire(end, "change");
-  const before = ws.sent.filter((m) => m.type === "send").length;
   q("[data-auto-ms]").value = "10"; const auto = q("[data-auto]"); auto.checked = true; fire(auto, "change");
-  await sleep(80);
-  const after = ws.sent.filter((m) => m.type === "send").length;
-  check("auto send repeats and keeps input", after - before >= 3 && input.value === "ping", { before, after });
-  auto.checked = false; fire(auto, "change"); await sleep(40);
-  const stopped = ws.sent.filter((m) => m.type === "send").length; await sleep(40);
-  check("auto send stops", ws.sent.filter((m) => m.type === "send").length === stopped);
-  // disconnect stops auto + disables bar
-  auto.checked = true; fire(auto, "change");
+  const autoMsg = lastOf(ws, "auto");
+  check("Auto asks the session to send again and again, and keeps the input", autoMsg && autoMsg.format === "text" && autoMsg.data === "ping" && autoMsg.end === "none" && autoMsg.ms === 10 && input.value === "ping", autoMsg);
+  json(ws, { type: "jobs", jobs: [{ id: 7, kind: "auto", name: "ping every 10ms", done: 3, total: 0 }] });
+  check("the running job shows in the toolbar with a Stop, and Auto stays ticked", /Auto ping every 10ms/.test(q(".toolbar .jobs").textContent) && !q(".toolbar .jobs").hidden && auto.checked);
+  auto.checked = false; fire(auto, "change");
+  check("unticking Auto stops that job", lastOf(ws, "stopjob")?.job === 7);
+  json(ws, { type: "jobs", jobs: [] });
+  check("and the toolbar shows nothing running", q(".toolbar .jobs").hidden && !auto.checked);
+  json(ws, { type: "jobs", jobs: [{ id: 8, kind: "script", name: "boot", done: 0, total: 0 }] });
+  q(".toolbar .jobs button").click();
+  check("the Stop of a job stops it", lastOf(ws, "stopjob")?.job === 8 && run("tabs[0].script", "x") === "boot");
+  json(ws, { type: "jobs", jobs: [] });
+  // disconnect disables the bar
   json(ws, { type: "state", state: "ended", message: "gone" });
-  check("bar disabled when not connected, auto off", input.disabled && !auto.checked);
+  check("bar disabled when not connected", input.disabled && !auto.checked);
   json(ws, { type: "state", state: "connected", message: "" });
 
   // main output is read-only
@@ -194,13 +198,15 @@ const tab = () => run("tabs[0]", "x");
   const keyRes = t.term.keyHandler({ type: "keydown", key: "a", code: "KeyA", ctrlKey: false, shiftKey: false });
   check("typing in the output sends nothing and is swallowed", keyRes === false && ws.sent.length === sentBefore);
 
-  // file send
+  // file send: the server sends it as a job
   const file = new w.File([new Uint8Array(600).fill(65)], "f.bin");
   await run("sendFile(tabs[0].pane, null)", "x");
   await (async () => { const f = file; Object.defineProperty(f, "arrayBuffer", { value: async () => new Uint8Array(600).fill(65).buffer }); w.__f = f; return run("sendFile(tabs[0].pane, window.__f)", "x"); })();
-  const raws = ws.sent.filter((m) => m.type === "raw");
-  check("file sent in chunks", raws.length >= 3 && raws.slice(-3).reduce((n, m) => n + Buffer.from(m.bytes, "base64").length, 0) === 600, raws.length);
-  check("and noted with the records of the tab", ws.sent.some((m) => m.type === "note" && /f\.bin sent/.test(m.data)));
+  const fileMsg = lastOf(ws, "file");
+  check("a file goes to the session whole, with its name", fileMsg && fileMsg.name === "f.bin" && Buffer.from(fileMsg.bytes, "base64").length === 600, fileMsg && fileMsg.name);
+  json(ws, { type: "jobs", jobs: [{ id: 9, kind: "file", name: "f.bin", done: 300, total: 600 }] });
+  check("and its progress shows", /File f\.bin 50%/.test(q(".toolbar .jobs").textContent), q(".toolbar .jobs").textContent);
+  json(ws, { type: "jobs", jobs: [] });
 
   // find
   t.term.buffer.active = { length: 2, getLine: (i) => ({ translateToString: () => ["abc Hello", "hello again"][i] }) };
@@ -262,14 +268,9 @@ const tab = () => run("tabs[0]", "x");
   check("a message to a connection that is still opening is not sent and does not throw", sentOk === false && errors.length === 0, errors);
   run("closeTab(tabs[tabs.length - 1])", "x");
 
-  // closing a tab ends its session, its auto send and its file job
-  typ.value = "text"; fire(typ, "change"); input.value = "tick"; end.value = "none"; fire(end, "change");
-  json(ws, { type: "state", state: "connected", message: "" });
-  q("[data-auto-ms]").value = "10"; auto.checked = true; fire(auto, "change");
-  const job = { stop: false }; t.job = job;
+  // closing a tab ends its session (and its jobs with it)
   run("closeTab(tabs[0])", "x");
-  const n0 = ws.sent.filter((m) => m.type === "send").length; await sleep(60);
-  check("closing a tab stops auto send and a file job, and ends the session", ws.sent.filter((m) => m.type === "send").length === n0 && job.stop === true && run("tabs.length", "x") === 0 && ws.sent.some((m) => m.type === "end"));
+  check("closing a tab ends its session", run("tabs.length", "x") === 0 && ws.sent.some((m) => m.type === "end"));
 
   // style snapshot for refactoring the style sheet: SNAPSHOT=file node smoke.js
   if (process.env.SNAPSHOT) {

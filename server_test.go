@@ -372,7 +372,7 @@ func TestScriptSendsItsCommandsWithADelayAndLoops(t *testing.T) {
 	waitFor(t, c, ctx, "state", "connected")
 	start := time.Now()
 	sendJSON(t, c, ctx, map[string]any{"type": "script", "name": "boot"})
-	waitFor(t, c, ctx, "script", "done")
+	waitNote(t, c, ctx, "script boot done")
 	if elapsed := time.Since(start); elapsed < 150*time.Millisecond {
 		t.Errorf("3 pauses of 50 ms expected, script took %v", elapsed)
 	}
@@ -397,15 +397,14 @@ func TestScriptCanBeStoppedAndNeedsAnOpenPort(t *testing.T) {
 	ts.do(t, "POST", "/api/scripts", `{"name":"forever","commands":["x"],"delayMs":20,"loop":true}`, ts.secret)
 	c, ctx := dialTerminal(t, ts)
 	sendJSON(t, c, ctx, map[string]any{"type": "script", "name": "forever"})
-	if m := waitFor(t, c, ctx, "script", "error"); m["message"] != "the port is closed" {
-		t.Errorf("got %v", m)
-	}
+	waitNote(t, c, ctx, "script forever: the port is closed")
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave}})
 	waitFor(t, c, ctx, "state", "connected")
 	sendJSON(t, c, ctx, map[string]any{"type": "script", "name": "forever"})
-	waitFor(t, c, ctx, "script", "running")
+	for m := waitFor(t, c, ctx, "jobs", ""); len(m["jobs"].([]any)) == 0; m = waitFor(t, c, ctx, "jobs", "") {
+	}
 	sendJSON(t, c, ctx, map[string]any{"type": "stop"})
-	waitFor(t, c, ctx, "script", "stopped")
+	waitNote(t, c, ctx, "script forever stopped")
 }
 
 func TestPingNeedsTheSecret(t *testing.T) {
@@ -685,7 +684,7 @@ func TestCmdAndScriptStepsDriveLinesWaitAndSendBytes(t *testing.T) {
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "enter": "lf"}})
 	waitFor(t, c, ctx, "state", "connected")
 	sendJSON(t, c, ctx, map[string]any{"type": "script", "name": "s"})
-	waitFor(t, c, ctx, "script", "done")
+	waitNote(t, c, ctx, "script s done")
 	if got := readDevice(t, master, len("AB@at\ngo\n")); string(got) != "AB@at\ngo\n" {
 		t.Errorf("sent %q", got)
 	}
@@ -1341,6 +1340,28 @@ func TestWebPageAccessibility(t *testing.T) {
 	}
 }
 
+// collectUntilNote gathers what the screen shows until a note of termdeck that contains the text.
+func collectUntilNote(t *testing.T, c *websocket.Conn, ctx context.Context, contains string) string {
+	t.Helper()
+	var text string
+	for {
+		kind, data, err := c.Read(ctx)
+		if err != nil {
+			t.Fatalf("waiting for a note with %q: %v (text so far %q)", contains, err, text)
+		}
+		if kind != websocket.MessageBinary {
+			continue
+		}
+		screen, notes := splitScreen(data)
+		text += screen
+		for _, n := range notes {
+			if strings.Contains(n, contains) {
+				return text
+			}
+		}
+	}
+}
+
 // collectUntil gathers the text of the frames, and returns it with the first JSON message that has the type and state.
 func collectUntil(t *testing.T, c *websocket.Conn, ctx context.Context, kind, state string) (string, map[string]any) {
 	t.Helper()
@@ -1372,7 +1393,7 @@ func TestAScriptCanWaitForWhatTheDeviceSays(t *testing.T) {
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:shell", "enter": "cr"}})
 	waitFor(t, c, ctx, "state", "connected")
 	sendJSON(t, c, ctx, map[string]any{"type": "script", "name": "login"})
-	text, _ := collectUntil(t, c, ctx, "script", "done")
+	text := collectUntilNote(t, c, ctx, "script login done")
 	time.Sleep(100 * time.Millisecond)
 	more := readFor(t, c, ctx, 300*time.Millisecond)
 	if !strings.Contains(text+more, "done-by-script") || !strings.Contains(text+more, "admin# ") {
@@ -1387,9 +1408,9 @@ func TestAnExpectThatDoesNotComeStopsTheScriptWithAnError(t *testing.T) {
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo"}})
 	waitFor(t, c, ctx, "state", "connected")
 	sendJSON(t, c, ctx, map[string]any{"type": "script", "name": "wait"})
-	text, m := collectUntil(t, c, ctx, "script", "error")
-	if !strings.Contains(m["message"].(string), "never-comes") || strings.Contains(text, "after") {
-		t.Errorf("message %v, echoed %q", m, text)
+	text := collectUntilNote(t, c, ctx, "never-comes")
+	if strings.Contains(text, "after") {
+		t.Errorf("echoed %q", text)
 	}
 	sendJSON(t, c, ctx, map[string]any{"type": "send", "format": "cmd", "data": "timeout=50; expect=zzz"})
 	waitNote(t, c, ctx, "zzz")

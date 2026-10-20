@@ -181,8 +181,16 @@ async function startServer() {
   await page.fill(".sendbar [data-auto-ms]", "100");
   const txBefore = await page.evaluate(() => tabs[0].counters.tx);
   await page.check(".sendbar [data-auto]");
+  await page.waitForSelector(".toolbar .jobs .job:has-text('Auto echo auto')", { timeout: 3000 }).catch(() => {});
+  check("the automatic send shows in the toolbar as a job", await page.locator(".toolbar .jobs .job", { hasText: "Auto echo auto" }).first().isVisible());
+  await page.locator(".tab", { hasText: "fake:counter" }).click();   // another tab: the automatic send goes on
+  const txAway = await page.evaluate(() => tabs[0].counters.tx);
+  await page.waitForFunction((n) => tabs[0].counters.tx > n + 20, txAway, { timeout: 4000 }).catch(() => {});
+  check("it goes on while another tab is shown", (await page.evaluate(() => tabs[0].counters.tx)) > txAway + 20);
+  await page.locator(".tab", { hasText: "fake:shell" }).click();
   await page.waitForFunction((n) => tabs[0].counters.tx >= n + 50, txBefore, { timeout: 8000 });  // five or more sends of "echo auto\r"
   await page.uncheck(".sendbar [data-auto]");
+  await page.waitForFunction(() => !tabs[0].jobs.length, null, { timeout: 3000 }).catch(() => {});
   s = await waitScreen(/(^auto\n[^]*){4}/m, 0);  // xterm parses what it was given a little later
   check("auto send repeats", (s.match(/^auto/gm) || []).length >= 4, s.replace(/\n+$/, ""));
   check("auto send keeps the input", (await input.inputValue()) === "echo auto");

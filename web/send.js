@@ -61,10 +61,6 @@ function setSendType(pane, type) {
   }
 }
 
-function sendRaw(tab, bytes) {
-  if (tab.state === "connected") sendMessage(tab, { type: "raw", bytes: b64(bytes) });
-}
-
 // What was sent from the send bar is remembered per port (whatever device it opens with), also after a reload.
 const HISTORY_MAX = 50;
 
@@ -81,8 +77,8 @@ function rememberSent(tab, entry) {
 }
 
 // The send bar: what is typed goes out as text, bytes or steps. It says whether something was sent.
-// The input is emptied afterwards, except for an automatic send, which sends it again.
-function submitSend(pane, auto = false) {
+// The input is emptied afterwards.
+function submitSend(pane) {
   const tab = pane.active;
   if (!tab || tab.state !== "connected") return false;
   const type = pane.sendbar.querySelector("[data-send-type]").value;
@@ -94,7 +90,7 @@ function submitSend(pane, auto = false) {
   for (const target of targets) sent = sendSteps(target, message) || sent;
   if (!sent) return false;
   rememberSent(tab, { type, text });
-  if (!auto) pane.sendbar.querySelector("[data-send-text]").value = "";
+  pane.sendbar.querySelector("[data-send-text]").value = "";
   return true;
 }
 
@@ -138,57 +134,42 @@ function showQuick(pane) {
   bar.querySelectorAll("button").forEach((button) => { button.disabled = tab.state !== "connected"; });
 }
 
-// ---- automatic send: the input goes out again and again, every so many milliseconds
+// ---- automatic send: the input goes out again and again, every so many milliseconds (a job on the server)
+const autoJobOf = (tab) => tab?.jobs?.find((j) => j.kind === "auto");
+
 function stopAuto(pane) {
-  if (!pane.auto) return;
-  clearInterval(pane.auto.timer);
-  pane.auto = null;
-  const box = pane.sendbar.querySelector("[data-auto]");
-  box.checked = false;
-  box.closest("label").classList.remove("on");
+  const tab = pane.active;
+  const job = autoJobOf(tab);
+  if (job) sendMessage(tab, { type: "stopjob", job: job.id });
 }
 
 function startAuto(pane) {
-  stopAuto(pane);
   const tab = pane.active;
   const box = pane.sendbar.querySelector("[data-auto]");
   const ms = Math.min(Math.max(Math.floor(Number(pane.sendbar.querySelector("[data-auto-ms]").value)) || 1000, 10), 3_600_000);
   pane.sendbar.querySelector("[data-auto-ms]").value = ms;
-  if (!tab || tab.state !== "connected" || !submitSend(pane, true)) { box.checked = false; return; }
-  box.checked = true;
-  box.closest("label").classList.add("on");
-  const tick = () => { if (pane.active !== tab || tab.state !== "connected" || !submitSend(pane, true)) stopAuto(pane); };
-  pane.auto = { tab, timer: setInterval(tick, ms) };
+  const type = pane.sendbar.querySelector("[data-send-type]").value;
+  const text = pane.sendbar.querySelector("[data-send-text]").value;
+  if (!tab || tab.state !== "connected" || (!text && type !== "text")) { box.checked = false; return; }
+  const targets = pane.sendbar.querySelector("[data-all]").checked ? tabs.filter((t) => t.state === "connected" && !t.profile.peer) : [tab];
+  for (const target of targets) sendSteps(target, { type: "auto", format: type, data: text, check: tab.sendCheck, end: tab.sendEnd.mode, endCustom: tab.sendEnd.custom, ms });
+  rememberSent(tab, { type, text });
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// The Auto box of the send bar says whether the shown tab sends by itself.
+function showAuto(pane) {
+  const on = !!autoJobOf(pane.active);
+  const box = pane.sendbar.querySelector("[data-auto]");
+  box.checked = on;
+  box.closest("label").classList.toggle("on", on);
+}
 
-// Send a file as it is, in small pieces so that it can be stopped.
+// Send a file as it is: the server sends it, a piece at a time, and shows how far it is.
 async function sendFile(pane, file) {
   const tab = pane.active;
   if (!tab || tab.state !== "connected" || !file) return;
   const data = new Uint8Array(await file.arrayBuffer());
-  const job = { name: file.name, total: data.length, sent: 0, stop: false };
-  tab.job = job;
-  note(tab, `sending ${file.name} (${data.length} bytes)`);
-  for (let i = 0; i < data.length && !job.stop; i += 256) {
-    while (tab.ws?.bufferedAmount > 2048 && !job.stop) await sleep(10);
-    if (tab.state !== "connected") job.stop = true;
-    if (job.stop) break;
-    sendRaw(tab, data.subarray(i, i + 256));
-    job.sent = Math.min(i + 256, data.length);
-    renderFileStatus(tab.pane);
-  }
-  tab.job = null;
-  note(tab, job.sent === data.length ? `${file.name} sent` : `${file.name} stopped after ${job.sent} bytes`);
-  renderFileStatus(tab.pane);
-}
-
-function renderFileStatus(pane) {
-  const job = pane.active?.job;
-  const box = pane.sendbar.querySelector(".file-status");
-  box.hidden = !job;
-  if (job) pane.sendbar.querySelector("[data-file-text]").textContent = `${job.name} ${Math.floor((job.sent * 100) / Math.max(job.total, 1))}%`;
+  sendMessage(tab, { type: "file", name: file.name, bytes: b64(data) });
 }
 
 // The send bar: the type, the input, End, Auto send and files.
@@ -199,7 +180,7 @@ function wireSendBar(pane) {
   send("[data-send-type]").addEventListener("change", () => setSendType(pane, send("[data-send-type]").value));
   send("[data-send]").addEventListener("click", () => { submitSend(pane); input.focus(); });
   send("[data-auto]").addEventListener("change", () => (send("[data-auto]").checked ? startAuto(pane) : stopAuto(pane)));
-  send("[data-auto-ms]").addEventListener("change", () => { if (pane.auto) startAuto(pane); });
+  send("[data-auto-ms]").addEventListener("change", () => { if (autoJobOf(pane.active)) startAuto(pane); });
   const endChange = () => {
     const tab = pane.active;
     if (tab) tab.sendEnd = { mode: send("[data-send-end]").value, custom: send("[data-send-end-custom]").value };
@@ -238,10 +219,5 @@ function wireSendBar(pane) {
     send("[data-file]").value = "";
     sendFile(pane, file);
   });
-  send("[data-file-cancel]").addEventListener("click", () => {
-    const tab = pane.active;
-    if (!tab?.job) return;
-    tab.job.stop = true;
-    sendMessage(tab, { type: "flush" });  // what is waiting in a slow send is dropped too
-  });
+;
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -10,8 +11,7 @@ import (
 // page, the log or the triggers.
 
 type xfer struct {
-	in     chan byte
-	cancel context.CancelFunc
+	in chan byte
 }
 
 // sessionLink lets the XMODEM engine use the port of a session.
@@ -63,26 +63,20 @@ func (t *termSession) feedTransfer(raw []byte) bool {
 	return true
 }
 
-// startXmodem sends or receives a file over the port, in the background.
+// startXmodem sends or receives a file over the port, as a job.
 func (t *termSession) startXmodem(m clientMessage, times xmodemTimes) {
 	t.mu.Lock()
-	ctx, port, running := t.runCtx, t.port, t.xfer != nil
+	running := t.xfer != nil
 	t.mu.Unlock()
-	switch {
-	case port == nil || ctx == nil:
-		t.notice("open the port before a file transfer")
-		return
-	case running:
+	if running {
 		t.notice("a file transfer is already running")
 		return
 	}
-	ctx, cancel := context.WithCancel(ctx)
-	x := &xfer{in: make(chan byte, 1<<16), cancel: cancel}
-	t.mu.Lock()
-	t.xfer = x
-	t.mu.Unlock()
-	link := sessionLink{t, x}
 	dir := m.Action
+	proto := m.Proto
+	if proto == "" {
+		proto = "xmodem"
+	}
 	report := func(extra map[string]any) {
 		message := map[string]any{"type": "xfer", "dir": dir, "name": m.Name, "total": len(m.Bytes), "proto": m.Proto}
 		for k, v := range extra {
@@ -90,15 +84,24 @@ func (t *termSession) startXmodem(m clientMessage, times xmodemTimes) {
 		}
 		t.sendJSON(message)
 	}
-	go func() {
+	name := strings.ToUpper(proto) + " " + dir
+	if m.Name != "" {
+		name += " " + m.Name
+	}
+	_, err := t.startJob("transfer", name, int64(len(m.Bytes)), func(ctx context.Context, j *job) error {
+		x := &xfer{in: make(chan byte, 1<<16)}
+		t.mu.Lock()
+		t.xfer = x
+		t.mu.Unlock()
 		defer func() {
 			t.mu.Lock()
 			t.xfer = nil
 			t.mu.Unlock()
-			cancel()
 		}()
+		link := sessionLink{t, x}
 		last := time.Time{}
 		progress := func(done int) {
+			t.progress(j, int64(done))
 			if time.Since(last) > 100*time.Millisecond {
 				last = time.Now()
 				report(map[string]any{"state": "running", "done": done})
@@ -109,11 +112,11 @@ func (t *termSession) startXmodem(m clientMessage, times xmodemTimes) {
 		var received []byte
 		receivedName := ""
 		switch {
-		case dir == "send" && m.Proto == "ymodem":
+		case dir == "send" && proto == "ymodem":
 			err = ymodemSend(ctx, link, m.Name, m.Bytes, times, progress)
 		case dir == "send":
 			err = xmodemSend(ctx, link, m.Bytes, m.OneK, times, progress)
-		case m.Proto == "ymodem":
+		case proto == "ymodem":
 			receivedName, received, err = ymodemReceive(ctx, link, times, progress)
 		default:
 			received, err = xmodemReceive(ctx, link, times, progress)
@@ -129,15 +132,24 @@ func (t *termSession) startXmodem(m clientMessage, times xmodemTimes) {
 		default:
 			report(map[string]any{"state": "done", "done": len(received), "data": received, "received": receivedName})
 		}
-	}()
+		return nil // the dialog and its notes say how it ended
+	})
+	if err != nil {
+		t.notice("open the port before a file transfer")
+	}
 }
 
 // cancelTransfer stops a running file transfer.
 func (t *termSession) cancelTransfer() {
 	t.mu.Lock()
-	x := t.xfer
+	var stop []*job
+	for _, j := range t.jobs {
+		if j.Kind == "transfer" {
+			stop = append(stop, j)
+		}
+	}
 	t.mu.Unlock()
-	if x != nil {
-		x.cancel()
+	for _, j := range stop {
+		j.cancel()
 	}
 }

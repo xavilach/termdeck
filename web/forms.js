@@ -348,7 +348,8 @@ function runScript(tab, name) {
   sendMessage(tab, { type: "script", name });
 }
 function stopScript(tab) {
-  sendMessage(tab, { type: "stop" });
+  const job = tab.jobs.find((j) => j.kind === "script");
+  if (job) sendMessage(tab, { type: "stopjob", job: job.id });
 }
 
 // Desktop notifications need the browser's permission, asked on a click.

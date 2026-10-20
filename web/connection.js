@@ -11,7 +11,7 @@ const MESSAGES = {
   session(tab, m) {
     setState(tab, m.state);
     tab.logging = m.logging;
-    tab.script = m.script || null;
+    setJobs(tab, m.jobs || []);
     if (tab.wantOpen && !["connected", "connecting", "reconnecting"].includes(m.state)) sendMessage(tab, { type: "open", profile: tab.profile });
     tab.wantOpen = false;
     REFRESH(tab);
@@ -26,11 +26,15 @@ const MESSAGES = {
   notify: (tab, m) => notifyLine(tab, m.text),
   xfer: receiveTransfer,
   counters(tab, m) { tab.counters = m; updateCounters(tab); },
-  script(tab, m) {
-    tab.script = m.state === "running" ? m.name : null;
-    if (tab === tab.pane.active) { renderToolbar(tab.pane); if (tab === active) renderTree(); }
-  },
+  jobs: (tab, m) => setJobs(tab, m.jobs),
 };
+
+// What runs on the port: scripts, automatic sends, files, transfers (the server runs them).
+function setJobs(tab, jobs) {
+  tab.jobs = jobs;
+  tab.script = jobs.find((j) => j.kind === "script")?.name || null;
+  if (tab === tab.pane.active) { renderToolbar(tab.pane); if (tab === active) renderTree(); }
+}
 
 // Attach the tab to its session (the server starts one for a new id), then open the port when asked.
 function connect(tab, open = true) {
@@ -69,7 +73,7 @@ function askLog(tab, path) {
 
 function setState(tab, state) {
   tab.state = state;
-  if (state !== "connected") { tab.script = null; tab.lines = null; tab.logging = false; }
+  if (state !== "connected") { tab.script = null; tab.jobs = []; tab.lines = null; tab.logging = false; }
   tab.tabEl.className = `tab ${state}${tab === tab.pane.active ? " active" : ""}${tab.belled ? " belled" : ""}`;
   if (tab === tab.pane.active) { renderToolbar(tab.pane); if (tab === active) renderTree(); }
 }

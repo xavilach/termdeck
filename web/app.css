@@ -63,7 +63,10 @@ legend { padding: 0 6px; color: var(--muted); }
 .script-row .info { flex: 1; min-width: 0; }
 .script-row .detail { color: var(--muted); font-size: 12px; }
 .script-row .scope { color: var(--muted); font-size: 12px; }
-.script-status { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); }
+.jobs { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; }
+.jobs .job { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); border: 1px solid var(--border); border-radius: 10px; padding: 0 2px 0 8px; white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.jobs .job button { min-height: 0; padding: 0 6px; border: 0; background: none; color: var(--muted); }
+.jobs .job button:hover { color: var(--text); }
 .tab.dragging { opacity: .4; }
 .tab.drop-before { box-shadow: inset 3px 0 0 var(--accent); }
 #new-group-form { padding: 0 10px 8px; }
@@ -166,7 +169,6 @@ textarea[name=colours] { font-family: ui-monospace, Consolas, monospace; }
 .counters { color: var(--muted); font-variant-numeric: tabular-nums; }
 .counters b { color: var(--text); font-weight: 600; }
 .sendbar .counters { margin-left: 4px; }
-.file-status { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); white-space: nowrap; }
 .findbar { display: flex; align-items: center; gap: 4px; padding: 3px 8px; background: var(--panel); border-bottom: 1px solid var(--border); }
 .findbar input { width: 220px; }
 .findbar button[aria-pressed=true] { background: var(--select); border-color: var(--accent); }

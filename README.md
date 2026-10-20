@@ -38,6 +38,7 @@ Press Help (left column, Alt+Shift+H) for the keys and the syntax of the setting
 - Text, Hex, Decimal, Binary or Cmd (steps: `dtr=1; wait=500; hex=0D 0A; expect=login:`; `expect` waits for what the device says, so scripts can log in or flash step by step). End, Check (sum, XOR, CRC), Auto, history, files, quick-send buttons.
 - All tabs: send the same data to every connected tab (a test bench); Open all (▶▶) opens every port of a device.
 - Transfer: XMODEM and YMODEM, send or receive (checked against lrzsz).
+- What runs over time (a script, Auto, a file, a transfer) shows in the toolbar with its progress and a Stop; it goes on while the page reloads or another tab is shown.
 - Scripts, triggers (`login: => admin`, paused when they loop) and quick sends are rules, one per line. A pattern is the same everywhere: text in any case, `/regex/` as written, `/regex/i`.
 
 ## Tools

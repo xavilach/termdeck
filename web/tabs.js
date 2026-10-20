@@ -239,7 +239,7 @@ const newTabId = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), (b
 function openTab(profile, { connect: doConnect = true, id = newTabId(), view = null, port = profile.peer ? null : profile.device, device = GENERIC } = {}) {
   if (openElsewhere(profile)) return;
   const pane = focusPane || panes[0];
-  const tab = { id, profile, port, device, pane, state: "closed", ws: null, fontSize: profile.fontSize || 14, script: null, view: view || viewOf(profile),
+  const tab = { id, profile, port, device, pane, state: "closed", ws: null, fontSize: profile.fontSize || 14, script: null, jobs: [], view: view || viewOf(profile),
                 sendEnd: { mode: profile.enter || "cr", custom: "" }, sendCheck: "none", counters: { rx: 0, tx: 0 }, sent: loadHistory(port || profile.name), sentAt: 0, graph: newGraph(profile) };
   tab.sentAt = tab.sent.length;
   newTerminal(tab);
@@ -318,9 +318,7 @@ addEventListener("beforeunload", (e) => {  // closing the page would drop the op
 
 function closeTab(tab) {
   const pane = tab.pane;
-  if (tab.job) tab.job.stop = true;  // a file being sent
-  if (pane.auto?.tab === tab) stopAuto(pane);
-  sendMessage(tab, { type: "end" });  // the session on the server ends, and closes its port
+  sendMessage(tab, { type: "end" });  // the session on the server ends: its jobs stop and its port closes
   tab.ws?.close();
   tab.term.dispose();
   tab.box.remove();
@@ -393,8 +391,7 @@ function renderToolbar(pane) {
   q(".status").textContent = STATUS[tab.state];
   q(".status").className = `status ${tab.state}`;
   q(".summary").textContent = summary(tab.profile) + (tab.title ? ` · ${tab.title}` : "");
-  q(".script-status").hidden = !tab.script;
-  q(".script-name").textContent = tab.script ? `Script ${tab.script}` : "";
+  renderJobs(pane, tab);
   renderLines(pane);
   const logButton = q("[data-action=log]");
   logButton.setAttribute("aria-pressed", String(!!tab.logging));
@@ -404,12 +401,30 @@ function renderToolbar(pane) {
   portButton.disabled = tab.state === "connecting";
   pane.viewbar.hidden = pane.sendbar.hidden = false;
   const off = tab.state !== "connected" || !!tab.profile.peer;  // nothing is sent into a tunnel
-  for (const field of pane.sendbar.querySelectorAll("select, input:not([data-file]), button:not([data-file-cancel])")) field.disabled = off;
+  for (const field of pane.sendbar.querySelectorAll("select, input:not([data-file]), button")) field.disabled = off;
   showQuick(pane);
-  if (off) stopAuto(pane);
-  renderFileStatus(pane);
+  showAuto(pane);
 }
 const renderToolbars = () => panes.forEach(renderToolbar);
+
+const JOB_NAMES = { script: "Script", auto: "Auto", file: "File", transfer: "" };
+
+// What runs on the port, each with how far it is and a Stop.
+function renderJobs(pane, tab) {
+  const box = pane.toolbar.querySelector(".jobs");
+  const jobs = tab.jobs || [];
+  box.hidden = jobs.length === 0;
+  box.replaceChildren(...jobs.map((j) => {
+    const percent = j.total ? ` ${Math.floor((j.done * 100) / j.total)}%` : j.kind === "script" && j.done ? ` round ${j.done + 1}` : "";
+    const chip = el("span", "job", `${JOB_NAMES[j.kind] ? JOB_NAMES[j.kind] + " " : ""}${j.name}${percent}`);
+    const stop = el("button", "", "■");
+    stop.title = `Stop ${j.name}`;
+    stop.setAttribute("aria-label", stop.title);
+    stop.addEventListener("click", () => sendMessage(tab, { type: "stopjob", job: j.id }));
+    chip.append(stop);
+    return chip;
+  }));
+}
 
 focusPane = createPane();
 focusPane.el.classList.add("focused");
@@ -484,7 +499,6 @@ const TOOLBAR = {
     applyModes(tab);
   },
   log: (tab) => sendMessage(tab, { type: "log", value: !tab.logging }),
-  "stop-script": stopScript,
   "font-up": (tab) => changeFont(tab, 1),
   "font-down": (tab) => changeFont(tab, -1),
 };

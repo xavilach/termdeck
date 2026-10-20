@@ -44,7 +44,7 @@
     <div class="toolbar" hidden>
       <span class="status"></span>
       <span class="summary muted"></span>
-      <span class="script-status" hidden><span class="script-name"></span> <button data-action="stop-script">Stop</button></span>
+      <span class="jobs" role="group" aria-label="What runs on this port" hidden></span>
       <span class="spacer"></span>
       <span class="lines" title="Control lines. DTR and RTS are driven by you: click to toggle. CTS, DSR, DCD and RI are driven by the device and only shown here.">
         <button data-action="line-dtr" aria-pressed="false">DTR</button><button data-action="line-rts" aria-pressed="false">RTS</button>
@@ -135,7 +135,6 @@
       <button data-xmodem title="Send a file to the device, or receive one from it, with the XMODEM or YMODEM protocol">Transfer…</button>
       <input type="file" data-file hidden>
       <span class="counters" title="Bytes sent since the port opened (in a tunnel: carried from B to A). Clear resets it.">Tx <b data-count="tx">0</b></span>
-      <span class="file-status" hidden><span data-file-text></span> <button data-file-cancel>Cancel</button></span>
     </div>
   </section>
 </template>

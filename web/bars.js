@@ -22,7 +22,6 @@ function syncBars(pane) {
   q("[data-nl-custom]").hidden = tab.view.nl !== "custom";
   markChanged(pane);
   updateCounters(tab);
-  if (pane.auto && pane.auto.tab !== tab) stopAuto(pane);  // auto send belongs to the tab it was started in
   restoreDraft(pane, tab);
   const end = pane.sendbar.querySelector("[data-send-end]");
   end.value = tab.sendEnd.mode;

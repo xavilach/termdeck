@@ -34,6 +34,8 @@ type clientMessage struct {
 	Check     string `json:"check"`     // send: the check added after the data
 	End       string `json:"end"`       // send: none, cr, lf, crlf, enter or custom
 	EndCustom string `json:"endCustom"` // send: the end when it is custom, written like text
+	Ms        int    `json:"ms"`        // auto: the pause between two sends
+	Job       int    `json:"job"`       // stopjob: which job (0: all of them)
 }
 
 // termSession is one tab: its port, its records and what it sends. It lives on the server, so a reload of the
@@ -55,12 +57,13 @@ type termSession struct {
 	profile    Profile
 	hasProfile bool
 	state      string // as last told to the page: connecting, connected, failed, closed, ended, reconnecting
-	scriptName string // the script that is running
 	marks      int
 	dtr        bool // the lines as we last set them
 	rts        bool
 	log        *Logger
-	stopRun    context.CancelFunc
+	jobs       map[int]*job // what runs over time: scripts, automatic sends, files, transfers
+	jobSeq     int
+	jobsSent   time.Time
 
 	writeMu sync.Mutex // one command at a time reaches the port
 
@@ -609,19 +612,16 @@ func (t *termSession) setLogging(on bool) {
 	}
 }
 
-// close stops any script and closes the port and the log. It is safe to call when nothing is open.
+// close stops the jobs and closes the port and the log. It is safe to call when nothing is open.
 func (t *termSession) close() bool {
 	t.mu.Lock()
-	port, log, stop, device, runStop, reconnect, tun := t.port, t.log, t.stopRun, t.profile.Device, t.runStop, t.reconnectStop, t.tun
-	t.port, t.log, t.stopRun, t.runStop, t.reconnectStop, t.tun = nil, nil, nil, nil, nil, nil
+	port, log, device, runStop, reconnect, tun := t.port, t.log, t.profile.Device, t.runStop, t.reconnectStop, t.tun
+	t.port, t.log, t.runStop, t.reconnectStop, t.tun = nil, nil, nil, nil, nil
 	if port != nil || tun != nil {
 		t.gen++
 	}
 	t.mu.Unlock()
-	if stop != nil {
-		stop()
-	}
-	if runStop != nil {
+	if runStop != nil { // the jobs and the replies end with the port
 		runStop()
 	}
 	if reconnect != nil {
@@ -650,8 +650,11 @@ func (t *termSession) write(text []byte) {
 func (t *termSession) writeRaw(data []byte) { t.sendData(data, []byte(hexText(data))) }
 
 // sendData sends bytes to the device (through the slow writer when the session has delays), and records
-// them as sent, shown as shown.
-func (t *termSession) sendData(out, shown []byte) {
+// them as sent, shown as shown (nil: not recorded).
+func (t *termSession) sendData(out, shown []byte) { t.sendDataWait(out, shown, false) }
+
+// sendDataWait is sendData that can wait until a slow writer has written the bytes (or dropped them).
+func (t *termSession) sendDataWait(out, shown []byte, wait bool) {
 	t.mu.Lock()
 	port, queue, ctx := t.port, t.outQ, t.runCtx
 	t.mu.Unlock()
@@ -659,9 +662,20 @@ func (t *termSession) sendData(out, shown []byte) {
 		return
 	}
 	if queue != nil { // slow send: the writer sends it
+		item := outItem{out: out, shown: shown}
+		if wait {
+			item.done = make(chan struct{})
+		}
 		select {
-		case queue <- outItem{out, shown}:
+		case queue <- item:
 		case <-ctx.Done():
+			return
+		}
+		if wait {
+			select {
+			case <-item.done:
+			case <-ctx.Done():
+			}
 		}
 		return
 	}
@@ -671,16 +685,19 @@ func (t *termSession) sendData(out, shown []byte) {
 	t.writeMu.Unlock()
 	if err == nil {
 		t.tx.Add(int64(n))
-		t.recordSent(out, shown)
+		if shown != nil { // a file is not shown, a note says it was sent
+			t.recordSent(out, shown)
+		}
 	}
 }
 
 // terminal serves the page of one tab: GET /api/terminal?id=<the tab's id>. The page sends JSON: hello (its
 // settings and view: the session sends its state and shows its records again), view, profile, open, close,
-// send (the send bar: format, data, check, end), quick (a quick send, by name), raw (bytes of a file), flush,
-// mark, clear, note, xmodem, break, script, stop, log, line, end (the tab is closed).
+// send (the send bar: format, data, check, end), quick (a quick send, by name), auto (the same, every ms),
+// file (a file to send), raw (bytes), flush, mark, clear, note, xmodem, break, script, stop (every job),
+// stopjob, log, line, end (the tab is closed).
 // The session sends its screen as binary messages (text for the terminal) and JSON: session, state, reset and
-// replayed (around a redraw), logging, logexists, lines, counters, points, notify, script, xfer.
+// replayed (around a redraw), logging, logexists, lines, counters, points, notify, jobs, xfer.
 func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{wsProtocol}})
 	if err != nil {
@@ -724,8 +741,9 @@ func (t *termSession) hello(m clientMessage) {
 	t.view, t.viewSet = m.View, true
 	t.streamMu.Unlock()
 	t.mu.Lock()
-	info := map[string]any{"type": "session", "state": t.state, "logging": t.log != nil, "script": t.scriptName, "profile": t.profile}
+	info := map[string]any{"type": "session", "state": t.state, "logging": t.log != nil, "profile": t.profile}
 	t.mu.Unlock()
+	info["jobs"] = t.listJobs()
 	// the counters go first: the page opens the port when it reads the session, and the counters of the
 	// port that opens must not be overtaken by these
 	t.sendJSON(map[string]any{"type": "counters", "rx": t.rx.Load(), "tx": t.tx.Load()})
@@ -792,7 +810,10 @@ var messageHandlers = map[string]func(t *termSession, m clientMessage){
 	"note":          func(t *termSession, m clientMessage) { t.note(m.Data) },
 	"break":         func(t *termSession, m clientMessage) { t.sendBreak(250 * time.Millisecond) },
 	"script":        func(t *termSession, m clientMessage) { t.runScript(m.Name) },
-	"stop":          func(t *termSession, m clientMessage) { t.stopScript() },
+	"stop":          func(t *termSession, m clientMessage) { t.stopJob(0) },
+	"stopjob":       func(t *termSession, m clientMessage) { t.stopJob(m.Job) },
+	"auto":          func(t *termSession, m clientMessage) { t.startAuto(m) },
+	"file":          func(t *termSession, m clientMessage) { t.startFile(m.Name, m.Bytes) },
 	"flush":         func(t *termSession, m clientMessage) { t.flushOut() },
 	"xmodem": func(t *termSession, m clientMessage) {
 		if m.Action == "cancel" {

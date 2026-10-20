@@ -92,7 +92,7 @@ func (t *termSession) runStep(ctx context.Context, s step, timeout *time.Duratio
 	case "baud":
 		return t.setBaud(s.n)
 	case "file":
-		return t.sendFile(s.value)
+		return t.sendFile(ctx, s.value)
 	case "log":
 		t.setLogging(s.on)
 	case "mark":
@@ -113,8 +113,8 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 // maxFileStep is the largest file a file step sends.
 const maxFileStep = 64 << 20
 
-// sendFile sends the content of a file on this computer, as it is.
-func (t *termSession) sendFile(path string) error {
+// sendFile sends the content of a file on this computer, as it is, a piece at a time.
+func (t *termSession) sendFile(ctx context.Context, path string) error {
 	info, err := os.Stat(path)
 	if err == nil && info.Size() > maxFileStep {
 		err = fmt.Errorf("it is bigger than %d MB", maxFileStep>>20)
@@ -126,7 +126,9 @@ func (t *termSession) sendFile(path string) error {
 	if err != nil {
 		return fmt.Errorf("file %s: %w", path, err)
 	}
-	t.sendData(data, []byte(fmt.Sprintf("file %s (%d bytes)", filepath.Base(path), len(data))))
+	sent := 0
+	t.sendChunks(ctx, data, func(done int) { sent = done })
+	t.note(fmt.Sprintf("file %s: %d of %d bytes sent", filepath.Base(path), sent, len(data)))
 	return nil
 }
 
@@ -227,73 +229,21 @@ func (t *termSession) answer(ctx context.Context, tr trigger) {
 	}()
 }
 
-// runScript sends the commands of the named script, pausing after each, in the background.
+// runScript sends the commands of the named script, pausing after each, as a job.
 func (t *termSession) runScript(name string) {
 	script, err := t.srv.scripts.Get(name)
-	t.mu.Lock()
-	open := t.port != nil
-	if err == nil && open && t.stopRun != nil {
-		t.stopRun()
+	if err == nil {
+		_, err = t.startJob("script", name, 0, func(ctx context.Context, j *job) error { return t.scriptRounds(ctx, j, script) })
 	}
-	var ctx context.Context
-	if err == nil && open {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithCancel(t.ctx)
-		t.stopRun = cancel
-	}
-	t.mu.Unlock()
-	switch {
-	case err != nil:
-		t.scriptState(name, "error", err.Error())
-		return
-	case !open:
-		t.scriptState(name, "error", "the port is closed")
-		return
-	}
-	t.scriptState(name, "running", "")
-	go func() {
-		failure := t.scriptRounds(ctx, script) // what stopped the script, besides a Stop
-		switch {
-		case failure != nil:
-			t.scriptState(name, "error", failure.Error())
-		case ctx.Err() != nil:
-			t.scriptState(name, "stopped", "")
-		default:
-			t.scriptState(name, "done", "")
-		}
-	}()
-}
-
-// scriptState tells the page what the script is doing, and notes in the stream how it ended.
-func (t *termSession) scriptState(name, state, message string) {
-	t.mu.Lock()
-	switch {
-	case state == "running":
-		t.scriptName = name
-	case t.scriptName == name:
-		t.scriptName = ""
-	}
-	t.mu.Unlock()
-	t.sendJSON(map[string]string{"type": "script", "state": state, "name": name, "message": message})
-	switch state {
-	case "error":
-		t.note("script " + name + ": " + message)
-	case "done", "stopped":
-		t.note("script " + name + " " + state)
+	if err != nil {
+		t.note("script " + name + ": " + err.Error())
 	}
 }
 
 // scriptRounds sends the commands of the script, pausing after each, once or as many rounds as it asks for.
 // It returns what went wrong (an expect that did not come), or nil when it ended or was stopped.
-func (t *termSession) scriptRounds(ctx context.Context, script Script) error {
-	pause := func() bool {
-		select {
-		case <-ctx.Done():
-			return false
-		case <-time.After(time.Duration(script.DelayMs) * time.Millisecond):
-			return true
-		}
-	}
+func (t *termSession) scriptRounds(ctx context.Context, j *job, script Script) error {
+	pause := func() bool { return sleepCtx(ctx, time.Duration(script.DelayMs)*time.Millisecond) == nil }
 	for round := 1; ; round++ {
 		for i, command := range script.Commands {
 			if ctx.Err() != nil {
@@ -308,17 +258,8 @@ func (t *termSession) scriptRounds(ctx context.Context, script Script) error {
 				return nil
 			}
 		}
+		t.progress(j, int64(round))
 	}
-}
-
-func (t *termSession) stopScript() {
-	t.mu.Lock()
-	stop := t.stopRun
-	t.mu.Unlock()
-	if stop != nil {
-		stop()
-	}
-	t.flushOut() // what the script left waiting in a slow send is not sent
 }
 
 // looping notes a reply and says whether the triggers are in a loop: a reply that makes the device send
