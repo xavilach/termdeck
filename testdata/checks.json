@@ -1,0 +1,177 @@
+[
+ {
+  "check": "sum8",
+  "data": "313233343536373839",
+  "want": "DD"
+ },
+ {
+  "check": "sum8",
+  "data": "",
+  "want": "00"
+ },
+ {
+  "check": "sum8",
+  "data": "01030000000A",
+  "want": "0E"
+ },
+ {
+  "check": "sum8",
+  "data": "FF",
+  "want": "FF"
+ },
+ {
+  "check": "sum8",
+  "data": "00112233445566778899AABBCCDDEEFF",
+  "want": "F8"
+ },
+ {
+  "check": "xor8",
+  "data": "313233343536373839",
+  "want": "31"
+ },
+ {
+  "check": "xor8",
+  "data": "",
+  "want": "00"
+ },
+ {
+  "check": "xor8",
+  "data": "01030000000A",
+  "want": "08"
+ },
+ {
+  "check": "xor8",
+  "data": "FF",
+  "want": "FF"
+ },
+ {
+  "check": "xor8",
+  "data": "00112233445566778899AABBCCDDEEFF",
+  "want": "00"
+ },
+ {
+  "check": "crc8",
+  "data": "313233343536373839",
+  "want": "F4"
+ },
+ {
+  "check": "crc8",
+  "data": "",
+  "want": "00"
+ },
+ {
+  "check": "crc8",
+  "data": "01030000000A",
+  "want": "B9"
+ },
+ {
+  "check": "crc8",
+  "data": "FF",
+  "want": "F3"
+ },
+ {
+  "check": "crc8",
+  "data": "00112233445566778899AABBCCDDEEFF",
+  "want": "4D"
+ },
+ {
+  "check": "crc16modbus",
+  "data": "313233343536373839",
+  "want": "374B"
+ },
+ {
+  "check": "crc16modbus",
+  "data": "",
+  "want": "FFFF"
+ },
+ {
+  "check": "crc16modbus",
+  "data": "01030000000A",
+  "want": "C5CD"
+ },
+ {
+  "check": "crc16modbus",
+  "data": "FF",
+  "want": "FF00"
+ },
+ {
+  "check": "crc16modbus",
+  "data": "00112233445566778899AABBCCDDEEFF",
+  "want": "17D7"
+ },
+ {
+  "check": "crc16ccitt",
+  "data": "313233343536373839",
+  "want": "29B1"
+ },
+ {
+  "check": "crc16ccitt",
+  "data": "",
+  "want": "FFFF"
+ },
+ {
+  "check": "crc16ccitt",
+  "data": "01030000000A",
+  "want": "0428"
+ },
+ {
+  "check": "crc16ccitt",
+  "data": "FF",
+  "want": "FF00"
+ },
+ {
+  "check": "crc16ccitt",
+  "data": "00112233445566778899AABBCCDDEEFF",
+  "want": "7842"
+ },
+ {
+  "check": "crc16xmodem",
+  "data": "313233343536373839",
+  "want": "31C3"
+ },
+ {
+  "check": "crc16xmodem",
+  "data": "",
+  "want": "0000"
+ },
+ {
+  "check": "crc16xmodem",
+  "data": "01030000000A",
+  "want": "0A38"
+ },
+ {
+  "check": "crc16xmodem",
+  "data": "FF",
+  "want": "1EF0"
+ },
+ {
+  "check": "crc16xmodem",
+  "data": "00112233445566778899AABBCCDDEEFF",
+  "want": "1248"
+ },
+ {
+  "check": "crc32",
+  "data": "313233343536373839",
+  "want": "2639F4CB"
+ },
+ {
+  "check": "crc32",
+  "data": "",
+  "want": "00000000"
+ },
+ {
+  "check": "crc32",
+  "data": "01030000000A",
+  "want": "C8E1EBDD"
+ },
+ {
+  "check": "crc32",
+  "data": "FF",
+  "want": "000000FF"
+ },
+ {
+  "check": "crc32",
+  "data": "00112233445566778899AABBCCDDEEFF",
+  "want": "9B750784"
+ }
+]

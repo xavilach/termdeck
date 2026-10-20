@@ -70,10 +70,10 @@ func (t *termSession) startXmodem(m clientMessage, times xmodemTimes) {
 	t.mu.Unlock()
 	switch {
 	case port == nil || ctx == nil:
-		t.sendJSON(map[string]string{"type": "notice", "text": "open the port before a file transfer"})
+		t.notice("open the port before a file transfer")
 		return
 	case running:
-		t.sendJSON(map[string]string{"type": "notice", "text": "a file transfer is already running"})
+		t.notice("a file transfer is already running")
 		return
 	}
 	ctx, cancel := context.WithCancel(ctx)

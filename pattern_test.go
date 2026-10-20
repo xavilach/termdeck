@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// testdata/patterns.json is checked here and by web/format_test.js, so the server and the page agree.
+// testdata/patterns.json lists how patterns match (the help of the page says the same).
 func TestPatternsMatchTheSharedTable(t *testing.T) {
 	data, err := os.ReadFile("testdata/patterns.json")
 	if err != nil {

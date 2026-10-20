@@ -8,8 +8,11 @@ import (
 // Slow send: some devices lose characters when they come at full speed. With a delay between characters
 // (and after a line end) the data goes out through one writer, in order, that can be stopped.
 
-// outItem is data for the writer: the bytes for the port, and what is recorded in the log once it is sent.
-type outItem struct{ out, logged []byte }
+// outItem is data for the writer: the bytes for the port, and what is recorded once it is sent (as text, or as bytes).
+type outItem struct {
+	out, logged []byte
+	raw         bool
+}
 
 const outQueue = 256
 
@@ -38,7 +41,7 @@ func (t *termSession) writer(queue chan outItem, ctx context.Context, charDelay,
 // writeSlowly sends the bytes one at a time. A flush while it runs stops it where it is.
 func (t *termSession) writeSlowly(ctx context.Context, item outItem, charDelay, lineDelay time.Duration) {
 	t.mu.Lock()
-	port, log := t.port, t.log
+	port := t.port
 	t.mu.Unlock()
 	if port == nil {
 		return
@@ -74,7 +77,7 @@ func (t *termSession) writeSlowly(ctx context.Context, item outItem, charDelay, 
 		return len(item.out), nil
 	})
 	if completed {
-		log.Write(dirTx, item.logged)
+		t.recordSent(item.out, item.logged, item.raw)
 	}
 }
 

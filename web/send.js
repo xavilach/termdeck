@@ -113,12 +113,10 @@ function sendData(tab, type, text, ending, check = "none") {
     } else if (type === "text") {
       const data = unescapeText(text) + String.fromCharCode(...ending);
       sendMessage(tab, { type: "input", data });
-      echoTx(tab, text, ENC.encode(data), text.length + 32);
     } else {
       const numbers = parseNumbers(type, text);
       const bytes = Uint8Array.from([...numbers, ...checksum(check, numbers), ...ending]);
       sendRaw(tab, bytes);
-      echoTx(tab, Array.from(bytes, hex2).join(" "), bytes, bytes.length * 3 + 32);
     }
   } catch (error) {
     tell(error.message);

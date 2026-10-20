@@ -78,7 +78,7 @@ func (t *termSession) answer(ctx context.Context, tr trigger, enter string) {
 	}
 	if t.pending.Add(1) > maxPendingReplies {
 		t.pending.Add(-1)
-		t.sendJSON(map[string]string{"type": "notice", "text": "trigger replies are backed up: dropped " + tr.pattern.Text})
+		t.notice("trigger replies are backed up: dropped " + tr.pattern.Text)
 		return
 	}
 	go func() {
@@ -88,13 +88,12 @@ func (t *termSession) answer(ctx context.Context, tr trigger, enter string) {
 		if ctx.Err() != nil {
 			return
 		}
-		t.sendJSON(map[string]string{"type": "trigger", "match": tr.pattern.Text})
+		t.note("trigger: " + tr.pattern.Text)
 		if tr.steps != nil {
 			t.reportSteps(ctx, t.runSteps(ctx, tr.steps))
 			return
 		}
 		t.write([]byte(tr.reply + enter))
-		t.sendJSON(map[string]string{"type": "tx", "data": tr.reply})
 	}()
 }
 
@@ -116,24 +115,43 @@ func (t *termSession) runScript(name string) {
 	t.mu.Unlock()
 	switch {
 	case err != nil:
-		t.sendJSON(map[string]string{"type": "script", "state": "error", "name": name, "message": err.Error()})
+		t.scriptState(name, "error", err.Error())
 		return
 	case !open:
-		t.sendJSON(map[string]string{"type": "script", "state": "error", "name": name, "message": "the port is closed"})
+		t.scriptState(name, "error", "the port is closed")
 		return
 	}
-	t.sendJSON(map[string]string{"type": "script", "state": "running", "name": name})
+	t.scriptState(name, "running", "")
 	go func() {
 		failure := t.scriptRounds(ctx, script, enter) // what stopped the script, besides a Stop
 		switch {
 		case failure != nil:
-			t.sendJSON(map[string]string{"type": "script", "state": "error", "name": name, "message": failure.Error()})
+			t.scriptState(name, "error", failure.Error())
 		case ctx.Err() != nil:
-			t.sendJSON(map[string]string{"type": "script", "state": "stopped", "name": name})
+			t.scriptState(name, "stopped", "")
 		default:
-			t.sendJSON(map[string]string{"type": "script", "state": "done", "name": name})
+			t.scriptState(name, "done", "")
 		}
 	}()
+}
+
+// scriptState tells the page what the script is doing, and notes in the stream how it ended.
+func (t *termSession) scriptState(name, state, message string) {
+	t.mu.Lock()
+	switch {
+	case state == "running":
+		t.scriptName = name
+	case t.scriptName == name:
+		t.scriptName = ""
+	}
+	t.mu.Unlock()
+	t.sendJSON(map[string]string{"type": "script", "state": state, "name": name, "message": message})
+	switch state {
+	case "error":
+		t.note("script " + name + ": " + message)
+	case "done", "stopped":
+		t.note("script " + name + " " + state)
+	}
 }
 
 // scriptRounds sends the commands of the script, pausing after each, once or as many rounds as it asks for.
@@ -174,7 +192,6 @@ func (t *termSession) runCommand(ctx context.Context, command, enter string) err
 	command = scriptText(command)
 	t.expectClear() // an expect after this line sees the answer to it
 	t.write([]byte(command + enter))
-	t.sendJSON(map[string]string{"type": "tx", "data": command})
 	return nil
 }
 
@@ -182,14 +199,14 @@ func (t *termSession) runCommand(ctx context.Context, command, enter string) err
 func (t *termSession) runCmd(text string) {
 	steps, err := parseSteps(text)
 	if err != nil {
-		t.sendJSON(map[string]string{"type": "notice", "text": err.Error()})
+		t.notice(err.Error())
 		return
 	}
 	t.mu.Lock()
 	ctx := t.runCtx
 	t.mu.Unlock()
 	if ctx == nil {
-		t.sendJSON(map[string]string{"type": "notice", "text": "open the port first"})
+		t.notice("open the port first")
 		return
 	}
 	go func() { t.reportSteps(ctx, t.runSteps(ctx, steps)) }()
@@ -226,14 +243,14 @@ func (t *termSession) looping() bool {
 		return false
 	}
 	t.triggersPaused = true
-	t.sendJSON(map[string]string{"type": "notice", "text": "triggers paused: more than 20 replies in a second, a loop? Open the port again to resume."})
+	t.notice("triggers paused: more than 20 replies in a second, a loop? Open the port again to resume.")
 	return true
 }
 
 // reportSteps tells the page why steps typed in Cmd or run by a trigger stopped, unless the port closed.
 func (t *termSession) reportSteps(ctx context.Context, err error) {
 	if err != nil && ctx.Err() == nil {
-		t.sendJSON(map[string]string{"type": "notice", "text": err.Error()})
+		t.notice(err.Error())
 	}
 }
 

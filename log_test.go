@@ -11,18 +11,25 @@ import (
 	"time"
 )
 
+func rxRecord(text string) record {
+	return record{at: time.Now(), src: srcRx, raw: []byte(text), text: []byte(text)}
+}
+
+func txRecord(sent string) record {
+	return record{at: time.Now(), src: srcTx, raw: []byte(sent), text: sentText([]byte(sent))}
+}
+
 func TestLogLinesCarryTheirMarkers(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "logs", "{name}-{date}.log")
 	l, err := OpenLog(Profile{Name: "a/b", LogPath: path, LogRxMarker: "<< ", LogTxMarker: ">> "}, "append")
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.Write(dirTx, []byte("AT"))
-	l.Write(dirTx, []byte("\r\n"))
-	l.Write(dirRx, []byte("OK\r\nREA"))
-	l.Write(dirRx, []byte("DY\r\n\r\n"))
-	l.Write(dirTx, []byte("ver\r"))
-	l.Write(dirRx, []byte("prompt> "))
+	l.Record(txRecord("AT\r\n"))
+	l.Record(rxRecord("OK\r\nREA"))
+	l.Record(rxRecord("DY\r\n\r\n"))
+	l.Record(txRecord("ver\r"))
+	l.Record(rxRecord("prompt> "))
 	l.Close() // writes the unfinished line
 	files, _ := filepath.Glob(filepath.Join(filepath.Dir(path), "a_b-*.log"))
 	if len(files) != 1 {
@@ -39,8 +46,8 @@ func TestLogWritesAnUnfinishedLineAfterAPause(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "x.log")
 	l, _ := OpenLog(Profile{LogPath: path}, "append")
 	defer l.Close()
-	l.Write(dirRx, []byte("login: "))
-	time.Sleep(logIdle + 200*time.Millisecond)
+	l.Record(rxRecord("login: "))
+	l.idle(time.Now().Add(lineIdle))
 	if data, _ := os.ReadFile(path); string(data) != "login: \n" {
 		t.Errorf("got %q", data)
 	}
@@ -51,7 +58,8 @@ func TestNoLogWithoutAPathAndNilIsSafe(t *testing.T) {
 	if l != nil || err != nil {
 		t.Fatalf("got %v %v", l, err)
 	}
-	l.Write(dirRx, []byte("x"))
+	l.Record(rxRecord("x"))
+	l.idle(time.Now())
 	l.Close()
 }
 
@@ -85,7 +93,7 @@ func TestLogOptionsOverwriteHeaderAndPrintable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.Write(dirRx, []byte("\x1b[1mhi\x1b[0m\r\n"))
+	l.Record(rxRecord("\x1b[1mhi\x1b[0m\r\n"))
 	l.Close()
 	data, _ := os.ReadFile(path)
 	text := string(data)
@@ -93,7 +101,7 @@ func TestLogOptionsOverwriteHeaderAndPrintable(t *testing.T) {
 		t.Errorf("unexpected log %q", text)
 	}
 	l2, _ := OpenLog(p, "append")
-	l2.Write(dirRx, []byte("more\r\n"))
+	l2.Record(rxRecord("more\r\n"))
 	l2.Close()
 	data, _ = os.ReadFile(path)
 	if !strings.HasSuffix(string(data), "more\n") || !strings.Contains(string(data), "hi\n=~=") || strings.Count(string(data), "termdeck log") != 2 {
@@ -110,7 +118,7 @@ func TestALogThatCannotBeWrittenReportsItsFirstError(t *testing.T) {
 		t.Fatal(err)
 	}
 	l.f.Close() // as if the disk went away
-	l.Write(dirRx, []byte("lost\n"))
+	l.Record(rxRecord("lost\n"))
 	if l.Err() == nil {
 		t.Error("the write error was not kept")
 	}
@@ -127,16 +135,14 @@ func TestAMarkIsWrittenBetweenTheLines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.Write(dirRx, []byte("one\nunfinished"))
-	l.Mark("mark 1 at 10:00:00")
-	l.Write(dirRx, []byte("two\n"))
+	l.Record(rxRecord("one\nunfinished"))
+	l.Record(record{at: time.Now(), src: srcNote, text: []byte("mark 1 at 10:00:00")})
+	l.Record(rxRecord("two\n"))
 	l.Close()
 	got, _ := os.ReadFile(path)
 	if string(got) != "one\nunfinished\n---- mark 1 at 10:00:00 ----\ntwo\n" {
 		t.Errorf("log %q", got)
 	}
-	var none *Logger
-	none.Mark("x") // safe
 }
 
 func TestLogLinesCanStartWithTheirTime(t *testing.T) {
@@ -145,7 +151,7 @@ func TestLogLinesCanStartWithTheirTime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.Write(dirRx, []byte("one\n\ntwo\n"))
+	l.Record(rxRecord("one\n\ntwo\n"))
 	l.Close()
 	got, _ := os.ReadFile(path)
 	lines := strings.Split(strings.TrimRight(string(got), "\n"), "\n")
@@ -163,7 +169,7 @@ func TestALogThatGetsBigStartsANewFileAndKeepsTheOldOnes(t *testing.T) {
 	}
 	l.maxBytes = 30 // a few lines, not megabytes
 	for i := 1; i <= 12; i++ {
-		l.Write(dirRx, []byte(fmt.Sprintf("line %02d....\n", i))) // 11 bytes: three lines fill a file
+		l.Record(rxRecord(fmt.Sprintf("line %02d....\n", i))) // 11 bytes: three lines fill a file
 	}
 	l.Close()
 	read := func(name string) string { b, _ := os.ReadFile(name); return string(b) }

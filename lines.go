@@ -32,9 +32,11 @@ func (t *termSession) resetCounters() {
 	t.tx.Store(0)
 }
 
-// watchLines reports the control lines (the ones we drive and the ones the device drives) when they change.
+// watchLines reports the control lines (the ones we drive and the ones the device drives) when they change,
+// and notes in the stream the ones the device drives, when the session asks for it.
 func (t *termSession) watchLines(gen int, port serial.Port, dtr, rts bool) {
 	var last map[string]any
+	var lastBits *serial.ModemStatusBits
 	for ; ; time.Sleep(400 * time.Millisecond) {
 		t.mu.Lock()
 		current := t.gen == gen
@@ -49,10 +51,34 @@ func (t *termSession) watchLines(gen int, port serial.Port, dtr, rts bool) {
 		if err != nil {
 			return // not every port has status lines (a pty, some adapters)
 		}
+		t.noteLines(lastBits, bits)
+		lastBits = bits
 		now := map[string]any{"type": "lines", "cts": bits.CTS, "dsr": bits.DSR, "dcd": bits.DCD, "ri": bits.RI, "dtr": dtr, "rts": rts}
 		if fmt.Sprint(now) != fmt.Sprint(last) {
 			last = now
 			t.sendJSON(now)
+		}
+	}
+}
+
+// noteLines notes the lines of the device that changed, when the session asks for it.
+func (t *termSession) noteLines(before, now *serial.ModemStatusBits) {
+	t.mu.Lock()
+	wanted := t.profile.NoteLines
+	t.mu.Unlock()
+	if before == nil || !wanted {
+		return
+	}
+	for _, l := range []struct {
+		name     string
+		was, now bool
+	}{{"CTS", before.CTS, now.CTS}, {"DSR", before.DSR, now.DSR}, {"DCD", before.DCD, now.DCD}, {"RI", before.RI, now.RI}} {
+		if l.was != l.now {
+			state := "off"
+			if l.now {
+				state = "on"
+			}
+			t.note(l.name + " " + state)
 		}
 	}
 }
@@ -81,7 +107,7 @@ func (t *termSession) setLine(line string, value bool) {
 		}
 	}
 	if err != nil {
-		t.sendJSON(map[string]string{"type": "notice", "text": "cannot set " + line + ": " + err.Error()})
+		t.notice("cannot set " + line + ": " + err.Error())
 	}
 }
 
@@ -89,11 +115,14 @@ func (t *termSession) sendBreak() {
 	t.mu.Lock()
 	port := t.port
 	t.mu.Unlock()
-	reply := map[string]any{"type": "break", "ok": port != nil}
-	if port == nil {
-		reply["message"] = "the port is closed"
-	} else if err := port.Break(250 * time.Millisecond); err != nil {
-		reply["ok"], reply["message"] = false, err.Error()
+	switch {
+	case port == nil:
+		t.note("break failed: the port is closed")
+	default:
+		if err := port.Break(250 * time.Millisecond); err != nil {
+			t.note("break failed: " + err.Error())
+		} else {
+			t.note("break sent")
+		}
 	}
-	t.sendJSON(reply)
 }

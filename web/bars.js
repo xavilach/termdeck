@@ -59,7 +59,7 @@ function toggleFreeze(pane) {
     tab.paused = null;
     redraw(tab);
   } else {
-    tab.paused = { upTo: tab.events[tab.events.length - 1] || null, bytes: 0 };
+    tab.paused = { bytes: 0 };
   }
   showFreeze(pane);
 }
@@ -68,10 +68,7 @@ function toggleFreeze(pane) {
 const MARK_ROW = /^\[termdeck\] mark \d+ at /;
 
 function addMark(tab) {
-  tab.markCount = (tab.markCount || 0) + 1;
-  const text = `mark ${tab.markCount} at ${stamp(Date.now()).slice(0, 8)}`;
-  note(tab, text);
-  sendMessage(tab, { type: "mark", data: text });
+  if (!sendMessage(tab, { type: "mark" })) tell("Marks need the connection to termdeck.");
 }
 
 // Scroll to the next (1) or previous (-1) mark above or below the top of the screen.
@@ -102,13 +99,13 @@ function download(name, blob) {
 const fileStamp = () => new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
 const fileName = (tab, ext) => `${tab.profile.name.replace(/[^\w.-]+/g, "_")}-${fileStamp()}.${ext}`;
 
-// What the device sent, as the bytes it sent (the kept data only: the last 8 MB).
-function rawOutput(tab) {
-  const parts = tab.events.filter((ev) => ev.k === "rx").map((ev) => ev.raw);
-  const all = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  let at = 0;
-  for (const p of parts) { all.set(p, at); at += p.length; }
-  return all;
+// What the device sent, as the bytes it sent (the records the server keeps: the last 8 MB).
+async function saveRaw(tab) {
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(tab.id)}/raw`, { headers: { "X-Termdeck-Auth": secret } });
+    if (!response.ok) throw new Error((await response.json()).error);
+    download(fileName(tab, "bin"), await response.blob());
+  } catch (error) { tell(`Cannot save: ${error.message}`); }
 }
 
 function updateCounters(tab) {
@@ -212,9 +209,7 @@ function wireViewBar(pane) {
   view("[data-save-text]").addEventListener("click", () => {
     if (pane.active) download(fileName(pane.active, "txt"), new Blob([outputText(pane.active)], { type: "text/plain" }));
   });
-  view("[data-save-raw]").addEventListener("click", () => {
-    if (pane.active) download(fileName(pane.active, "bin"), new Blob([rawOutput(pane.active)], { type: "application/octet-stream" }));
-  });
+  view("[data-save-raw]").addEventListener("click", () => { if (pane.active) saveRaw(pane.active); });
 }
 
 // The find bar.

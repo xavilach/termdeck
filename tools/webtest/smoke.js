@@ -46,9 +46,13 @@ const scripts = [...fs.readFileSync(web + "index.html", "utf8").matchAll(/<scrip
 for (const file of scripts) run(fs.readFileSync(web + file, "utf8"), file);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const frame = (t, raw) => { const b = Buffer.concat([Buffer.alloc(12), Buffer.from(raw, "latin1"), Buffer.from(raw, "latin1")]); b.writeBigUInt64BE(BigInt(t), 0); b.writeUInt32BE(raw.length, 8); const u = new w.Uint8Array(b.length); u.set(b); return u.buffer; };
+// The server draws the screen: what it sends is written to the terminal as it is.
+const frame = (raw) => { const b = Buffer.from(raw, "latin1"); const u = new w.Uint8Array(b.length); u.set(b); return u.buffer; };
 const json = (ws, o) => ws.onmessage({ data: JSON.stringify(o) });
-const bin = (ws, t, raw) => ws.onmessage({ data: frame(t, raw) });
+const bin = (ws, raw) => ws.onmessage({ data: frame(raw) });
+const lastOf = (ws, type) => ws.sent.filter((m) => m.type === type).pop();
+// the session answers the hello of a tab with its state
+const attach = (ws, state = "closed") => json(ws, { type: "session", state, logging: false, script: "" });
 let failed = 0;
 const check = (name, ok, extra) => { if (!ok) failed++; console.log((ok ? "ok   " : "FAIL ") + name + (ok ? "" : "  " + JSON.stringify(extra))); };
 const q = (s) => w.document.querySelector(s);
@@ -61,49 +65,51 @@ const tab = () => run("tabs[0]", "x");
   run('openTab(profiles[0])', "x");
   await sleep(10);
   const ws = sockets[0];
-  check("opens a socket and sends open", ws && ws.sent[0] && ws.sent[0].type === "open", ws && ws.sent);
+  check("a tab attaches to its session with an id, its settings and its view", ws && /\/api\/terminal\?id=[0-9a-f]{24}$/.test(ws.url) && ws.sent[0]?.type === "hello" && ws.sent[0].profile.name === "p" && ws.sent[0].view.mode === "text", ws && ws.sent);
+  attach(ws);
+  check("a new session is asked to open the port", ws.sent[1]?.type === "open" && ws.sent[1].profile.device === "fake:echo", ws.sent);
   json(ws, { type: "state", state: "connected", message: "" });
   const t = tab();
-  bin(ws, 1000, "hello\r\nworld\r\n");
-  check("received text shows", t.term.text().includes("hello\r\nworld"), t.term.text());
+  bin(ws, "hello\r\nworld\r\n");
+  check("what the server draws shows", t.term.text().includes("hello\r\nworld"), t.term.text());
   json(ws, { type: "counters", rx: 14, tx: 3 });
   check("counters shown", q("[data-count=rx]").textContent === "14" && q("[data-count=tx]").textContent === "3");
 
-  // view: hex
+  // the view: the server draws everything again
   const view = q("[data-view]");
   view.value = "hex"; fire(view, "change");
-  check("hex view redraws kept data", /68 65 6c 6c 6f/.test(t.term.text()) && !t.term.text().includes("hello\r\n"), t.term.text());
+  check("a view change asks the server to draw again", lastOf(ws, "view")?.view.mode === "hex", lastOf(ws, "view"));
   check("changed marker + reset button", q("[data-view-reset]").hidden === false && view.closest("label").classList.contains("changed"));
+  json(ws, { type: "reset" });
+  check("a redraw starts from an empty screen", t.term.out[0] === "<reset>" && t.quiet === true);
+  bin(ws, "68 65 6c 6c 6f");
+  json(ws, { type: "replayed" });
+  check("and shows what the server drew", t.term.text().includes("68 65 6c") && t.quiet === false, t.term.text());
   view.value = "text"; fire(view, "change");
-  check("text view back with nothing lost", t.term.text().includes("hello\r\nworld"), t.term.text());
-  check("marker clears", q("[data-view-reset]").hidden === true);
+  check("marker clears", q("[data-view-reset]").hidden === true && lastOf(ws, "view").view.mode === "text");
 
-  // new line at
+  // new line at, time, control characters
   const nl = q("[data-nl]"); const custom = q("[data-nl-custom]");
   nl.value = "custom"; fire(nl, "change");
   check("custom field shows", custom.hidden === false);
   custom.value = "ld"; fire(custom, "input");
   await sleep(320);
-  check("custom sequence applied while typing", t.term.text().includes("hello\r\nworld\r\n") === false || true);
-  console.log("   screen:", JSON.stringify(t.term.text()));
-  nl.value = "none"; fire(nl, "change");
-  console.log("   none:  ", JSON.stringify(t.term.text()));
+  check("custom sequence sent while typing", lastOf(ws, "view").view.nl === "custom" && lastOf(ws, "view").view.nlCustom === "ld", lastOf(ws, "view"));
   nl.value = "terminal"; fire(nl, "change");
-
-  // stamps
   const stamps = q("[data-stamps]"); stamps.checked = true; fire(stamps, "change");
-  check("timestamps", /\[\d\d:\d\d:\d\d\.\d{3}\] hello/.test(t.term.text()), t.term.text());
+  check("timestamps", lastOf(ws, "view").view.stamps === true);
   const mode = q("[data-time-mode]"); mode.value = "delta"; fire(mode, "change");
-  check("time since the previous line", /\[\+\d+(ms|\.\d{3}s)\] hello/.test(t.term.text()), t.term.text());
-  check("choosing what the time shows turns it on and marks the change", stamps.checked && q("[data-view-reset]").hidden === false);
+  check("choosing what the time shows turns it on and marks the change", stamps.checked && lastOf(ws, "view").view.timeMode === "delta" && q("[data-view-reset]").hidden === false);
   mode.value = "clock"; fire(mode, "change");
   stamps.checked = false; fire(stamps, "change");
-
-  // control chars
-  bin(ws, 1100, "x\x1b[1my\r\n");
   const ctrl = q("[data-ctrl]"); ctrl.checked = true; fire(ctrl, "change");
-  check("control chars shown", t.term.text().includes("<ESC>[1my<CR><LF>"), t.term.text());
+  check("control chars", lastOf(ws, "view").view.ctrl === true);
   ctrl.checked = false; fire(ctrl, "change");
+  const flt = q("[data-filter]"); flt.value = "!tick"; fire(flt, "input");
+  await sleep(320);
+  check("the filter goes to the server and marks the change", lastOf(ws, "view").view.filter === "!tick" && flt.closest("label").classList.contains("changed"));
+  flt.value = ""; fire(flt, "input");
+  await sleep(320);
 
   // send bar: text
   const input = q("[data-send-text]"); const send = q("[data-send]");
@@ -112,18 +118,17 @@ const tab = () => run("tabs[0]", "x");
   const sent1 = ws.sent.filter((m) => m.type === "input");
   check("text send uses End (session Enter = LF) and unescapes", sent1.length === 1 && sent1[0].data === "AT\r\n", sent1);
   check("input cleared after send", input.value === "");
-  check("local echo shows the Tx line with marker", t.term.text().includes("TX AT\\r"), t.term.text().slice(-80));
   // End selector
   const end = q("[data-send-end]"); end.value = "none"; fire(end, "change");
   input.value = "x"; send.click();
-  check("End none sends nothing extra", ws.sent.filter((m) => m.type === "input").pop().data === "x");
+  check("End none sends nothing extra", lastOf(ws, "input").data === "x");
   end.value = "custom"; fire(end, "change"); const ec = q("[data-send-end-custom]"); ec.value = "\\x03;"; fire(ec, "input");
   input.value = "y"; send.click();
-  check("custom End", ws.sent.filter((m) => m.type === "input").pop().data === "y\x03;", ws.sent.filter((m) => m.type === "input").pop());
+  check("custom End", lastOf(ws, "input").data === "y\x03;", lastOf(ws, "input"));
   // hex type
   typ.value = "hex"; fire(typ, "change");
   input.value = "41 42"; end.value = "crlf"; fire(end, "change"); send.click();
-  const raw = ws.sent.filter((m) => m.type === "raw").pop();
+  const raw = lastOf(ws, "raw");
   check("hex send raw with CRLF", raw && Buffer.from(raw.bytes, "base64").toString("hex") === "41420d0a", raw);
   // the history keeps type and data, and survives a reload (localStorage)
   check("sent data is remembered with its type", run("tabs[0].sent.length", "x") >= 3 && run("tabs[0].sent.some((e) => e.type === 'hex' && e.text === '41 42')", "x"));
@@ -161,63 +166,49 @@ const tab = () => run("tabs[0]", "x");
   const keyRes = t.term.keyHandler({ type: "keydown", key: "a", code: "KeyA", ctrlKey: false, shiftKey: false });
   check("typing in the output sends nothing and is swallowed", keyRes === false && ws.sent.length === sentBefore);
 
-  // triggers note, tx event
-  json(ws, { type: "tx", data: "from script" });
-  check("script tx line shown with local echo", t.term.text().includes("TX from script"));
-  // local echo off hides tx
-  t.profile.localEcho = false; json(ws, { type: "tx", data: "hidden one" });
-  check("local echo off hides tx", !t.term.text().includes("hidden one"));
-  t.profile.localEcho = true;
-
   // file send
   const file = new w.File([new Uint8Array(600).fill(65)], "f.bin");
   await run("sendFile(tabs[0].pane, null)", "x");
-  const pane = t.pane; pane.sendbar.querySelector("[data-file]");
-  await w.eval("0");
   await (async () => { const f = file; Object.defineProperty(f, "arrayBuffer", { value: async () => new Uint8Array(600).fill(65).buffer }); w.__f = f; return run("sendFile(tabs[0].pane, window.__f)", "x"); })();
   const raws = ws.sent.filter((m) => m.type === "raw");
   check("file sent in chunks", raws.length >= 3 && raws.slice(-3).reduce((n, m) => n + Buffer.from(m.bytes, "base64").length, 0) === 600, raws.length);
+  check("and noted with the records of the tab", ws.sent.some((m) => m.type === "note" && /f\.bin sent/.test(m.data)));
 
   // find
   t.term.buffer.active = { length: 2, getLine: (i) => ({ translateToString: () => ["abc Hello", "hello again"][i] }) };
   q("[data-action=find]").click(); const f = q("[data-find]"); f.value = "hello"; fire(f, "input");
   check("find counts matches (case-insens.)", q("[data-find-count]").textContent === "2 found", q("[data-find-count]").textContent);
 
-  // settings saved re-applies view
+  // settings saved re-applies the view and tells the session
   run("applyProfile(tabs[0], {...tabs[0].profile, view: 'bin', linePauseMs: 5})", "x");
   check("applyProfile resets the view to the profile", q("[data-view]").value === "bin" && q("[data-pause]").value === "5");
-
+  check("and gives the session the settings and the view", lastOf(ws, "profile")?.profile.view === "bin" && lastOf(ws, "view").view.mode === "bin");
 
   // freeze, copy
   const freeze = q("[data-freeze]");
   freeze.click();
-  bin(ws, 3000, "while frozen\r\n");
+  bin(ws, "while frozen\r\n");
   check("freeze keeps the screen as it is and counts what comes", !t.term.text().includes("while frozen") && /Resume \(\d+ B new\)/.test(freeze.textContent), freeze.textContent);
-  view.value = "hex"; fire(view, "change"); view.value = "text"; fire(view, "change");
-  check("a view change while frozen does not show the new data", !t.term.text().includes("while frozen"));
+  const views = ws.sent.filter((m) => m.type === "view").length;
   freeze.click();
-  check("resume shows everything", t.term.text().includes("while frozen") && freeze.textContent === "Freeze", t.term.text().slice(-60));
+  check("resume asks the server to draw everything again", ws.sent.filter((m) => m.type === "view").length === views + 1 && freeze.textContent === "Freeze");
   let copied = null; w.navigator.clipboard.writeText = (x) => { copied = x; return Promise.resolve(); };
   t.term.buffer.active = { length: 2, getLine: (i) => ({ translateToString: () => ["one", "two"][i], isWrapped: false }) };
   q("[data-copy-all]").click();
   check("Copy copies the whole output", copied === "one\ntwo", copied);
   // toolbar buttons and shortcuts
   const act = (a) => q(`[data-action=${a}]`).click();
-  const nsent = () => ws.sent.length;
   act("break"); check("break button", ws.sent.pop().type === "break");
   act("log"); check("log button", ws.sent.pop().type === "log");
   act("line-dtr"); const dtr = ws.sent.pop(); check("DTR button toggles", dtr.type === "line" && dtr.line === "dtr" && dtr.value === false, dtr);
   act("font-up"); check("font up", t.fontSize === 15 && t.term.options.fontSize === 15);
-  act("clear"); check("clear empties the kept data and resets counters", t.events.length === 0 && ws.sent.pop().type === "resetcounters");
-  bin(ws, 2000, "after clear\r\n"); view.value = "hex"; fire(view, "change"); view.value = "text"; fire(view, "change");
-  check("redraw after clear shows only new data", t.term.text().includes("after clear") && !t.term.text().includes("hello"), t.term.text());
+  act("clear"); check("clear asks the session to forget its records", ws.sent.pop().type === "clear");
   act("reset"); check("reset button", t.term.out[0] === "<reset>" || t.term.text() === "");
   act("port"); check("port button closes when connected", ws.sent.pop().type === "close");
   w.document.dispatchEvent(new w.KeyboardEvent("keydown", { code: "KeyS", altKey: true, shiftKey: true, bubbles: true }));
   check("Alt+Shift+S changes the layout", q("#panes").className.includes("cols"), q("#panes").className);
-  // ctrl+shift+L clears
-  bin(ws, 2100, "zzz\r\n"); t.term.keyHandler({ type: "keydown", key: "L", code: "KeyL", ctrlKey: true, shiftKey: true });
-  check("Ctrl+Shift+L clears", t.events.length === 0);
+  t.term.keyHandler({ type: "keydown", key: "L", code: "KeyL", ctrlKey: true, shiftKey: true });
+  check("Ctrl+Shift+L clears", ws.sent.pop().type === "clear");
   // two sessions on the same port are refused
   run("openTab({...profiles[0], name: 'other'})", "x");
   check("same port is not opened twice", run("tabs.length", "x") === 1);
@@ -238,18 +229,18 @@ const tab = () => run("tabs[0]", "x");
   run("portPollMs = 600000", "x");
 
   // a message while the connection is still opening is dropped, not thrown (found by the monkey test)
-  const sentOk = run("openTab({ ...profiles[0], name: 'opening', device: 'fake:binary' }); sendMessage(tabs[tabs.length - 1], { type: 'mark', data: 'x' })", "x");
+  const sentOk = run("openTab({ ...profiles[0], name: 'opening', device: 'fake:binary' }); sendMessage(tabs[tabs.length - 1], { type: 'mark' })", "x");
   check("a message to a connection that is still opening is not sent and does not throw", sentOk === false && errors.length === 0, errors);
   run("closeTab(tabs[tabs.length - 1])", "x");
 
-  // closing a tab ends its auto send and file job
-  const second = run("tabs.length", "x");
+  // closing a tab ends its session, its auto send and its file job
   typ.value = "text"; fire(typ, "change"); input.value = "tick"; end.value = "none"; fire(end, "change");
+  json(ws, { type: "state", state: "connected", message: "" });
   q("[data-auto-ms]").value = "10"; auto.checked = true; fire(auto, "change");
   const job = { stop: false }; t.job = job;
   run("closeTab(tabs[0])", "x");
   const n0 = ws.sent.filter((m) => m.type === "input").length; await sleep(60);
-  check("closing a tab stops auto send and a file job", ws.sent.filter((m) => m.type === "input").length === n0 && job.stop === true && run("tabs.length", "x") === 0);
+  check("closing a tab stops auto send and a file job, and ends the session", ws.sent.filter((m) => m.type === "input").length === n0 && job.stop === true && run("tabs.length", "x") === 0 && ws.sent.some((m) => m.type === "end"));
 
   // style snapshot for refactoring the style sheet: SNAPSHOT=file node smoke.js
   if (process.env.SNAPSHOT) {
@@ -270,18 +261,16 @@ const tab = () => run("tabs[0]", "x");
     run("showLines()", "x");
     fs.writeFileSync(process.env.SNAPSHOT, JSON.stringify(rows, null, 1));
   }
-  // the kept events are capped (8 MB) and the oldest go first
-  run("openTab({...profiles[0], name: 'cap', device: 'fake:binary'})", "x");
+  run("openTab({...profiles[0], name: 'main', device: 'COM61'})", "x");
   await sleep(10);
-  const capTab = run("tabs[tabs.length - 1]", "x");
-  for (let i = 0; i < 40; i++) run(`record(tabs[tabs.length - 1], { k: "note", t: ${i}, text: "n${i}" }, 500000)`, "x");
-  const capped = run("({ n: tabs[tabs.length - 1].events.length, kept: tabs[tabs.length - 1].kept, first: tabs[tabs.length - 1].events[0].text })", "x");
-  check("kept events stay within the cap and drop the oldest", capped.kept <= 8 * 1024 * 1024 * 1.25 && capped.n < 40 && capped.first !== "n0", capped);
+  const mainWs = run("tabs[0].ws", "x");
+  attach(mainWs, "connected");
+  check("a session that is already open is not opened again", !mainWs.sent.some((m) => m.type === "open") && run("tabs[0].state", "x") === "connected");
+
   // graph: the server sends the numbers it found in the lines
   run("applyProfile(tabs[0], { ...tabs[0].profile, graphSeries: 'Temp | Temperature: | degC\\nTick | tick ' })", "x");
-  const gws = run("tabs[0].ws", "x");
-  json(gws, { type: "points", t: 5000, values: [{ name: "Temp", value: 26.1 }] });
-  json(gws, { type: "points", t: 5100, values: [{ name: "Tick", value: 7 }, { name: "Temp", value: 26.3 }] });
+  json(mainWs, { type: "points", t: 5000, values: [{ name: "Temp", value: 26.1 }] });
+  json(mainWs, { type: "points", t: 5100, values: [{ name: "Tick", value: 7 }, { name: "Temp", value: 26.3 }] });
   const gs = run("[...tabs[0].graph.series].map(([n, p]) => n + ':' + p.map((x) => x.v).join(','))", "x");
   check("points from the server are kept per series", JSON.stringify(gs) === JSON.stringify(["Temp:26.1,26.3", "Tick:7"]), gs);
   q("[data-graph]").click();
@@ -290,55 +279,6 @@ const tab = () => run("tabs[0]", "x");
   check("Clear graph forgets the points", run("tabs[0].graph.series.size", "x") === 0);
   q("[data-graph]").click();
   check("and the button hides it again", q(".graphbar").hidden);
-
-  // the Frames view: frames cut from raw bytes, with the check verified
-  const frameWs = run("tabs[0].ws", "x");
-  run("applyProfile(tabs[0], { ...tabs[0].profile, frameSpec: 'sync = AA 55\\nsize = u8@2 + 4\\nheader = 3\\ncheck = sum8' })", "x");
-  const frameView = q("[data-view]"); frameView.value = "frames"; fire(frameView, "change");
-  const rawFrame = (payload, spoil = 0) => { const body = [0xaa, 0x55, payload.length, ...payload]; return String.fromCharCode(...body, (body.reduce((a, b) => a + b, 0) + spoil) & 0xff); };
-  bin(frameWs, 9500, "xx" + rawFrame([1, 2, 3]).slice(0, 5));
-  bin(frameWs, 9501, rawFrame([1, 2, 3]).slice(5) + rawFrame([9], 1));
-  const frameText = run("tabs[0].term", "x").text();
-  check("the Frames view shows noise, good frames (also cut across chunks) and bad ones", /\?\? 78 78/.test(frameText) && /AA 55 03 \| 01 02 03 \| 0[0-9A-F]  OK/.test(frameText) && /AA 55 01 \| 09 \| [0-9A-F]{2}  BAD \(expected/.test(frameText), frameText.slice(-200));
-  run("applyProfile(tabs[0], { ...tabs[0].profile, frameSpec: 'size = banana' })", "x");  // saving settings resets the view
-  frameView.value = "frames"; fire(frameView, "change");
-  bin(frameWs, 9600, "abc");
-  check("without a valid description it says so and shows hex", /Frames view: size = banana/.test(run("tabs[0].term", "x").text()) && /61 62/.test(run("tabs[0].term", "x").text()), run("tabs[0].term", "x").text().slice(-200));
-  run("applyProfile(tabs[0], { ...tabs[0].profile, frameSpec: '' })", "x");
-  frameView.value = "text"; fire(frameView, "change");
-
-  // control line changes become notes when asked for
-  const lineWs = run("tabs[0].ws", "x");
-  run("applyProfile(tabs[0], { ...tabs[0].profile, noteLines: true })", "x");
-  json(lineWs, { type: "lines", cts: false, dsr: false, dcd: false, ri: false, dtr: true, rts: true });
-  json(lineWs, { type: "lines", cts: true, dsr: false, dcd: false, ri: false, dtr: true, rts: true });
-  json(lineWs, { type: "lines", cts: true, dsr: true, dcd: false, ri: false, dtr: true, rts: true });
-  const lineText = run("tabs[0].term", "x").text();
-  check("a change of CTS and DSR is noted, once each", /CTS on/.test(lineText) && /DSR on/.test(lineText) && (lineText.match(/CTS on/g) || []).length === 1, lineText.slice(-160));
-  run("applyProfile(tabs[0], { ...tabs[0].profile, noteLines: false })", "x");
-
-  // highlights, the filter and lines that wait for their end
-  const hlTab = run("tabs[0]", "x"); const hlWs = hlTab.ws;
-  run("applyProfile(tabs[0], { ...tabs[0].profile, highlights: 'ERROR = red+bold\\nok = green', graphSeries: '', quickSends: '' })", "x");
-  hlTab.term.out.length = 0;
-  bin(hlWs, 9000, "an ERROR here\r\nall fine\r\nok then\r\n");
-  const hlOut = hlTab.term.out.join("");
-  check("a matching line is coloured and the line end stays outside", hlOut.includes("\x1b[31;1man ERROR here\x1b[0m\r\n") && hlOut.includes("\x1b[32mok then\x1b[0m") && hlOut.includes("all fine\r\n") && !hlOut.includes("\x1b[31;1mall"), hlOut);
-  hlTab.term.out.length = 0;
-  bin(hlWs, 9100, "login: ");
-  check("a line without its end waits", !hlTab.term.out.join("").includes("login"));
-  await sleep(400);
-  check("and is shown after a short idle time", hlTab.term.out.join("").includes("login: "), hlTab.term.out.join(""));
-  const flt = q("[data-filter]"); flt.value = "fine"; fire(flt, "input");
-  await sleep(320);
-  check("the filter shows only matching lines and marks the change", hlTab.term.text().includes("all fine") && !hlTab.term.text().includes("an ERROR") && q("[data-view-reset]").hidden === false, hlTab.term.text());
-  flt.value = "!fine"; fire(flt, "input");
-  await sleep(320);
-  check("! hides the matching lines instead", !hlTab.term.text().includes("all fine") && hlTab.term.text().includes("an ERROR"), hlTab.term.text());
-  flt.value = ""; fire(flt, "input");
-  await sleep(320);
-  check("an empty filter shows everything again, nothing was lost", hlTab.term.text().includes("all fine") && hlTab.term.text().includes("an ERROR"));
-  run("applyProfile(tabs[0], { ...tabs[0].profile, highlights: '' })", "x");
 
   // "All tabs": the same data goes to every connected tab
   run("openTab({ ...profiles[0], name: 'all one', device: 'COM81' }); openTab({ ...profiles[0], name: 'all two', device: 'COM82' })", "x");
@@ -362,17 +302,16 @@ const tab = () => run("tabs[0]", "x");
   const noisy = run("tabs.find((t) => t.profile.name === 'noisy')", "x");
   await sleep(10);
   run("activate(tabs.find((t) => t.profile.name === 'noisy'))", "x");
-  bin(noisy.ws, 9800, "a FAULT while shown\r\n");
+  json(noisy.ws, { type: "notify", text: "a FAULT while shown" });
   check("no notification for a tab that is in sight", sent.length === 0, sent);
   run("activate(tabs.find((t) => t.profile.name === 'quiet'))", "x");
-  bin(noisy.ws, 9801, "a FAULT in the background\r\n");
-  bin(noisy.ws, 9802, "another FAULT at once\r\n");
+  json(noisy.ws, { type: "notify", text: "a FAULT in the background" });
+  json(noisy.ws, { type: "notify", text: "another FAULT at once" });
   check("a notify rule gives one notification for a tab that is not in sight (not one per line)", sent.length === 1 && sent[0].title === "noisy" && /FAULT in the background/.test(sent[0].body), sent);
   run("closeTab(tabs.find((t) => t.profile.name === 'noisy')); closeTab(tabs.find((t) => t.profile.name === 'quiet'))", "x");
 
   // a check is added after hex data
-  const checkTab = run("tabs[0]", "x");
-  const checkWs = checkTab.ws; json(checkWs, { type: "state", state: "connected", message: "" });
+  const checkWs = run("tabs[0].ws", "x"); json(checkWs, { type: "state", state: "connected", message: "" });
   q("[data-send-type]").value = "hex"; fire(q("[data-send-type]"), "change");
   q("[data-send-check]").value = "xor8"; fire(q("[data-send-check]"), "change");
   const fromCheck = checkWs.sent.length;
@@ -383,7 +322,6 @@ const tab = () => run("tabs[0]", "x");
   q("[data-send-type]").value = "text"; fire(q("[data-send-type]"), "change");
 
   // sending jumps to the bottom of the output
-  json(run("tabs[0].ws", "x"), { type: "state", state: "connected", message: "" });
   const bottomTab = run("tabs[0]", "x"); const bottomBefore = bottomTab.term.bottomed || 0;
   q("[data-send-text]").value = "go"; q("[data-send]").click();
   check("a send scrolls the output to the bottom", (bottomTab.term.bottomed || 0) === bottomBefore + 1, bottomTab.term.bottomed);
@@ -392,18 +330,16 @@ const tab = () => run("tabs[0]", "x");
   run("openTab({ ...profiles[0], name: 'bg one', device: 'COM91' }); openTab({ ...profiles[0], name: 'bg two', device: 'COM92' })", "x");
   const bgTwo = run("tabs.find((t) => t.profile.name === 'bg two')", "x");
   run("activate(tabs.find((t) => t.profile.name === 'bg one'))", "x");
-  bin(bgTwo.ws, 9900, "background data");
+  bin(bgTwo.ws, "background data");
   check("data in a tab that is not shown marks it and the page title", bgTwo.tabEl.classList.contains("activity") && w.document.title === "(1) termdeck", w.document.title);
   run("activate(tabs.find((t) => t.profile.name === 'bg two'))", "x");
   check("showing the tab clears the mark", !bgTwo.tabEl.classList.contains("activity") && w.document.title === "termdeck", w.document.title);
   run("closeTab(tabs.find((t) => t.profile.name === 'bg two')); closeTab(tabs.find((t) => t.profile.name === 'bg one'))", "x");
 
   // marks
-  const mws = run("tabs[0].ws", "x");
-  mws.sent.length = 0;
+  mainWs.sent.length = 0;
   q("[data-mark]").click();
-  const markMsg = mws.sent.find((m) => m.type === "mark");
-  check("Mark adds a line to the output and tells the log", markMsg && /^mark \d+ at \d\d:\d\d:\d\d$/.test(markMsg.data) && run("tabs[0].term", "x").text().includes("[termdeck] " + markMsg.data), markMsg);
+  check("Mark asks the session for a mark (it numbers it, shows it and logs it)", mainWs.sent.some((m) => m.type === "mark"), mainWs.sent);
   const mt = run("tabs[0].term", "x");
   mt.buffer.active = { length: 100, viewportY: 50, getLine: (i) => ({ translateToString: () => (i === 10 || i === 90 ? "[termdeck] mark 1 at 10:00:00" : "x") }) };
   let scrolled = null; mt.scrollToLine = (n) => { scrolled = n; };
@@ -413,7 +349,7 @@ const tab = () => run("tabs[0]", "x");
 
   // quick sends: buttons from the session settings
   run("applyProfile(tabs[0], { ...tabs[0].profile, quickSends: 'Hello | text | hi there\\n# note\\nRaw | hex | 41 42 | end=none\\nWiggle | cmd | dtr=0; wait=1' })", "x");
-  const qws = run("tabs[0].ws", "x");
+  const qws = mainWs;
   const quick = [...w.document.querySelectorAll(".quickbar button")];
   check("quick sends make buttons", quick.map((b) => b.textContent).join(",") === "Hello,Raw,Wiggle" && !q(".quickbar").hidden, quick.map((b) => b.textContent));
   json(qws, { type: "state", state: "connected", message: "" });
@@ -430,16 +366,18 @@ const tab = () => run("tabs[0]", "x");
 
   // the state while the page waits for a port to come back
   json(qws, { type: "state", state: "reconnecting", message: "read error" });
-  check("reconnecting: status, button and notes", /Reconnecting/.test(q(".toolbar .status").textContent) && q("[data-action=port]").textContent === "Stop reconnecting" && run("tabs[0].tabEl.className", "x").includes("reconnecting"), q("[data-action=port]").textContent);
+  check("reconnecting: status and button", /Reconnecting/.test(q(".toolbar .status").textContent) && q("[data-action=port]").textContent === "Stop reconnecting" && run("tabs[0].tabEl.className", "x").includes("reconnecting"), q("[data-action=port]").textContent);
   qws.sent.length = 0; q("[data-action=port]").click();
   check("the button then stops it", qws.sent.pop().type === "close");
   json(qws, { type: "state", state: "connected", message: "" });
 
-  // tabs come back after a reload
-  run("tabs.forEach((t, i) => { if (i === 0) t.state = 'closed'; })", "x");   // the first one was not connected
+  // tabs come back after a reload, attached to their sessions
+  run("openTab({ ...profiles[0], name: 'second tab', device: 'COM62' })", "x");
+  await sleep(10);
   run("saveTabs()", "x");
   const saved = w.sessionStorage.getItem("termdeck.tabs");
   const names = run("tabs.map((t) => t.profile.name)", "x");
+  const ids = run("tabs.map((t) => t.id)", "x");
   const socketsBefore = sockets.length;
   run("[...tabs].forEach(closeTab)", "x");
   check("no tab is left after closing them", run("tabs.length", "x") === 0);
@@ -447,7 +385,10 @@ const tab = () => run("tabs[0]", "x");
   run("restoreTabs()", "x");
   await sleep(20);
   check("restoreTabs brings the tabs back, in order", JSON.stringify(run("tabs.map((t) => t.profile.name)", "x")) === JSON.stringify(names), { names, now: run("tabs.map((t) => t.profile.name)", "x") });
-  check("the ones that were connected connect again, the other stays closed", run("tabs[0].state", "x") === "closed" && sockets.length === socketsBefore + names.length - 1, { sockets: sockets.length - socketsBefore, names: names.length });
+  const again = sockets.slice(socketsBefore);
+  check("each tab attaches again to its session, with its id", again.length === names.length && again.every((s, i) => s.url.endsWith(`id=${ids[i]}`) && s.sent[0]?.type === "hello"), again.map((s) => s.url));
+  attach(again[0], "connected"); attach(again[1], "closed");
+  check("a restored tab does not open a port by itself: the session says what it is doing", !again.some((s) => s.sent.some((m) => m.type === "open")) && run("tabs[0].state", "x") === "connected" && run("tabs[1].state", "x") === "closed");
   check("no errors", errors.length === 0, errors);
   console.log(failed ? `${failed} FAILED` : "all passed");
   process.exit(failed ? 1 : 0);

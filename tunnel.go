@@ -14,7 +14,6 @@ import (
 type tunnel struct {
 	a, b           serial.Port
 	devA, devB     string
-	log            *Logger
 	cancel         context.CancelFunc
 	a2b, b2a       atomic.Int64
 	writeA, writeB chanMutex // one write at a time to each port
@@ -28,7 +27,7 @@ func newChanMutex() chanMutex { return make(chanMutex, 1) }
 func (m chanMutex) lock()   { m <- struct{}{} }
 func (m chanMutex) unlock() { <-m }
 
-const tunnelA2B, tunnelB2A = "a2b", "b2a"
+const tunnelA2B, tunnelB2A = srcA2B, srcB2A
 
 // openTunnel opens both ports of profile and its peer, and starts carrying data between them. A
 // reconnecting attempt is quiet and does not end the reconnecting loop it belongs to.
@@ -47,6 +46,7 @@ func (t *termSession) openTunnel(profile Profile, reconnecting bool) bool {
 	}
 	peer := profile.Peer // normalized with it
 	if !reconnecting {
+		t.useProfile(profile)
 		t.sendState("connecting", "")
 	}
 	if !t.srv.claimPort(profile.Device, t) {
@@ -81,16 +81,16 @@ func (t *termSession) openTunnel(profile Profile, reconnecting bool) bool {
 	}
 	log, logErr := OpenLog(logProfile, existing)
 	ctx, cancel := context.WithCancel(t.ctx)
-	tun := &tunnel{a: a, b: b, devA: profile.Device, devB: peer.Device, log: log, cancel: cancel, writeA: newChanMutex(), writeB: newChanMutex()}
+	tun := &tunnel{a: a, b: b, devA: profile.Device, devB: peer.Device, cancel: cancel, writeA: newChanMutex(), writeB: newChanMutex()}
 	t.mu.Lock()
 	t.gen++
 	gen := t.gen
-	t.tun, t.profile = tun, profile
+	t.tun, t.profile, t.log = tun, profile, log
 	t.mu.Unlock()
 	t.sendState("connected", "")
 	t.sendJSON(map[string]any{"type": "logging", "on": log != nil})
 	if logErr != nil {
-		t.sendJSON(map[string]string{"type": "notice", "text": "log not written: " + logErr.Error()})
+		t.notice("log not written: " + logErr.Error())
 	}
 	go t.pump(gen, ctx, tun, a, b, tun.writeB, tunnelA2B, &tun.a2b)
 	go t.pump(gen, ctx, tun, b, a, tun.writeA, tunnelB2A, &tun.b2a)
@@ -109,12 +109,7 @@ func (t *termSession) pump(gen int, ctx context.Context, tun *tunnel, from, to s
 			_, werr := to.Write(data)
 			toLock.unlock()
 			count.Add(int64(n))
-			if dir == tunnelA2B {
-				tun.log.Write(dirRx, data)
-			} else {
-				tun.log.Write(dirTx, data)
-			}
-			t.sendJSON(map[string]any{"type": "tunnel", "dir": dir, "t": time.Now().UnixMilli(), "data": data})
+			t.emit(record{at: time.Now(), src: dir, raw: data, text: data})
 			if werr != nil && err == nil {
 				err = werr
 			}
@@ -167,5 +162,4 @@ func (t *termSession) closeTunnel(tun *tunnel) {
 	tun.b.Close()
 	t.srv.releasePort(tun.devA, t)
 	t.srv.releasePort(tun.devB, t)
-	tun.log.Close()
 }

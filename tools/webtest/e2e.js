@@ -185,7 +185,7 @@ async function startServer() {
   await waitScreen(/before-freeze/);
   await page.click(".viewbar [data-freeze]");
   await input.fill("echo while-frozen"); await input.press("Enter");
-  await page.waitForFunction(() => tabs[0].events.some((e) => e.k === "rx" && new TextDecoder().decode(e.text).includes("while-frozen")));
+  await page.waitForFunction(() => tabs[0].paused && tabs[0].paused.bytes > 30);  // the echo and the answer came
   s = await screen(0);
   check("freeze: new output is kept but not shown", /before-freeze/.test(s) && !/while-frozen/.test(s), s.slice(-120));
   check("the button counts what came meanwhile", /Resume \(\d+ B new\)/.test(await page.locator(".viewbar [data-freeze]").textContent()));
@@ -521,7 +521,7 @@ async function startServer() {
   await page.click("#xmodem-close");
 
   // the line changes the device drives show as notes: DTR of one end is DSR of the other
-  await page.evaluate((i) => { tabs[i].profile.noteLines = true; }, a);
+  await page.evaluate((i) => { tabs[i].profile.noteLines = true; sendMessage(tabs[i], { type: "profile", profile: tabs[i].profile }); }, a);
   await page.locator(".tab", { hasText: "fake:link-b" }).click();
   await page.click("[data-action=line-dtr]");
   s = await waitScreen(/DSR off/, a, 4000);
@@ -666,7 +666,7 @@ async function startServer() {
   await waitScreen(/line 5000 of 5000/, shellTab, 8000);
   const t0 = Date.now();
   await page.selectOption(".viewbar [data-view]", "hex");
-  await page.waitForFunction((n) => tabs[n].events.length > 0 && !tabs[n].hold, shellTab);
+  await page.waitForFunction((n) => { const b = tabs[n].term.buffer.active; for (let r = Math.max(0, b.length - 40); r < b.length; r++) if (/^([0-9a-f]{2} ){16} \|/.test(b.getLine(r)?.translateToString(true) || "")) return true; return false; }, shellTab);  // hex rows drawn
   check("5000 lines are kept and a view switch takes under 3 s", Date.now() - t0 < 3000, Date.now() - t0);
   await page.selectOption(".viewbar [data-view]", "text");
 
@@ -739,8 +739,8 @@ async function startServer() {
   await page.evaluate(() => { window.__max = 0; let last = performance.now(); const loop = () => { const now = performance.now(); window.__max = Math.max(window.__max, now - last); last = now; requestAnimationFrame(loop); }; requestAnimationFrame(loop); });
   await page.locator("#port-tree .item.port", { hasText: "fake:stream" }).dblclick();
   await page.waitForFunction(() => tabs[0].counters.rx > 2_500_000, null, { timeout: 30000 }).catch(() => {});
-  const speed = await page.evaluate(() => ({ rx: tabs[0].counters.rx, gap: Math.round(window.__max), kept: tabs[0].kept, rows: tabs[0].term.buffer.active.length }));
-  check("a fast stream (600 KB/s) is taken without freezing the page (longest frame under 400 ms)", speed.rx > 2_500_000 && speed.gap < 400 && speed.kept < 11 * 1024 * 1024, speed);
+  const speed = await page.evaluate(() => ({ rx: tabs[0].counters.rx, gap: Math.round(window.__max), rows: tabs[0].term.buffer.active.length }));
+  check("a fast stream (600 KB/s) is taken without freezing the page (longest frame under 400 ms)", speed.rx > 2_500_000 && speed.gap < 400, speed);
   await page.locator(".tab .close").first().click();
   await page.locator(".tab .close").first().click();
 

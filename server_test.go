@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/json"
 	"math/rand"
 	"net/http"
@@ -48,6 +47,7 @@ func itoa(n int) string { b, _ := json.Marshal(n); return string(b) }
 
 type testServer struct {
 	*httptest.Server
+	srv    *Server
 	secret string
 }
 
@@ -57,7 +57,8 @@ func newTestServer(t *testing.T) *testServer {
 	s := NewServer(NewStore(filepath.Join(dir, "profiles.json")), NewScriptStore(filepath.Join(dir, "scripts.json")), NewGroupStore(filepath.Join(dir, "groups.json")))
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
-	return &testServer{Server: ts, secret: s.auth.Login(s.auth.NewLink())}
+	t.Cleanup(s.endSessions) // the sessions would outlive the test, and keep their ports
+	return &testServer{Server: ts, srv: s, secret: s.auth.Login(s.auth.NewLink())}
 }
 
 func (ts *testServer) do(t *testing.T, method, path, body, secret string) (int, string) {
@@ -131,9 +132,15 @@ func TestProfilesOverHTTP(t *testing.T) {
 
 func dialTerminal(t *testing.T, ts *testServer) (*websocket.Conn, context.Context) {
 	t.Helper()
+	return dialTerminalID(t, ts, "")
+}
+
+// dialTerminalID attaches to the session of the tab id (a new one when it is empty or unknown).
+func dialTerminalID(t *testing.T, ts *testServer, id string) (*websocket.Conn, context.Context) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
-	c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(ts.URL, "http")+"/api/terminal",
+	c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(ts.URL, "http")+"/api/terminal?id="+id,
 		&websocket.DialOptions{Subprotocols: []string{wsProtocol, "auth." + ts.secret}})
 	if err != nil {
 		t.Fatal(err)
@@ -459,8 +466,8 @@ func TestLoggingCanBeStartedAndStoppedWhileConnected(t *testing.T) {
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave}})
 	waitFor(t, c, ctx, "state", "connected")
 	sendJSON(t, c, ctx, map[string]any{"type": "log", "value": true})
-	if m := waitFor(t, c, ctx, "notice", ""); !strings.Contains(m["text"].(string), "set a log file") {
-		t.Errorf("notice %v", m["text"])
+	if n := waitNote(t, c, ctx, "log"); !strings.Contains(n, "set a log file") {
+		t.Errorf("notice %v", n)
 	}
 	// with a path the port opens without logging only when asked to; here it logs from the start, then stops, then starts again
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "logPath": logFile}})
@@ -494,24 +501,49 @@ func TestLoggingCanBeStartedAndStoppedWhileConnected(t *testing.T) {
 	}
 }
 
-// readFrame returns the raw bytes and the text of the next frame of port output, skipping the text messages.
-func readFrame(c *websocket.Conn, ctx context.Context) (raw, text []byte, err error) {
+var noteLine = regexp.MustCompile(`\x1b\[90m\[termdeck\] (.*?)\x1b\[0m\r\n`)
+
+// splitScreen separates the notes of termdeck from the rest of what the screen shows.
+func splitScreen(data []byte) (text string, notes []string) {
+	for _, m := range noteLine.FindAllSubmatch(data, -1) {
+		notes = append(notes, string(m[1]))
+	}
+	return noteLine.ReplaceAllString(string(data), ""), notes
+}
+
+// readBinary returns what the screen shows next from the device, without the notes, skipping the text messages.
+func readBinary(c *websocket.Conn, ctx context.Context) ([]byte, error) {
 	for {
 		kind, data, err := c.Read(ctx)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		if kind == websocket.MessageBinary {
-			n := int(binary.BigEndian.Uint32(data[8:12]))
-			return data[12 : 12+n], data[12+n:], nil
+			if text, _ := splitScreen(data); text != "" {
+				return []byte(text), nil
+			}
 		}
 	}
 }
 
-// readBinary returns the text of the next frame of port output.
-func readBinary(c *websocket.Conn, ctx context.Context) ([]byte, error) {
-	_, text, err := readFrame(c, ctx)
-	return text, err
+// waitNote reads messages until the screen shows a note of termdeck that contains the text.
+func waitNote(t *testing.T, c *websocket.Conn, ctx context.Context, contains string) string {
+	t.Helper()
+	for {
+		kind, data, err := c.Read(ctx)
+		if err != nil {
+			t.Fatalf("waiting for a note with %q: %v", contains, err)
+		}
+		if kind != websocket.MessageBinary {
+			continue
+		}
+		_, notes := splitScreen(data)
+		for _, n := range notes {
+			if strings.Contains(n, contains) {
+				return n
+			}
+		}
+	}
 }
 
 // Every script, style sheet and file the page names must be served, or the page breaks in a real browser.
@@ -529,16 +561,21 @@ func TestEveryFileTheIndexPageUsesIsServed(t *testing.T) {
 	}
 }
 
-func TestFramesCarryTheRawBytesAndTheTime(t *testing.T) {
+func TestTheRawBytesTheDeviceSentCanBeDownloaded(t *testing.T) {
 	ts := newTestServer(t)
 	master, slave := newPty(t)
-	c, ctx := dialTerminal(t, ts)
+	c, ctx := dialTerminalID(t, ts, "tab-raw")
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave, "charset": "iso-8859-1"}})
 	waitFor(t, c, ctx, "state", "connected")
 	master.Write([]byte{'a', 0xe9})
-	raw, text, err := readFrame(c, ctx)
-	if err != nil || !bytes.Equal(raw, []byte{'a', 0xe9}) || string(text) != "aé" {
-		t.Fatalf("raw %x text %q %v", raw, text, err)
+	if text, err := readBinary(c, ctx); err != nil || string(text) != "aé" {
+		t.Fatalf("screen %q %v", text, err)
+	}
+	if code, body := ts.do(t, "GET", "/api/sessions/tab-raw/raw", "", ts.secret); code != 200 || body != "a\xe9" {
+		t.Errorf("raw: %d %q", code, body)
+	}
+	if code, _ := ts.do(t, "GET", "/api/sessions/nobody/raw", "", ts.secret); code != 404 {
+		t.Errorf("unknown session: %d", code)
 	}
 }
 
@@ -611,7 +648,7 @@ func TestCmdAndScriptStepsDriveLinesWaitAndSendBytes(t *testing.T) {
 		t.Errorf("sent %q", got)
 	}
 	sendJSON(t, c, ctx, map[string]any{"type": "steps", "data": "nonsense"})
-	waitFor(t, c, ctx, "notice", "")
+	waitNote(t, c, ctx, "nonsense")
 }
 
 func TestTriggerAnswersWhatTheDeviceSends(t *testing.T) {
@@ -647,9 +684,7 @@ func TestCmdNeedsAnOpenPortAndStopsWhenItCloses(t *testing.T) {
 	master, slave := newPty(t)
 	c, ctx := dialTerminal(t, ts)
 	sendJSON(t, c, ctx, map[string]any{"type": "steps", "data": "hex=41"})
-	if m := waitFor(t, c, ctx, "notice", ""); !strings.Contains(m["text"].(string), "open the port") {
-		t.Errorf("notice %v", m)
-	}
+	waitNote(t, c, ctx, "open the port")
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": slave}})
 	waitFor(t, c, ctx, "state", "connected")
 	sendJSON(t, c, ctx, map[string]any{"type": "steps", "data": "wait=300; hex=42"})
@@ -744,14 +779,14 @@ func TestLinesAndBreakWorkOnAVirtualPort(t *testing.T) {
 		}
 	}
 	sendJSON(t, c, ctx, map[string]any{"type": "break"})
-	if m := waitFor(t, c, ctx, "break", ""); m["ok"] != true {
-		t.Errorf("break %v", m)
+	if n := waitNote(t, c, ctx, "break"); n != "break sent" {
+		t.Errorf("break %q", n)
 	}
 	sendJSON(t, c, ctx, map[string]any{"type": "close"})
 	waitFor(t, c, ctx, "state", "closed")
 	sendJSON(t, c, ctx, map[string]any{"type": "break"})
-	if m := waitFor(t, c, ctx, "break", ""); m["ok"] != false {
-		t.Errorf("break on a closed port %v", m)
+	if n := waitNote(t, c, ctx, "break"); !strings.Contains(n, "failed") {
+		t.Errorf("break on a closed port %q", n)
 	}
 }
 
@@ -797,15 +832,62 @@ func TestOpeningAndClosingPortsManyTimesLeavesNoGoroutinesBehind(t *testing.T) {
 	t.Errorf("goroutines: %d before, %d after 40 open and close cycles", before, after)
 }
 
-func TestAPortClosedWithTheConnectionCanBeOpenedAgain(t *testing.T) {
+func TestAPortLeftByItsPageIsClosedAfterAWhile(t *testing.T) {
+	old := sessionGrace
+	sessionGrace = 50 * time.Millisecond
+	t.Cleanup(func() { sessionGrace = old })
 	ts := newTestServer(t)
 	for i := 0; i < 3; i++ {
 		c, ctx := dialTerminal(t, ts)
 		sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:link-a"}})
 		waitFor(t, c, ctx, "state", "connected")
 		c.Close(websocket.StatusNormalClosure, "page closed")
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+func TestAReloadedPageFindsItsSessionAsItWas(t *testing.T) {
+	ts := newTestServer(t)
+	c, ctx := dialTerminalID(t, ts, "tab-1")
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo"}})
+	waitFor(t, c, ctx, "state", "connected")
+	sendJSON(t, c, ctx, map[string]any{"type": "input", "data": "before reload\n"})
+	if text := readFor(t, c, ctx, 300*time.Millisecond); !strings.Contains(text, "before reload") {
+		t.Fatalf("echo %q", text)
+	}
+	c.Close(websocket.StatusNormalClosure, "reload")
+
+	c, ctx = dialTerminalID(t, ts, "tab-1")
+	sendJSON(t, c, ctx, map[string]any{"type": "hello", "profile": map[string]any{"name": "t", "device": "fake:echo"}, "view": map[string]any{"mode": "text"}})
+	m := waitFor(t, c, ctx, "session", "")
+	if m["state"] != "connected" {
+		t.Errorf("state after the reload %v", m["state"])
+	}
+	waitFor(t, c, ctx, "reset", "")
+	if text, _ := collectUntil(t, c, ctx, "replayed", ""); !strings.Contains(text, "before reload") {
+		t.Errorf("the records were not shown again: %q", text)
+	}
+	sendJSON(t, c, ctx, map[string]any{"type": "input", "data": "after\n"})
+	if text := readFor(t, c, ctx, 300*time.Millisecond); !strings.Contains(text, "after") {
+		t.Errorf("the port is not open any more: %q", text)
+	}
+	// another page with the same tab takes it over: the first one is let go
+	other, octx := dialTerminalID(t, ts, "tab-1")
+	sendJSON(t, other, octx, map[string]any{"type": "hello", "view": map[string]any{"mode": "hex"}})
+	waitFor(t, other, octx, "session", "")
+	if _, _, err := c.Read(ctx); err == nil {
+		for {
+			if _, _, err := c.Read(ctx); err != nil {
+				break
+			}
+		}
+	}
+	// the tab is closed: the session ends and the port is free for another tab
+	sendJSON(t, other, octx, map[string]any{"type": "end"})
+	c3, ctx3 := dialTerminal(t, ts)
+	time.Sleep(100 * time.Millisecond)
+	sendJSON(t, c3, ctx3, map[string]any{"type": "open", "profile": map[string]any{"name": "t2", "device": "fake:echo"}})
+	waitFor(t, c3, ctx3, "state", "connected")
 }
 
 func TestALogThatFailsStopsAndTellsThePage(t *testing.T) {
@@ -817,8 +899,8 @@ func TestALogThatFailsStopsAndTellsThePage(t *testing.T) {
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo", "logPath": "/dev/full"}})
 	waitFor(t, c, ctx, "state", "connected")
 	sendJSON(t, c, ctx, map[string]any{"type": "raw", "bytes": []byte("hello\n")})
-	if m := waitFor(t, c, ctx, "notice", ""); !strings.Contains(m["text"].(string), "log stopped") {
-		t.Errorf("notice %v", m)
+	if n := waitNote(t, c, ctx, "log"); !strings.Contains(n, "log stopped") {
+		t.Errorf("notice %v", n)
 	}
 }
 
@@ -828,8 +910,8 @@ func TestATriggerThatTriggersItselfIsPaused(t *testing.T) {
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo", "enter": "lf", "triggers": "a => a"}})
 	waitFor(t, c, ctx, "state", "connected")
 	sendJSON(t, c, ctx, map[string]any{"type": "raw", "bytes": []byte("a")})
-	if m := waitFor(t, c, ctx, "notice", ""); !strings.Contains(m["text"].(string), "triggers paused") {
-		t.Errorf("notice %v", m)
+	if n := waitNote(t, c, ctx, "triggers"); !strings.Contains(n, "triggers paused") {
+		t.Errorf("notice %v", n)
 	}
 }
 
@@ -840,7 +922,7 @@ func readFor(t *testing.T, c *websocket.Conn, ctx context.Context, d time.Durati
 	defer cancel()
 	var got []byte
 	for {
-		_, text, err := readFrame(c, ctx)
+		text, err := readBinary(c, ctx)
 		if err != nil {
 			return string(got)
 		}
@@ -857,7 +939,7 @@ func TestSlowSendPutsTimeBetweenCharactersAndCanBeFlushed(t *testing.T) {
 	sendJSON(t, c, ctx, map[string]any{"type": "raw", "bytes": []byte("ab\ncd")})
 	var got string
 	for len(got) < 5 && time.Since(start) < 3*time.Second {
-		_, text, err := readFrame(c, ctx)
+		text, err := readBinary(c, ctx)
 		if err != nil {
 			break
 		}
@@ -1086,9 +1168,7 @@ func TestATransferCanBeCancelledAndNeedsAnOpenPort(t *testing.T) {
 	ts := newTestServer(t)
 	c, ctx := dialTerminal(t, ts)
 	sendJSON(t, c, ctx, map[string]any{"type": "xmodem", "action": "send", "bytes": []byte("x")})
-	if m := waitFor(t, c, ctx, "notice", ""); !strings.Contains(m["text"].(string), "open the port") {
-		t.Errorf("notice %v", m)
-	}
+	waitNote(t, c, ctx, "open the port")
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo"}})
 	waitFor(t, c, ctx, "state", "connected")
 	sendJSON(t, c, ctx, map[string]any{"type": "xmodem", "action": "receive", "name": "never"})
@@ -1115,14 +1195,16 @@ func TestATunnelCarriesDataBothWaysAndShowsIt(t *testing.T) {
 	if got := readDevice(t, masterA, 7); string(got) != "from B\n" {
 		t.Fatalf("A got %q", got)
 	}
-	seen := map[string]string{}
-	for len(seen) < 2 {
-		m := waitFor(t, c, ctx, "tunnel", "")
-		data, _ := base64.StdEncoding.DecodeString(m["data"].(string))
-		seen[m["dir"].(string)] = string(data)
+	var screen string
+	for !strings.Contains(screen, "B→A \x1b[0mfrom B") {
+		text, err := readBinary(c, ctx)
+		if err != nil {
+			t.Fatalf("the page saw %q: %v", screen, err)
+		}
+		screen += string(text)
 	}
-	if seen["a2b"] != "from A\n" || seen["b2a"] != "from B\n" {
-		t.Errorf("the page saw %v", seen)
+	if !strings.Contains(screen, "A→B \x1b[0mfrom A\n") {
+		t.Errorf("the page saw %q", screen)
 	}
 	for {
 		if m := waitFor(t, c, ctx, "counters", ""); m["rx"] == float64(7) && m["tx"] == float64(7) {
@@ -1223,8 +1305,8 @@ func collectUntil(t *testing.T, c *websocket.Conn, ctx context.Context, kind, st
 			t.Fatalf("waiting for %s/%s: %v (text so far %q)", kind, state, err, text)
 		}
 		if mt == websocket.MessageBinary {
-			n := int(binary.BigEndian.Uint32(data[8:12]))
-			text = append(text, data[12+n:]...)
+			screen, _ := splitScreen(data)
+			text = append(text, screen...)
 			continue
 		}
 		var m map[string]any
@@ -1264,9 +1346,7 @@ func TestAnExpectThatDoesNotComeStopsTheScriptWithAnError(t *testing.T) {
 		t.Errorf("message %v, echoed %q", m, text)
 	}
 	sendJSON(t, c, ctx, map[string]any{"type": "steps", "data": "timeout=50; expect=zzz"})
-	if n := waitFor(t, c, ctx, "notice", ""); !strings.Contains(n["text"].(string), "zzz") {
-		t.Errorf("notice %v", n)
-	}
+	waitNote(t, c, ctx, "zzz")
 	if text := readFor(t, c, ctx, 200*time.Millisecond); strings.Contains(text, "after") {
 		t.Error("the line after the failed expect was sent")
 	}

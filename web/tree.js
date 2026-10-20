@@ -73,7 +73,7 @@ function node(key, titleText, className, tools, buildBody, onTitle) {
 // A short message where the action happened: in the lines of the current session, or in the bottom bar when none is open.
 let tellTimer = null;
 function tell(text) {
-  if (active) return note(active, text);
+  if (active) return localNote(active, text);
   const node = $("#notice");
   node.textContent = text;
   clearTimeout(tellTimer);

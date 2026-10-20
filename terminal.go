@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -17,33 +17,45 @@ import (
 var enterBytes = map[string]string{"cr": "\r", "lf": "\n", "crlf": "\r\n"}
 
 type clientMessage struct {
-	Type    string  `json:"type"`
-	Profile Profile `json:"profile"`
-	Data    string  `json:"data"`
-	Answer  string  `json:"answer"` // reply to a question about an existing log: append, overwrite or none
-	Line    string  `json:"line"`   // control line to set: dtr or rts
-	Value   bool    `json:"value"`  // asserted or not
-	Name    string  `json:"name"`   // script to run
-	Bytes   []byte  `json:"bytes"`  // raw bytes to send, as they are
-	Action  string  `json:"action"` // xmodem: send, receive or cancel
-	OneK    bool    `json:"oneK"`   // xmodem: blocks of 1024 bytes instead of 128
-	Proto   string  `json:"proto"`  // xmodem (the default) or ymodem: the name and the exact size travel with the file
+	Type    string       `json:"type"`
+	Profile Profile      `json:"profile"`
+	View    viewSettings `json:"view"`
+	Data    string       `json:"data"`
+	Answer  string       `json:"answer"` // reply to a question about an existing log: append, overwrite or none
+	Line    string       `json:"line"`   // control line to set: dtr or rts
+	Value   bool         `json:"value"`  // asserted or not
+	Name    string       `json:"name"`   // script to run
+	Bytes   []byte       `json:"bytes"`  // raw bytes to send, as they are
+	Action  string       `json:"action"` // xmodem: send, receive or cancel
+	OneK    bool         `json:"oneK"`   // xmodem: blocks of 1024 bytes instead of 128
+	Proto   string       `json:"proto"`  // xmodem (the default) or ymodem: the name and the exact size travel with the file
 }
 
-// termSession is one tab: a WebSocket that can open and close its port as often as the user wants.
+// termSession is one tab: its port, its records and what it sends. It lives on the server, so a reload of the
+// page attaches to it again and finds everything as it was. A session left without a page ends after a while.
 type termSession struct {
-	srv *Server
-	c   *websocket.Conn
-	ctx context.Context
+	srv  *Server
+	id   string
+	ctx  context.Context // the life of the session
+	stop context.CancelFunc
 
-	mu      sync.Mutex // guards everything below
-	gen     int        // changes with each open and close, so a stale reader knows it is stale
-	port    serial.Port
-	profile Profile
-	dtr     bool // the lines as we last set them
-	rts     bool
-	log     *Logger
-	stopRun context.CancelFunc
+	connMu  sync.Mutex // guards the three below
+	conn    *websocket.Conn
+	connCtx context.Context
+	orphan  *time.Timer // ends the session when no page comes back
+
+	mu         sync.Mutex // guards everything below
+	gen        int        // changes with each open and close, so a stale reader knows it is stale
+	port       serial.Port
+	profile    Profile
+	hasProfile bool
+	state      string // as last told to the page: connecting, connected, failed, closed, ended, reconnecting
+	scriptName string // the script that is running
+	marks      int
+	dtr        bool // the lines as we last set them
+	rts        bool
+	log        *Logger
+	stopRun    context.CancelFunc
 
 	writeMu sync.Mutex // one command at a time reaches the port
 
@@ -68,6 +80,14 @@ type termSession struct {
 	trigMu         sync.Mutex // guards the two below: the replies of the last second, and whether they are paused
 	replyTimes     []time.Time
 	triggersPaused bool
+
+	streamMu sync.Mutex // guards the records and the renderers; held while screen output is sent, to keep its order
+	hist     history
+	view     viewSettings
+	viewSet  bool      // the page told its view; until then the view follows the settings
+	screen   *renderer // the tab's view of the records
+	lines    *renderer // the received lines as the session cuts them, for the graph
+	graph    []graphSpec
 }
 
 const (
@@ -75,23 +95,299 @@ const (
 	maxMessage        = 16 << 20 // an XMODEM file travels in one message
 )
 
-// frame is what the page gets for data from the device: the time in milliseconds (8 bytes), the
-// length of the raw bytes (4), the raw bytes, then the same data converted to UTF-8.
-func frame(at time.Time, raw, text []byte) []byte {
-	out := make([]byte, 12, 12+len(raw)+len(text))
-	binary.BigEndian.PutUint64(out, uint64(at.UnixMilli()))
-	binary.BigEndian.PutUint32(out[8:], uint32(len(raw)))
-	return append(append(out, raw...), text...)
+// sessionGrace is how long a session waits for its page to come back (a reload) before it ends.
+var sessionGrace = time.Minute
+
+func newSession(srv *Server, id string) *termSession {
+	ctx, stop := context.WithCancel(context.Background())
+	t := &termSession{srv: srv, id: id, ctx: ctx, stop: stop, answers: make(chan string, 1), state: "closed"}
+	t.view = viewOf(Profile{})
+	t.screen = t.newScreen()
+	t.lines = t.newLines()
+	go t.tick()
+	return t
+}
+
+// sessionFor finds the session of a tab, or starts one.
+func (s *Server) sessionFor(id string) *termSession {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	if t := s.sessions[id]; t != nil {
+		return t
+	}
+	t := newSession(s, id)
+	s.sessions[id] = t
+	return t
+}
+
+// endSessions ends every session: termdeck is stopping.
+func (s *Server) endSessions() {
+	s.sessionsMu.Lock()
+	all := make([]*termSession, 0, len(s.sessions))
+	for _, t := range s.sessions {
+		all = append(all, t)
+	}
+	s.sessionsMu.Unlock()
+	for _, t := range all {
+		t.end()
+	}
+}
+
+// end closes the port and forgets the session.
+func (t *termSession) end() {
+	t.srv.sessionsMu.Lock()
+	if t.srv.sessions[t.id] == t {
+		delete(t.srv.sessions, t.id)
+	}
+	t.srv.sessionsMu.Unlock()
+	t.close()
+	t.stop()
+	t.connMu.Lock()
+	conn := t.conn
+	t.conn = nil
+	t.connMu.Unlock()
+	if conn != nil {
+		conn.Close(websocket.StatusNormalClosure, "the tab was closed")
+	}
+}
+
+// attach makes c the page of the session; a page that had it before is let go.
+func (t *termSession) attach(c *websocket.Conn, ctx context.Context) {
+	t.connMu.Lock()
+	old := t.conn
+	t.conn, t.connCtx = c, ctx
+	if t.orphan != nil {
+		t.orphan.Stop()
+		t.orphan = nil
+	}
+	t.connMu.Unlock()
+	if old != nil {
+		old.Close(websocket.StatusPolicyViolation, "the tab was opened again in another page")
+	}
+}
+
+// detach notes that c is gone; the session ends if no page comes back in time.
+func (t *termSession) detach(c *websocket.Conn) {
+	t.connMu.Lock()
+	defer t.connMu.Unlock()
+	if t.conn != c {
+		return
+	}
+	t.conn = nil
+	t.orphan = time.AfterFunc(sessionGrace, func() {
+		t.connMu.Lock()
+		alone := t.conn == nil
+		t.connMu.Unlock()
+		if alone {
+			t.end()
+		}
+	})
+}
+
+// write sends a message to the page, when there is one.
+func (t *termSession) send(kind websocket.MessageType, data []byte) {
+	t.connMu.Lock()
+	c, ctx := t.conn, t.connCtx
+	t.connMu.Unlock()
+	if c != nil {
+		c.Write(ctx, kind, data)
+	}
 }
 
 func (t *termSession) sendJSON(v any) {
 	data, _ := json.Marshal(v)
-	t.c.Write(t.ctx, websocket.MessageText, data)
+	t.send(websocket.MessageText, data)
 }
 
+// sendState tells the page the state of the port, and notes it in the stream.
 func (t *termSession) sendState(state, message string) {
+	t.mu.Lock()
+	t.state = state
+	profile := t.profile
+	t.mu.Unlock()
 	t.sendJSON(map[string]string{"type": "state", "state": state, "message": message})
+	switch state {
+	case "failed", "ended":
+		if message == "" {
+			message = state
+		}
+		t.note(message)
+	case "reconnecting":
+		t.note(message + ": opening the port again as soon as it is back")
+	case "connected":
+		t.note("connected to " + summary(profile))
+	case "closed":
+		t.note("port closed")
+	}
 }
+
+// summary is the port and its settings in a few words: COM3 115200 8N1.
+func summary(p Profile) string {
+	text := p.Device
+	if p.Peer != nil {
+		text += " ⇄ " + p.Peer.Device
+	}
+	parity := "N"
+	if p.Parity != "" {
+		parity = string(p.Parity[0] - 'a' + 'A')
+	}
+	text += fmt.Sprintf(" %d %d%s%s", p.Baud, p.DataBits, parity, p.StopBits)
+	switch p.Flow {
+	case "rtscts":
+		text += " RTS/CTS"
+	case "xonxoff":
+		text += " XON/XOFF"
+	case "dsrdtr":
+		text += " DSR/DTR"
+	}
+	return text
+}
+
+// notice tells the page something went wrong or happened, in the stream.
+func (t *termSession) notice(text string) { t.note(text) }
+
+// note puts a message of termdeck in the stream.
+func (t *termSession) note(text string) {
+	t.emit(record{at: time.Now(), src: srcNote, text: []byte(text)})
+}
+
+// ---------------------------------------------------------------- the stream
+
+// emit keeps a record, writes it to the log and shows it on the page.
+func (t *termSession) emit(rec record) {
+	t.streamMu.Lock()
+	defer t.streamMu.Unlock()
+	t.hist.add(rec)
+	t.logger().Record(rec)
+	t.lines.add(rec)
+	t.lines.take()
+	t.screen.add(rec)
+	t.flushScreen()
+}
+
+// flushScreen sends what the screen renderer made. The caller holds streamMu.
+func (t *termSession) flushScreen() {
+	if out := t.screen.take(); len(out) > 0 {
+		t.send(websocket.MessageBinary, out)
+	}
+}
+
+// tick shows the lines that waited long enough for their end (a prompt), on the screen and in the log.
+func (t *termSession) tick() {
+	for {
+		select {
+		case <-t.ctx.Done():
+			return
+		case now := <-time.After(100 * time.Millisecond):
+			t.streamMu.Lock()
+			t.screen.idle(now)
+			t.lines.idle(now)
+			t.lines.take()
+			t.flushScreen()
+			t.streamMu.Unlock()
+			t.logger().idle(now)
+		}
+	}
+}
+
+func (t *termSession) newScreen() *renderer {
+	t.mu.Lock()
+	profile := t.profile
+	t.mu.Unlock()
+	if !t.viewSet {
+		t.view = viewOf(profile)
+	}
+	r := newRenderer(screenFormat(profile, t.view))
+	r.onNotify = func(line string) { t.sendJSON(map[string]string{"type": "notify", "text": line}) }
+	return r
+}
+
+func (t *termSession) newLines() *renderer {
+	t.mu.Lock()
+	profile := t.profile
+	t.mu.Unlock()
+	t.graph, _ = parseGraphSeries(profile.GraphSeries) // checked by Normalize
+	r := newRenderer(linesFormat(profile))
+	r.onLine = func(src, line string, at time.Time) {
+		if values := extractValues(line, t.graph); len(values) > 0 && src == srcRx {
+			t.sendJSON(map[string]any{"type": "points", "t": at.UnixMilli(), "values": values})
+		}
+	}
+	return r
+}
+
+// maxReplay is how much of the screen a redraw sends at most: more than the terminal keeps anyway.
+const maxReplay = 4 << 20
+
+// redraw shows the records again from the start, with the current view and settings.
+func (t *termSession) redraw() {
+	t.streamMu.Lock()
+	defer t.streamMu.Unlock()
+	t.screen = t.newScreen()
+	t.lines = t.newLines()
+	t.screen.replaying = true
+	for _, rec := range t.hist.records {
+		t.screen.add(rec)
+		t.lines.add(rec)
+	}
+	t.lines.take()
+	t.screen.idle(time.Now())
+	t.screen.replaying = false
+	out := t.screen.take()
+	if len(out) > maxReplay {
+		out = out[len(out)-maxReplay:]
+		for i, b := range out {
+			if b == '\n' {
+				out = append([]byte("\x1b[0m"), out[i+1:]...)
+				break
+			}
+		}
+	}
+	t.sendJSON(map[string]string{"type": "reset"})
+	if len(out) > 0 {
+		t.send(websocket.MessageBinary, out)
+	}
+	t.sendJSON(map[string]string{"type": "replayed"})
+}
+
+// clearRecords forgets the records and the counters: the page cleared its screen.
+func (t *termSession) clearRecords() {
+	t.streamMu.Lock()
+	t.hist.clear()
+	t.screen = t.newScreen()
+	t.streamMu.Unlock()
+	t.resetCounters()
+}
+
+// setProfile changes the settings that show the records (and that the next open uses).
+func (t *termSession) setProfile(p Profile) {
+	if err := p.Normalize(); err != nil {
+		t.notice("settings not applied: " + err.Error())
+		return
+	}
+	t.mu.Lock()
+	t.profile, t.hasProfile = p, true
+	t.mu.Unlock()
+}
+
+// sentText is how a line that was sent shows: the text, without its line end, with control characters escaped.
+func sentText(data []byte) []byte {
+	for len(data) > 0 && (data[len(data)-1] == '\n' || data[len(data)-1] == '\r') {
+		data = data[:len(data)-1]
+	}
+	return []byte(escapeText(data))
+}
+
+// recordSent puts what went out in the stream: text as typed, bytes as hex.
+func (t *termSession) recordSent(out, data []byte, raw bool) {
+	text := sentText(data)
+	if raw {
+		text = []byte(hexText(out))
+	}
+	t.emit(record{at: time.Now(), src: srcTx, raw: out, text: text})
+}
+
+// ---------------------------------------------------------------- the port
 
 // open (re)opens the port of profile.
 func (t *termSession) open(profile Profile) { t.openPort(profile, false) }
@@ -110,6 +406,7 @@ func (t *termSession) openPort(profile Profile, reconnecting bool) bool {
 		return false
 	}
 	if !reconnecting {
+		t.useProfile(profile)
 		t.sendState("connecting", "")
 	}
 	if !t.srv.claimPort(profile.Device, t) {
@@ -156,13 +453,23 @@ func (t *termSession) openPort(profile Profile, reconnecting bool) bool {
 	t.sendState("connected", "")
 	t.sendJSON(map[string]any{"type": "logging", "on": log != nil})
 	if logErr != nil {
-		t.sendJSON(map[string]string{"type": "notice", "text": "log not written: " + logErr.Error()})
+		t.notice("log not written: " + logErr.Error())
 	}
-	graph, _ := parseGraphSeries(profile.GraphSeries) // checked by Normalize
-	go t.read(gen, port, t.codec, t.triggers, graph, t.runCtx)
+	go t.read(gen, port, t.codec, t.triggers, t.runCtx)
 	go t.watchLines(gen, port, asserted(profile.DTR), asserted(profile.RTS))
 	go t.watchCounters(gen)
 	return true
+}
+
+// useProfile takes the settings of an open, and shows the records again when they show differently now.
+func (t *termSession) useProfile(p Profile) {
+	t.mu.Lock()
+	before, _ := json.Marshal(t.profile)
+	t.profile, t.hasProfile = p, true
+	t.mu.Unlock()
+	if after, _ := json.Marshal(p); string(after) != string(before) {
+		t.redraw()
+	}
 }
 
 // askAboutLog asks the page what to do with the log file that is already there.
@@ -183,29 +490,22 @@ func (t *termSession) askAboutLog(profile Profile) string {
 	return "none"
 }
 
-func (t *termSession) read(gen int, port serial.Port, codec *Codec, triggers []trigger, graph []graphSpec, ctx context.Context) {
+func (t *termSession) read(gen int, port serial.Port, codec *Codec, triggers []trigger, ctx context.Context) {
 	buf := make([]byte, 4096)
-	var lines lineSplitter // the lines of the data, for the graph
-	var window []byte      // the end of what the device sent, to match triggers across chunks
+	var window []byte // the end of what the device sent, to match triggers across chunks
 	for {
 		n, err := port.Read(buf)
 		if n > 0 && t.feedTransfer(buf[:n]) {
 			t.rx.Add(int64(n)) // a file transfer is reading: the data is not for the page
 		} else if n > 0 {
-			at := time.Now()
 			raw := append([]byte(nil), buf[:n]...)
 			text := codec.FromDevice(raw)
 			t.rx.Add(int64(n))
 			t.expectFeed(text)
-			t.logger().Write(dirRx, text)
+			t.emit(record{at: time.Now(), src: srcRx, raw: raw, text: text})
 			t.stopLogOnError()
-			if t.c.Write(t.ctx, websocket.MessageBinary, frame(at, raw, text)) != nil {
-				return
-			}
+			t.answerENQ(raw)
 			window = t.match(ctx, triggers, window, text)
-			if len(graph) > 0 {
-				t.sendPoints(at, lines.feed(text), graph)
-			}
 		}
 		if err != nil || n == 0 {
 			t.mu.Lock()
@@ -232,6 +532,19 @@ func (t *termSession) read(gen int, port serial.Port, codec *Codec, triggers []t
 	}
 }
 
+// answerENQ sends the answerback of the session when the device asks who we are (ENQ, Ctrl+E).
+func (t *termSession) answerENQ(raw []byte) {
+	t.mu.Lock()
+	answer := t.profile.Answerback
+	t.mu.Unlock()
+	for _, b := range raw {
+		if b == 5 && answer != "" {
+			t.write([]byte(answer))
+			return
+		}
+	}
+}
+
 // stopLogOnError closes a log that cannot be written any more and says so, once.
 func (t *termSession) stopLogOnError() {
 	log := t.logger()
@@ -248,7 +561,7 @@ func (t *termSession) stopLogOnError() {
 	t.mu.Unlock()
 	log.Close()
 	t.sendJSON(map[string]any{"type": "logging", "on": false})
-	t.sendJSON(map[string]string{"type": "notice", "text": "log stopped: " + err.Error()})
+	t.notice("log stopped: " + err.Error())
 }
 
 func (t *termSession) logger() *Logger {
@@ -260,11 +573,11 @@ func (t *termSession) logger() *Logger {
 // setLogging starts or stops the log of the open port, whatever it was when the port opened.
 func (t *termSession) setLogging(on bool) {
 	t.mu.Lock()
-	port, profile, current := t.port, t.profile, t.log
+	open, profile, current := t.port != nil || t.tun != nil, t.profile, t.log
 	t.mu.Unlock()
 	switch {
-	case port == nil:
-		t.sendJSON(map[string]string{"type": "notice", "text": "open the port before logging"})
+	case !open:
+		t.notice("open the port before logging")
 	case !on:
 		t.mu.Lock()
 		t.log = nil
@@ -274,7 +587,7 @@ func (t *termSession) setLogging(on bool) {
 	case current != nil:
 		// already logging
 	case profile.LogPath == "":
-		t.sendJSON(map[string]string{"type": "notice", "text": "set a log file in the settings of this session first"})
+		t.notice("set a log file in the settings of this session first")
 	default:
 		existing := profile.LogExisting
 		if existing == "ask" {
@@ -285,7 +598,7 @@ func (t *termSession) setLogging(on bool) {
 		}
 		log, err := OpenLog(profile, existing)
 		if err != nil {
-			t.sendJSON(map[string]string{"type": "notice", "text": "log not written: " + err.Error()})
+			t.notice("log not written: " + err.Error())
 			return
 		}
 		t.mu.Lock()
@@ -325,14 +638,14 @@ func (t *termSession) close() bool {
 }
 
 // write sends text to the device, in its character set, and records it as sent.
-func (t *termSession) write(data []byte) { t.send(data, false) }
+func (t *termSession) write(data []byte) { t.sendData(data, false) }
 
 // writeRaw sends bytes to the device as they are.
-func (t *termSession) writeRaw(data []byte) { t.send(data, true) }
+func (t *termSession) writeRaw(data []byte) { t.sendData(data, true) }
 
-func (t *termSession) send(data []byte, raw bool) {
+func (t *termSession) sendData(data []byte, raw bool) {
 	t.mu.Lock()
-	port, log, codec := t.port, t.log, t.codec
+	port, codec := t.port, t.codec
 	t.mu.Unlock()
 	if port == nil {
 		return
@@ -346,24 +659,26 @@ func (t *termSession) send(data []byte, raw bool) {
 	t.mu.Unlock()
 	if queue != nil { // slow send: the writer sends it
 		select {
-		case queue <- outItem{out, data}:
+		case queue <- outItem{out, data, raw}:
 		case <-ctx.Done():
 		}
 		return
 	}
 	t.writeMu.Lock()
-	defer t.writeMu.Unlock()
 	mode, delay := t.rs485()
-	if n, err := transmit(port, mode, delay, func() (int, error) { return port.Write(out) }); err == nil {
+	n, err := transmit(port, mode, delay, func() (int, error) { return port.Write(out) })
+	t.writeMu.Unlock()
+	if err == nil {
 		t.tx.Add(int64(n))
-		log.Write(dirTx, data)
+		t.recordSent(out, data, raw)
 	}
 }
 
-// terminal serves one tab. The client sends JSON: open, close, input, raw, steps, flush, mark, xmodem, break, script (by name), stop.
-// The server sends binary frames of port output (see frame) and JSON: state (connecting, connected, failed,
-// closed, ended), tx (a line a script sent), script (running, done, stopped, error), break, notice, counters, trigger.
-// The port can be closed and opened again over the same connection, so the tab keeps its screen.
+// terminal serves the page of one tab: GET /api/terminal?id=<the tab's id>. The page sends JSON: hello (its
+// settings and view: the session sends its state and shows its records again), view, profile, open, close,
+// input, raw, steps, flush, mark, clear, note, xmodem, break, script, stop, log, line, end (the tab is closed).
+// The session sends its screen as binary messages (text for the terminal) and JSON: session, state, reset and
+// replayed (around a redraw), logging, logexists, lines, counters, points, notify, script, xfer.
 func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{wsProtocol}})
 	if err != nil {
@@ -371,11 +686,15 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 	}
 	defer c.CloseNow()
 	c.SetReadLimit(maxMessage) // an "open" message carries the whole profile, with a custom bell sound
-	t := &termSession{srv: s, c: c, ctx: r.Context(), answers: make(chan string, 1)}
-	defer t.close()
-
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		id = randomToken(12)
+	}
+	t := s.sessionFor(id)
+	t.attach(c, r.Context())
+	defer t.detach(c)
 	for {
-		_, data, err := c.Read(t.ctx)
+		_, data, err := c.Read(r.Context())
 		if err != nil {
 			return
 		}
@@ -389,15 +708,34 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// sendPoints tells the page the numbers the lines of a chunk gave, for its graph.
-func (t *termSession) sendPoints(at time.Time, lines []string, graph []graphSpec) {
-	var values []graphValue
-	for _, line := range lines {
-		values = append(values, extractValues(line, graph)...)
+// hello answers a page that attached: the settings and view it brings (unless the port is open with others),
+// the state of the session, and its records.
+func (t *termSession) hello(m clientMessage) {
+	t.mu.Lock()
+	busy := t.port != nil || t.tun != nil || t.reconnectStop != nil
+	keep := busy || (t.hasProfile && m.Profile.Device == "")
+	t.mu.Unlock()
+	if !keep {
+		t.setProfile(m.Profile)
 	}
-	if len(values) > 0 {
-		t.sendJSON(map[string]any{"type": "points", "t": at.UnixMilli(), "values": values})
-	}
+	t.streamMu.Lock()
+	t.view, t.viewSet = m.View, true
+	t.streamMu.Unlock()
+	t.mu.Lock()
+	info := map[string]any{"type": "session", "state": t.state, "logging": t.log != nil, "script": t.scriptName, "profile": t.profile}
+	t.mu.Unlock()
+	t.sendJSON(info)
+	t.redraw()
+	t.sendJSON(map[string]any{"type": "counters", "rx": t.rx.Load(), "tx": t.tx.Load()})
+}
+
+// mark puts a numbered mark in the stream, to find a moment again.
+func (t *termSession) mark() {
+	t.mu.Lock()
+	t.marks++
+	n := t.marks
+	t.mu.Unlock()
+	t.note(fmt.Sprintf("mark %d at %s", n, time.Now().Format("15:04:05")))
 }
 
 // rs485 is the direction control of the open port, and its delay.
@@ -409,6 +747,14 @@ func (t *termSession) rs485() (string, time.Duration) {
 
 // What the session does for each kind of message from the page.
 var messageHandlers = map[string]func(t *termSession, m clientMessage){
+	"hello": func(t *termSession, m clientMessage) { t.hello(m) },
+	"view": func(t *termSession, m clientMessage) {
+		t.streamMu.Lock()
+		t.view, t.viewSet = m.View, true
+		t.streamMu.Unlock()
+		t.redraw()
+	},
+	"profile": func(t *termSession, m clientMessage) { t.setProfile(m.Profile); t.redraw() },
 	"open": func(t *termSession, m clientMessage) {
 		go func() { // in the background: the page may have to answer a question first
 			t.opMu.Lock()
@@ -426,10 +772,13 @@ var messageHandlers = map[string]func(t *termSession, m clientMessage){
 		t.close()
 		t.sendState("closed", "port closed")
 	},
+	"end":           func(t *termSession, m clientMessage) { go t.end() },
 	"input":         func(t *termSession, m clientMessage) { t.write([]byte(m.Data)) },
 	"raw":           func(t *termSession, m clientMessage) { t.writeRaw(m.Bytes) },
 	"steps":         func(t *termSession, m clientMessage) { t.runCmd(m.Data) },
 	"resetcounters": func(t *termSession, m clientMessage) { t.resetCounters() },
+	"clear":         func(t *termSession, m clientMessage) { t.clearRecords() },
+	"note":          func(t *termSession, m clientMessage) { t.note(m.Data) },
 	"break":         func(t *termSession, m clientMessage) { t.sendBreak() },
 	"script":        func(t *termSession, m clientMessage) { t.runScript(m.Name) },
 	"stop":          func(t *termSession, m clientMessage) { t.stopScript() },
@@ -441,7 +790,7 @@ var messageHandlers = map[string]func(t *termSession, m clientMessage){
 			t.startXmodem(m, xmodemTimesInUse)
 		}
 	},
-	"mark": func(t *termSession, m clientMessage) { t.logger().Mark(m.Data) },
+	"mark": func(t *termSession, m clientMessage) { t.mark() },
 	"log": func(t *termSession, m clientMessage) {
 		go func() {
 			t.opMu.Lock()

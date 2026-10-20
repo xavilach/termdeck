@@ -92,9 +92,8 @@ function applyProfile(tab, p) {
   Object.assign(o, boldOptions(p));
   tab.view = viewOf(p);
   updateGraphSpecs(tab);
-  tab.frameWarned = false;
-  tab.highlights = parseHighlights(p.highlights);
   syncBars(tab.pane);
+  sendMessage(tab, { type: "profile", profile: p });
   redraw(tab);
   renderToolbar(tab.pane);
   fitPane(tab.pane);

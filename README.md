@@ -20,12 +20,13 @@ Press Help (left column, Alt+Shift+H) for the keys and the syntax of the setting
 - Baud, data bits, parity, stop bits, flow control (RTS/CTS, XON/XOFF, DSR/DTR on Windows), DTR/RTS, live CTS/DSR/DCD/RI, character sets.
 - Reconnect when the port comes back. RS-485 direction by RTS. Slow send (pause per character and per line end). Note line changes. Duplicate (❐).
 - A tab that gets data while another is shown is marked, and the browser tab title counts them: `(2) termdeck`.
+- A tab lives on the server: a reload of the page finds it as it was (the port open, the lines, a running script). A tab left without its page ends after a minute.
 - The port list follows plugging and unplugging, and tells USB adapters apart (product, vendor:product, serial number: from sysfs on Linux, the Registry on Windows). A reload brings the tabs back (the connected ones connect again).
 - Virtual ports, to try things without hardware: `fake:echo`, `fake:shell` (admin/admin), `fake:counter`, `fake:binary`, `fake:stream` (600 KB/s), `fake:flaky` (drops and returns), `fake:link-a` / `fake:link-b` (a null-modem cable).
 
 ## Receive (the bar above the lines)
 
-- View: Text, Hex, Decimal, Binary, Frames. New line at (Terminal, CR, LF, CR LF, Custom, None), filter (text, `/regex/`, `!hide`); under More: control characters, time (clock or since the last line), new line after a pause, Copy, Save. Changing them redraws the data kept (8 MB): nothing is lost.
+- View: Text, Hex, Decimal, Binary, Frames. New line at (Terminal, CR, LF, CR LF, Custom, None), filter (text, `/regex/`, `!hide`); under More: control characters, time (clock or since the last line), new line after a pause, Copy, Save. Changing them redraws the data kept (8 MB, on the server): nothing is lost. The screen and the log are drawn the same way.
 - Frames: bytes cut into frames by a description (`sync`, `size`, `end`, `header`, `check`), one line each, OK or BAD.
 - Highlights (`ERROR = red+bold`; add `notify` for a desktop notification while the tab is out of sight), Graph of numbers taken from lines (`Temp | Temperature: | degC`), Marks (Alt+Shift+M), Freeze, Copy, Save text / raw, Find (Ctrl+Shift+F), Rx counter.
 - The lines are read-only.
@@ -35,7 +36,7 @@ Press Help (left column, Alt+Shift+H) for the keys and the syntax of the setting
 - Text, Hex, Decimal, Binary or Cmd (steps: `dtr=1; wait=500; hex=0D 0A; expect=login:`; `expect` waits for what the device says, so scripts can log in or flash step by step). End, Check (sum, XOR, CRC), Auto, history, files, quick-send buttons.
 - All tabs: send the same data to every connected tab (a test bench); Open all (▶▶) opens every session of a group.
 - Transfer: XMODEM and YMODEM, send or receive (checked against lrzsz).
-- Scripts, triggers (`login: => admin`, paused when they loop) and quick sends are rules, one per line.
+- Scripts, triggers (`login: => admin`, paused when they loop) and quick sends are rules, one per line. A pattern is the same everywhere: text in any case, `/regex/` as written, `/regex/i`.
 
 ## Tools
 

@@ -7,7 +7,8 @@ import (
 )
 
 // Pattern is what triggers, expect, the graph, highlights and the filter look for. It is written the same way
-// everywhere: text, matched in any case, or /regex/, matched as written (/regex/i in any case).
+// everywhere: text, matched in any case, or /regex/, matched as written (/regex/i in any case). Only the
+// server matches patterns, so every feature agrees.
 
 type Pattern struct {
 	Text string // as written

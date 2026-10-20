@@ -83,6 +83,9 @@ func (a *Auth) Check(secret string) bool {
 }
 
 type Server struct {
+	sessionsMu sync.Mutex
+	sessions   map[string]*termSession // the sessions of the tabs, by the tab's id
+
 	portsMu sync.Mutex
 	ports   map[string]*termSession // ports that are open, by device, so no two tabs open the same one
 	store   *Store[Profile]
@@ -92,7 +95,7 @@ type Server struct {
 }
 
 func NewServer(store *Store[Profile], scripts *Store[Script], groups *Store[string]) *Server {
-	return &Server{store: store, scripts: scripts, groups: groups, auth: NewAuth(), ports: map[string]*termSession{}}
+	return &Server{store: store, scripts: scripts, groups: groups, auth: NewAuth(), ports: map[string]*termSession{}, sessions: map[string]*termSession{}}
 }
 
 func wsSecret(r *http.Request) string {
@@ -220,7 +223,24 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/export", s.export)
 	mux.HandleFunc("POST /api/import", s.importSettings)
 	mux.HandleFunc("GET /api/terminal", s.terminal)
+	mux.HandleFunc("GET /api/sessions/{id}/raw", s.rawOutput)
 	return s.guard(mux)
+}
+
+// rawOutput is what the device of a tab sent, as the bytes it sent (the records kept: the last 8 MB).
+func (s *Server) rawOutput(w http.ResponseWriter, r *http.Request) {
+	s.sessionsMu.Lock()
+	t := s.sessions[r.PathValue("id")]
+	s.sessionsMu.Unlock()
+	if t == nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("no such tab"))
+		return
+	}
+	t.streamMu.Lock()
+	data := t.hist.raw()
+	t.streamMu.Unlock()
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Write(data)
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {

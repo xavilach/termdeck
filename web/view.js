@@ -1,8 +1,6 @@
 "use strict";
 
-// What a tab shows: theme and bell, and the lines kept as events so that a view change can redraw them.
-
-// ---------------------------------------------------------------- the lines of a tab
+// What a tab shows: theme and bell, the screen output of the server, notifications and notes.
 
 const MONO_FONTS = '"Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace';
 
@@ -60,57 +58,23 @@ function bell(tab) {
   }
 }
 
-// "Implicit LF in every CR": a CR that is not followed by LF becomes CR LF (across chunks too).
-function addImplicitLF(tab, bytes) {
-  const out = [];
-  if (tab.afterCR && bytes.length && bytes[0] !== 10) out.push(10);
-  tab.afterCR = false;
-  for (let i = 0; i < bytes.length; i++) {
-    out.push(bytes[i]);
-    if (bytes[i] === 13) {
-      if (i + 1 < bytes.length) { if (bytes[i + 1] !== 10) out.push(10); } else tab.afterCR = true;
-    }
-  }
-  return Uint8Array.from(out);
-}
+// ---------------------------------------------------------------- what is shown
+// The server keeps the records of the tab and draws them for its view (text or hex, times, new line at...):
+// the page writes what it sends into the terminal. A view change asks the server to draw everything again.
 
-// ---------------------------------------------------------------- what is shown, and kept to show again
-// Everything that reaches the screen is also kept as an event (received data with its raw bytes and
-// time, sent lines, notes). Changing the view (text or hex, times, new line after a pause) clears the
-// screen and shows the events again, so a view can be left and come back with nothing lost.
-
-const KEEP_BYTES = 8 * 1024 * 1024;
-const { ENC, hex2, stamp, formatDelta, NEWLINES, shapeText, NUMBERS, unescapeText, textBytes, parseNumbers, parseQuickSends, seriesNames, CHECKS, checksum, parseFrameSpec, makeFrameParser, frameLine, parseHighlights, highlightOf, notifyOf, compileFilter, passesFilter, ALLOWED, clean, groupDigits, formatBytes, b64 } = Format;
+const { ENC, unescapeText, textBytes, NEWLINES, parseNumbers, parseQuickSends, seriesNames, CHECKS, checksum, ALLOWED, clean, groupDigits, formatBytes, b64 } = Format;
 const viewOf = (p) => ({ mode: p.view || "text", stamps: !!p.timestamps, timeMode: p.timeMode || "clock", pause: p.linePauseMs || 0, ctrl: !!p.showControl, filter: p.filter || "",
                                     nl: p.newLine || "terminal", nlCustom: p.newLineCustom || "" });
 
-function record(tab, ev, size) {
-  if (tab.replaying) return;
-  ev.size = size;
-  tab.events.push(ev);
-  tab.kept += size;
-  if (tab.kept > KEEP_BYTES * 1.25) {  // drop the oldest in one go, not one at a time
-    let drop = 0;
-    while (tab.kept > KEEP_BYTES && drop < tab.events.length - 1) tab.kept -= tab.events[drop++].size;
-    tab.events.splice(0, drop);
-  }
-}
-
-function render(tab, ev) {
-  if (tab.hold || (tab.paused && !tab.replaying)) return;  // a frozen screen shows nothing new
-  if (ev.k === "rx") showRx(tab, ev);
-  else if (ev.k === "tx") showTx(tab, ev.text, true, ev.t, ev.bytes);
-  else writeNote(tab, ev.text);
-}
-
-function emit(tab, ev, size) {
-  record(tab, ev, size);
-  if (ev.k === "rx" && !tab.replaying) markActivity(tab);
+// Screen output of the server: written, unless the screen is frozen (Resume draws it all again).
+function showOutput(tab, data) {
   if (tab.paused) {
-    tab.paused.bytes += size;
+    tab.paused.bytes += data.byteLength;
     if (tab === tab.pane.active) showFreeze(tab.pane);
+  } else {
+    tab.term.write(new Uint8Array(data));
   }
-  render(tab, ev);
+  if (!tab.quiet) markActivity(tab);
 }
 
 // A tab that is not shown and receives data gets a mark, and the page title counts such tabs.
@@ -128,268 +92,45 @@ function showUnread() {
   document.title = count ? `(${count}) termdeck` : "termdeck";
 }
 
-// The kept events a redraw shows: all of them, or up to the moment the screen was frozen.
-function shownEvents(tab) {
-  if (!tab.paused) return tab.events;
-  const at = tab.paused.upTo ? tab.events.indexOf(tab.paused.upTo) + 1 : 0;
-  return tab.events.slice(0, at);
+// The server draws the records again with the tab's view.
+function redraw(tab) {
+  sendMessage(tab, { type: "view", view: tab.view });
 }
 
-// Clear the screen and show the kept events again with the tab's view.
-function redraw(tab) {
-  tab.hold = true;  // events that arrive meanwhile are kept, and shown by the redraw itself
-  tab.term.write("", () => {
-    tab.term.reset();
-    Object.assign(tab, { lineStart: true, txOpen: false, afterCR: false, lastRx: 0, lastHead: 0, lastDir: null, hex: null, frameWarned: false, held: [], pending: new Uint8Array(0), quiet: true, hold: false });
-    applyModes(tab);
-    frameParserOf(tab);  // the frames are cut again from the start
-    tab.replaying = true;
-    for (const ev of shownEvents(tab)) render(tab, ev);
-    tab.replaying = false;
-    if (tab.pending.length && Date.now() - tab.pendingAt > LINE_IDLE_MS) flushPending(tab);  // a prompt that was waiting for its line end
-    tab.term.write("", () => { tab.quiet = false; });  // the old bells and titles are not news
-  });
+// The server is drawing the records again: the screen starts empty, and old bells and titles are not news.
+function startRedraw(tab) {
+  tab.quiet = true;
+  tab.term.reset();
+  applyModes(tab);
+}
+
+function endRedraw(tab) {
+  tab.term.write("", () => { tab.quiet = false; });
 }
 
 function clearTab(tab) {
   tab.term.clear();
-  tab.events = [];
-  tab.kept = 0;
-  tab.hex = null;
-  tab.held = [];
   tab.counters = { rx: 0, tx: 0 };
-  sendMessage(tab, { type: "resetcounters" });
+  sendMessage(tab, { type: "clear" });
   updateCounters(tab);
 }
 
-// What starts a line: the time when asked for, then the marker.
-function lineHead(tab, marker, at) {
-  let head = "";
-  if (tab.view.stamps) {
-    const text = tab.view.timeMode === "delta" ? formatDelta(tab.lastHead ? at - tab.lastHead : 0) : stamp(at);
-    head = `\x1b[90m[${text}]\x1b[39m `;
-    tab.lastHead = at;
-  }
-  return head + (marker || "");
-}
-
-// ---- hex, decimal and binary rows: each byte as a number, then the text of the row
-function endRow(tab, out) {
-  const f = NUMBERS[tab.view.mode] || NUMBERS.hex;
-  out.push(" ".repeat((f.per - tab.hex.n) * f.width) + ` |${tab.hex.chars}|\r\n`);
-  tab.hex = null;
-  tab.lineStart = true;
-}
-
-// A row that is not full yet is finished before anything else is written.
-function flushHex(tab) {
-  if (!tab.hex) return;
-  const out = [];
-  endRow(tab, out);
-  tab.term.write(out.join(""));
-}
-
-// What starts the lines of a direction: the Rx or Tx marker, and for a tunnel the way the data went.
-const TUNNEL_MARKERS = { a2b: "\x1b[32mA→B \x1b[0m", b2a: "\x1b[36mB→A \x1b[0m" };
-const markerOf = (tab, dir) => TUNNEL_MARKERS[dir] || (dir === "rx" ? tab.profile.rxMarker : tab.profile.txMarker);
-
-function hexWrite(tab, data, dir, at) {
-  const f = NUMBERS[tab.view.mode] || NUMBERS.hex;  // the Frames view without a description shows hex
-  const out = [];
-  if (tab.hex && (tab.hex.dir !== dir || (tab.view.pause > 0 && at - tab.hex.at > tab.view.pause))) endRow(tab, out);
-  for (const b of data) {
-    if (!tab.hex) {
-      if (!tab.lineStart) out.push("\r\n");
-      out.push(lineHead(tab, markerOf(tab, dir), at));
-      tab.hex = { dir, n: 0, chars: "", at };
-      tab.lineStart = false;
-    }
-    out.push(f.show(b).padEnd(f.width));
-    tab.hex.chars += b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : ".";
-    if (++tab.hex.n === f.per) endRow(tab, out);
-  }
-  if (tab.hex) tab.hex.at = at;
-  tab.term.write(out.join(""));
-}
-
-// ---- text
-
-const MOUSE_MODES = /\x1b\[\?(?:9|100[0-6]|1015|1016)[hl]/g;
-
-// The received text before it is shaped into lines: mouse modes the profile refuses are removed, a CR gets its LF.
-function prepareRx(tab, bytes) {
-  if (tab.profile.noMouseReport && bytes.includes(0x1b)) {
-    bytes = Uint8Array.from(Array.from(String.fromCharCode(...bytes).replace(MOUSE_MODES, ""), (c) => c.charCodeAt(0)));
-  }
-  if (tab.view.nl === "terminal" && !tab.view.ctrl && tab.profile.implicitLF) bytes = addImplicitLF(tab, bytes);
-  return shapeText(bytes, tab.view, tab.held);
-}
-
-// Write text where every line starts with the time and the marker, and keep track of whether a line is open.
-function writeLines(tab, bytes, marker, at) {
-  if (!marker && !tab.view.stamps) {
-    tab.term.write(bytes);
-    const last = bytes.lastIndexOf(10);
-    if (last >= 0) tab.lineStart = last === bytes.length - 1;
-    else if (bytes.length) tab.lineStart = false;
-    return;
-  }
-  let start = 0;
-  for (let i = 0; i < bytes.length; i++) {
-    if (tab.lineStart) {
-      if (i > start) tab.term.write(bytes.subarray(start, i));
-      start = i;
-      tab.term.write(lineHead(tab, marker, at));
-      tab.lineStart = false;
-    }
-    if (bytes[i] === 10) {
-      tab.term.write(bytes.subarray(start, i + 1));
-      start = i + 1;
-      tab.lineStart = true;
-    }
-  }
-  if (start < bytes.length) tab.term.write(bytes.subarray(start));
-}
-
-// Received data, with the time and the Rx marker at the start of each line.
-function showRx(tab, ev) {
-  const pause = tab.view.pause;
-  if (tab.view.mode === "frames") {
-    showFrames(tab, ev);
-  } else if (tab.view.mode !== "text") {
-    hexWrite(tab, ev.raw, ev.dir || "rx", ev.t);
-  } else {
-    if (ev.dir && tab.lastDir && ev.dir !== tab.lastDir && !tab.lineStart) {  // the other way: a line of its own
-      tab.term.write("\r\n");
-      tab.lineStart = true;
-    }
-    tab.lastDir = ev.dir;
-    const bytes = prepareRx(tab, ev.text);
-    if (pause > 0 && !tab.lineStart && tab.lastRx && ev.t - tab.lastRx > pause) {
-      tab.term.write("\r\n");  // nothing came for a while: a new line
-      tab.lineStart = true;
-    }
-    if (lineMode(tab)) showByLines(tab, bytes, ev.t);
-    else writeLines(tab, bytes, markerOf(tab, ev.dir || "rx"), ev.t);
-  }
-  tab.lastRx = ev.t;
-}
-
-// ---- frames: the bytes cut into frames by the session's description, a line each
-function frameParserOf(tab) {
-  const spec = parseFrameSpec(tab.profile.frameSpec);
-  tab.frameSpec = spec;
-  tab.frameFeed = spec.error ? null : makeFrameParser(spec);
-}
-
-function showFrames(tab, ev) {
-  if (!tab.frameFeed) {
-    if (!tab.frameWarned) { tab.frameWarned = true; note(tab, `Frames view: ${tab.frameSpec?.error || "no frame description"} (set it on the Receive page, Frames, in the session settings)`); }
-    return hexWrite(tab, ev.raw, "rx", ev.t);  // without a description the bytes show as hex
-  }
-  for (const row of tab.frameFeed(ev.raw)) {
-    const line = frameLine(tab.frameSpec, row);
-    const sgr = row.noise ? "90" : row.ok === false ? "31" : "";
-    const text = ENC.encode(`${sgr ? `\x1b[${sgr}m` : ""}${line}${sgr ? "\x1b[0m" : ""}\r\n`);
-    writeLines(tab, text, tab.profile.rxMarker, ev.t);
-  }
-}
-
-// A line that matches a rule with "notify" gives a desktop notification when the tab is not in sight (at most one per 5 s per tab).
+// A line that matched a rule with "notify" gives a desktop notification when the tab is not in sight (at most one per 5 s per tab).
 function notifyLine(tab, text) {
-  if (!notifyOf(tab.highlights, text)) return;
   if (tab === tab.pane.active && !document.hidden) return;
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
   if (Date.now() - (tab.notifiedAt || 0) < 5000) return;
   tab.notifiedAt = Date.now();
-  const notification = new Notification(tab.profile.name, { body: Format.plainLine(text), tag: `termdeck-${tab.profile.name}` });
+  const notification = new Notification(tab.profile.name, { body: text, tag: `termdeck-${tab.profile.name}` });
   notification.onclick = () => { window.focus(); activate(tab); showLines(); notification.close(); };
 }
 
-// ---- highlights and the filter work on whole lines: what has no line end yet waits (a prompt is shown
-// after a short idle time), then each line is shown, coloured, or left out
-const LINE_IDLE_MS = 300;
-const lineMode = (tab) => tab.view.filter.trim() !== "" || tab.highlights.length > 0;
-const concatBytes = (a, b) => { const out = new Uint8Array(a.length + b.length); out.set(a); out.set(b, a.length); return out; };
-
-function showByLines(tab, bytes, at) {
-  if (tab.pending.length && at - tab.pendingAt > LINE_IDLE_MS) flushPending(tab);
-  tab.pending = concatBytes(tab.pending, bytes);
-  tab.pendingAt = at;
-  for (let end = tab.pending.indexOf(10); end >= 0; end = tab.pending.indexOf(10)) {
-    const line = tab.pending.slice(0, end + 1);
-    tab.pending = tab.pending.slice(end + 1);
-    showLine(tab, line, at);
-  }
-  if (tab.replaying) return;
-  clearTimeout(tab.flushTimer);
-  if (tab.pending.length) tab.flushTimer = setTimeout(() => flushPending(tab), LINE_IDLE_MS);
-}
-
-function flushPending(tab) {
-  clearTimeout(tab.flushTimer);
-  const line = tab.pending;
-  tab.pending = new Uint8Array(0);
-  if (line.length) showLine(tab, line, tab.pendingAt);
-}
-
-// One line (or the start of one) through the filter and the highlights.
-function showLine(tab, line, at) {
-  const text = new TextDecoder().decode(line);
-  if (tab.filterText !== tab.view.filter) {  // compiled again only when it changed
-    tab.filterText = tab.view.filter;
-    tab.filterCompiled = compileFilter(tab.view.filter);
-  }
-  if (!passesFilter(tab.filterCompiled, text)) return;
-  if (!tab.replaying) notifyLine(tab, text);
-  const sgr = highlightOf(tab.highlights, text);
-  if (!sgr) return writeLines(tab, line, markerOf(tab, tab.lastDir || "rx"), at);
-  let body = line.length;  // the colour ends before the line end
-  while (body > 0 && (line[body - 1] === 10 || line[body - 1] === 13)) body--;
-  const coloured = concatBytes(concatBytes(ENC.encode(`\x1b[${sgr}m`), line.slice(0, body)), concatBytes(ENC.encode("\x1b[0m"), line.slice(body)));
-  writeLines(tab, coloured, markerOf(tab, tab.lastDir || "rx"), at);
-}
-
-// Text we send and show ourselves (typed lines, local echo, scripts), with the Tx marker.
-// In a number view the bytes (or the text) show as rows like the received ones.
-function showTx(tab, text, finish, at = Date.now(), bytes) {
-  if (tab.view.mode !== "text") {
-    hexWrite(tab, bytes || ENC.encode(text), "tx", at);
-    if (finish) flushHex(tab);
-    return;
-  }
-  const marker = tab.profile.txMarker;
-  if (!tab.txOpen && !tab.lineStart) {
-    tab.term.write("\r\n");
-    tab.lineStart = true;
-  }
-  if (tab.lineStart) {
-    const head = lineHead(tab, marker, at);
-    if (head) tab.term.write(head);
-  }
-  tab.lineStart = false;
-  tab.txOpen = true;
-  tab.term.write(text);
-  if (finish) {
-    tab.term.write("\r\n");
-    tab.lineStart = true;
-    tab.txOpen = false;
-  }
-}
-
-// What we send is shown only with Local echo; the device may echo it as well.
-function echoTx(tab, text, bytes, size) {
-  if (tab.profile.localEcho) emit(tab, { k: "tx", t: Date.now(), text, bytes }, size);
-}
-
+// A message of termdeck about the tab, kept with its records (and written to its log).
 function note(tab, text) {
-  emit(tab, { k: "note", t: Date.now(), text }, text.length + 16);
+  if (!sendMessage(tab, { type: "note", data: text })) localNote(tab, text);
 }
 
-function writeNote(tab, text) {
-  flushHex(tab);
-  if (!tab.lineStart) tab.term.write("\r\n");
-  tab.term.write(`\x1b[90m[termdeck] ${text}\x1b[0m\r\n`);
-  tab.lineStart = true;
-  tab.txOpen = false;
+// A message of the page only (an answer to a click, the server gone): on the screen, not kept.
+function localNote(tab, text) {
+  tab.term.write(`\r\n\x1b[90m[termdeck] ${text}\x1b[0m\r\n`);
 }

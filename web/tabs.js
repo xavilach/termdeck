@@ -212,12 +212,12 @@ function newTabElement(tab) {
   addReorder(tab);
 }
 
-// The open tabs are remembered for the life of the browser tab, so that a reload (F5) brings them back:
-// the ones that were connected connect again, the others come back with their port closed.
+// The open tabs are remembered for the life of the browser tab, so that a reload (F5) brings them back. Each
+// tab attaches again to its session on the server, which kept its port, its records and what it was doing.
 const TABS_KEY = "termdeck.tabs";
 
 function saveTabs() {
-  const data = { active: tabs.indexOf(active), tabs: tabs.map((t) => ({ profile: t.profile, connected: ["connected", "connecting", "reconnecting"].includes(t.state), pane: panes.indexOf(t.pane) })) };
+  const data = { active: tabs.indexOf(active), tabs: tabs.map((t) => ({ id: t.id, profile: t.profile, view: t.view, pane: panes.indexOf(t.pane) })) };
   try { sessionStorage.setItem(TABS_KEY, JSON.stringify(data)); } catch { /* no storage */ }
 }
 
@@ -227,7 +227,7 @@ function restoreTabs() {
   if (!data || !Array.isArray(data.tabs)) return;
   for (const saved of data.tabs) {
     focusPane = panes[Math.min(Math.max(saved.pane, 0), panes.length - 1)];
-    openTab(saved.profile, { connect: saved.connected });
+    openTab(saved.profile, { connect: false, id: saved.id, view: saved.view });
   }
   if (tabs[data.active]) { activate(tabs[data.active]); showLines(); }
 }
@@ -235,14 +235,15 @@ function restoreTabs() {
 addEventListener("pagehide", saveTabs);
 document.addEventListener("visibilitychange", () => { if (!document.hidden && active) { active.unread = false; active.tabEl.classList.remove("activity"); showUnread(); } });
 
-function openTab(profile, { connect: doConnect = true } = {}) {
+const newTabId = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, "0")).join("");
+
+// Open a tab for a profile. A restored tab brings the id of its session (and its view); connect opens the port.
+function openTab(profile, { connect: doConnect = true, id = newTabId(), view = null } = {}) {
   if (openElsewhere(profile)) return;
   const pane = focusPane || panes[0];
-  const tab = { profile, pane, state: "connecting", ws: null, fontSize: profile.fontSize || 14,
-                lineStart: true, txOpen: false, script: null, events: [], kept: 0, held: [], view: viewOf(profile),
-                sendEnd: { mode: profile.enter || "cr", custom: "" }, sendCheck: "none", counters: { rx: 0, tx: 0 }, sent: loadHistory(profile.name), sentAt: 0, graph: newGraph(profile), frameFeed: null, frameSpec: null, pending: new Uint8Array(0), highlights: parseHighlights(profile.highlights) };
+  const tab = { id, profile, pane, state: "closed", ws: null, fontSize: profile.fontSize || 14, script: null, view: view || viewOf(profile),
+                sendEnd: { mode: profile.enter || "cr", custom: "" }, sendCheck: "none", counters: { rx: 0, tx: 0 }, sent: loadHistory(profile.name), sentAt: 0, graph: newGraph(profile) };
   tab.sentAt = tab.sent.length;
-  frameParserOf(tab);
   newTerminal(tab);
   newTabElement(tab);
   listenToTerminal(tab);
@@ -251,8 +252,8 @@ function openTab(profile, { connect: doConnect = true } = {}) {
   tabs.push(tab);
   activate(tab);
   showLines();
-  if (doConnect) connect(tab);
-  else setState(tab, "closed");
+  setState(tab, "closed");
+  connect(tab, doConnect);
   saveTabs();
 }
 
@@ -321,6 +322,7 @@ function closeTab(tab) {
   const pane = tab.pane;
   if (tab.job) tab.job.stop = true;  // a file being sent
   if (pane.auto?.tab === tab) stopAuto(pane);
+  sendMessage(tab, { type: "end" });  // the session on the server ends, and closes its port
   tab.ws?.close();
   tab.term.dispose();
   tab.box.remove();
@@ -481,7 +483,6 @@ const TOOLBAR = {
   reset(tab) {
     clearTab(tab);
     tab.term.reset();
-    Object.assign(tab, { lineStart: true, txOpen: false, hex: null, held: [] });
     applyModes(tab);
   },
   log: (tab) => sendMessage(tab, { type: "log", value: !tab.logging }),
@@ -567,7 +568,7 @@ function showServer(state, text) {
   node.textContent = text;
   node.className = state;
   if (state === "down" && serverUp !== false) {
-    for (const t of tabs) if (t.state !== "ended" && t.state !== "closed") { setState(t, "ended"); note(t, "termdeck stopped"); }
+    for (const t of tabs) if (t.state !== "ended" && t.state !== "closed") { setState(t, "ended"); localNote(t, "termdeck stopped"); }
   }
   serverUp = state === "up";
 }

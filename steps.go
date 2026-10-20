@@ -164,7 +164,7 @@ type quickSend struct {
 var (
 	quickTypes  = []string{"text", "hex", "dec", "bin", "cmd"}
 	quickEnds   = []string{"session", "none", "cr", "lf", "crlf"}
-	quickChecks = []string{"none", "sum8", "xor8", "crc8", "crc16modbus", "crc16ccitt", "crc16xmodem", "crc32"}
+	quickChecks = checkNames()
 	quickOption = regexp.MustCompile(`^\s*(end|check)=(\w+)\s*$`)
 )
 

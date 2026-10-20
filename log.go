@@ -11,14 +11,6 @@ import (
 	"unicode/utf8"
 )
 
-const (
-	dirRx = 0
-	dirTx = 1
-
-	// A line that is not finished (a prompt) is written after this pause.
-	logIdle = 300 * time.Millisecond
-)
-
 var unsafeName = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1f]`)
 
 // logPath replaces {name}, {date} and {time} in a profile's log path.
@@ -30,17 +22,13 @@ func logPath(p Profile, now time.Time) string {
 	).Replace(p.LogPath)
 }
 
-// Logger writes what was received and sent as lines, each starting with its marker.
+// Logger writes the records of a session to its log file, through a renderer with the log's format (markers,
+// times, printable text), and starts a new file when the file is full.
 type Logger struct {
-	mu        sync.Mutex
-	f         *os.File
-	markers   [2]string
-	printable bool // leave out escape sequences and control characters
-	lines     [2][]byte
-	timers    [2]*time.Timer
-	stamps    bool         // start each line with the date and time it began
-	began     [2]time.Time // when the line in progress of each direction began
-	err       error        // the first error writing the file (the disk is full, say)
+	mu  sync.Mutex
+	f   *os.File
+	r   *renderer
+	err error // the first error writing the file (the disk is full, say)
 
 	path     string // the file, to start a new one when it is full
 	size     int64  // bytes in it
@@ -70,8 +58,7 @@ func OpenLog(p Profile, existing string) (*Logger, error) {
 	if err != nil {
 		return nil, err
 	}
-	l := &Logger{f: f, markers: [2]string{p.LogRxMarker, p.LogTxMarker}, printable: p.LogPrintable, stamps: p.LogTimestamps,
-		path: path, maxBytes: int64(p.LogMaxMB) * 1024 * 1024, keep: max(p.LogKeep, 1)}
+	l := &Logger{f: f, r: newRenderer(logFormat(p)), path: path, maxBytes: int64(p.LogMaxMB) * 1024 * 1024, keep: max(p.LogKeep, 1)}
 	if info, err := f.Stat(); err == nil {
 		l.size = info.Size()
 	}
@@ -130,73 +117,40 @@ func printableOnly(in []byte) []byte {
 	return out
 }
 
-// Write records data seen in direction dir (dirRx or dirTx). Safe on a nil Logger.
-func (l *Logger) Write(dir int, data []byte) {
+// Record writes a record. Safe on a nil Logger.
+func (l *Logger) Record(rec record) {
 	if l == nil {
 		return
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	for _, b := range data {
-		switch {
-		case b == '\n' && (dir == dirRx || len(l.lines[dir]) > 0), b == '\r' && dir == dirTx:
-			l.endLine(dir)
-		case b == '\n' || b == '\r':
-			// the CR of a received CR LF, or the LF of a sent CR LF
-		default:
-			if len(l.lines[dir]) == 0 {
-				l.began[dir] = time.Now()
-			}
-			l.lines[dir] = append(l.lines[dir], b)
-		}
-	}
-	if len(l.lines[dir]) > 0 {
-		if l.timers[dir] != nil {
-			l.timers[dir].Stop()
-		}
-		l.timers[dir] = time.AfterFunc(logIdle, func() {
-			l.mu.Lock()
-			defer l.mu.Unlock()
-			l.flushPartial(dir)
-		})
-	}
+	l.r.add(rec)
+	l.write()
 }
 
-// Mark writes a line that is neither received nor sent, such as a bookmark, after the lines in progress.
-// Safe on a nil Logger.
-func (l *Logger) Mark(text string) {
+// idle writes a line that has waited long enough for its end (a prompt). Safe on a nil Logger.
+func (l *Logger) idle(now time.Time) {
 	if l == nil {
 		return
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.flushPartial(dirRx)
-	l.flushPartial(dirTx)
-	if l.f == nil {
-		return
-	}
-	if _, err := fmt.Fprintf(l.f, "---- %s ----\n", text); err != nil && l.err == nil {
-		l.err = err
-	}
+	l.r.idle(now)
+	l.write()
 }
 
-// endLine writes the current line of dir, even when it is empty (a blank line was sent or received).
-func (l *Logger) endLine(dir int) {
-	if l.f == nil {
+// write puts what the renderer made into the file, and starts a new file when it is full.
+func (l *Logger) write() {
+	out := l.r.take()
+	if l.f == nil || len(out) == 0 {
 		return
 	}
-	text := l.lines[dir]
-	if l.printable {
-		text = printableOnly(text)
-	}
-	line := append([]byte(l.head(dir)), text...)
-	n, err := l.f.Write(append(line, '\n'))
+	n, err := l.f.Write(out)
 	if err != nil && l.err == nil {
 		l.err = err
 	}
 	l.size += int64(n)
-	l.lines[dir] = l.lines[dir][:0]
-	if l.maxBytes > 0 && l.size >= l.maxBytes {
+	if l.maxBytes > 0 && l.size >= l.maxBytes && out[len(out)-1] == '\n' {
 		l.rotate()
 	}
 }
@@ -220,26 +174,6 @@ func (l *Logger) rotate() {
 	l.f, l.size = f, 0
 }
 
-// head is what starts a line of dir: the time when asked for, then the marker.
-func (l *Logger) head(dir int) string {
-	at := l.began[dir]
-	l.began[dir] = time.Time{}
-	if !l.stamps {
-		return l.markers[dir]
-	}
-	if at.IsZero() {
-		at = time.Now() // an empty line
-	}
-	return at.Format("2006-01-02 15:04:05.000 ") + l.markers[dir]
-}
-
-// flushPartial writes a line that was not finished, if there is one.
-func (l *Logger) flushPartial(dir int) {
-	if len(l.lines[dir]) > 0 {
-		l.endLine(dir)
-	}
-}
-
 // Err is the first error writing the file, or nil. Safe on a nil Logger.
 func (l *Logger) Err() error {
 	if l == nil {
@@ -256,13 +190,9 @@ func (l *Logger) Close() {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.flushPartial(dirRx)
-	l.flushPartial(dirTx)
-	for _, t := range l.timers {
-		if t != nil {
-			t.Stop()
-		}
-	}
+	l.r.flushPending()
+	l.r.flushHex()
+	l.write()
 	l.f.Close()
 	l.f = nil
 }
