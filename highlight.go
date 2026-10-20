@@ -14,16 +14,13 @@ var highlightStyles = []string{"red", "green", "yellow", "blue", "magenta", "cya
 
 var nestedRepeat = regexp.MustCompile(`\([^()]*[+*][^()]*\)[+*{]`)
 
-// checkPattern validates the text of a pattern: plain text, or /regex/.
+// checkPattern validates a pattern the page matches (see Pattern).
 func checkPattern(pattern string) error {
-	if len(pattern) > 2 && strings.HasPrefix(pattern, "/") && strings.HasSuffix(pattern, "/") {
-		expr := pattern[1 : len(pattern)-1]
-		if _, err := regexp.Compile(expr); err != nil {
-			return err
-		}
-		if nestedRepeat.MatchString(expr) {
-			return fmt.Errorf("%q repeats a repeat, which can make the page hang", pattern)
-		}
+	if _, err := ParsePattern(pattern); err != nil {
+		return err
+	}
+	if expr, _, ok := regexBody(pattern); ok && nestedRepeat.MatchString(expr) {
+		return fmt.Errorf("%q repeats a repeat, which can make the page hang", pattern)
 	}
 	return nil
 }
@@ -57,5 +54,9 @@ func checkHighlights(text string) error {
 
 // checkFilter validates the filter: text or /regex/, with ! in front to hide the lines that match.
 func checkFilter(text string) error {
-	return checkPattern(strings.TrimPrefix(strings.TrimSpace(text), "!"))
+	text = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(text), "!"))
+	if text == "" {
+		return nil
+	}
+	return checkPattern(text)
 }

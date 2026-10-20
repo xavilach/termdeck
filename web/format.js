@@ -192,9 +192,11 @@ const Format = (() => {
   const STYLES = { red: "31", green: "32", yellow: "33", blue: "34", magenta: "35", cyan: "36", white: "37", grey: "90",
     orange: "38;5;208", bold: "1", dim: "2", underline: "4", inverse: "7" };
 
-  // A pattern written as text (any case) or /regex/. Null when it is not valid.
+  // A pattern written as text (any case), /regex/ (as written) or /regex/i (any case), like Pattern on the
+  // server (testdata/patterns.json holds the cases both check). Null when it is not valid.
   function compilePattern(pattern) {
     try {
+      if (pattern.length > 3 && pattern.startsWith("/") && pattern.endsWith("/i")) return new RegExp(pattern.slice(1, -2), "i");
       if (pattern.length > 2 && pattern.startsWith("/") && pattern.endsWith("/")) return new RegExp(pattern.slice(1, -1));
       return new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
     } catch { return null; }
@@ -402,7 +404,7 @@ const Format = (() => {
   }
 
   return { ENC, hex2, stamp, formatDelta, bufferText, controlName, NEWLINES, unescapeText, textBytes, newlineBytes, shapeText, NUMBERS,
-           parseNumbers, parseQuickSends, seriesNames, CHECKS, checksum, parseFrameSpec, makeFrameParser, frameLine, parseHighlights, highlightOf, notifyOf, compileFilter, passesFilter, plainLine, ALLOWED, clean, groupDigits, formatBytes, b64 };
+           parseNumbers, parseQuickSends, seriesNames, CHECKS, checksum, parseFrameSpec, makeFrameParser, frameLine, parseHighlights, highlightOf, notifyOf, compilePattern, compileFilter, passesFilter, plainLine, ALLOWED, clean, groupDigits, formatBytes, b64 };
 })();
 
 if (typeof module !== "undefined") module.exports = Format;

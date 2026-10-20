@@ -282,3 +282,8 @@ test("frames cut the same way however the bytes arrive", () => {
     assert.ok(all.filter((l) => /OK$/.test(l)).length >= 6, "every frame was found");
   }
 });
+
+test("patterns follow the table the server checks too", () => {
+  const cases = JSON.parse(require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "testdata", "patterns.json"), "utf8"));
+  for (const c of cases) assert.equal(F.compilePattern(c.pattern).test(c.text), c.match, `${c.pattern} on ${c.text}`);
+});

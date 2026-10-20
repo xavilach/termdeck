@@ -1,0 +1,13 @@
+[
+  {"pattern": "login:", "text": "Login: ", "match": true, "note": "text is matched in any case"},
+  {"pattern": "ERROR", "text": "an error", "match": true},
+  {"pattern": "a.b", "text": "axb", "match": false, "note": "text is literal"},
+  {"pattern": "a.b", "text": "A.B", "match": true},
+  {"pattern": "/a.b/", "text": "axb", "match": true},
+  {"pattern": "/ERROR/", "text": "an error", "match": false, "note": "a regex is matched as written"},
+  {"pattern": "/ERROR/i", "text": "an error", "match": true},
+  {"pattern": "/^tick [0-9]+$/", "text": "tick 42", "match": true},
+  {"pattern": "/", "text": "a/b", "match": true, "note": "too short to be a regex: text"},
+  {"pattern": "//", "text": "x//y", "match": true},
+  {"pattern": "/x/y", "text": "/x/y", "match": true, "note": "not closed by / or /i: text"}
+]

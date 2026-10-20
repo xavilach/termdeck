@@ -197,7 +197,7 @@ func FuzzParseTriggers(f *testing.F) {
 			return
 		}
 		for _, tr := range triggers {
-			tr.re.FindIndex([]byte("some text the device sent"))
+			tr.pattern.FindIndex([]byte("some text the device sent"))
 		}
 	})
 }
@@ -240,7 +240,7 @@ func TestQuickSendsAreParsedAndValidated(t *testing.T) {
 
 func TestExpectAndTimeoutSteps(t *testing.T) {
 	steps, err := parseSteps("timeout=3000; expect=login: ; expect=/pass(word)?:/; dtr=1")
-	if err != nil || len(steps) != 4 || steps[0].ms != 3000 || steps[1].label != "login:" || !steps[2].pattern.MatchString("password:") || steps[1].pattern.MatchString("LOGIN:") {
+	if err != nil || len(steps) != 4 || steps[0].ms != 3000 || steps[1].pattern.Text != "login:" || !steps[2].pattern.MatchString("password:") || !steps[1].pattern.MatchString("LOGIN:") {
 		t.Fatalf("%v %+v", err, steps)
 	}
 	for _, bad := range []string{"expect=", "expect=/(/", "timeout=0", "timeout=x", "timeout=99999999"} {

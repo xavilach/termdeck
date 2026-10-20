@@ -9,12 +9,11 @@ import (
 
 // step is one action of a script line starting with "@", of a Cmd input or of a trigger reply.
 type step struct {
-	kind    string         // dtr, rts, wait, hex, expect or timeout
-	on      bool           // dtr and rts
-	ms      int            // wait and timeout
-	bytes   []byte         // hex
-	pattern *regexp.Regexp // expect
-	label   string         // expect: the pattern as written
+	kind    string  // dtr, rts, wait, hex, expect or timeout
+	on      bool    // dtr and rts
+	ms      int     // wait and timeout
+	bytes   []byte  // hex
+	pattern Pattern // expect
 }
 
 const maxWaitMs = 3_600_000
@@ -42,8 +41,11 @@ var stepParsers = map[string]func(value string) (step, error){
 		return step{kind: "hex", bytes: data}, err
 	},
 	"expect": func(v string) (step, error) {
-		re, err := expectPattern(v)
-		return step{kind: "expect", pattern: re, label: v}, err
+		if v == "" {
+			return step{}, fmt.Errorf("expect needs the text to wait for")
+		}
+		p, err := ParsePattern(v)
+		return step{kind: "expect", pattern: p}, err
 	},
 }
 
@@ -118,13 +120,12 @@ func scriptText(command string) string { return strings.TrimPrefix(command, "@")
 
 // trigger sends a reply when the pattern shows up in what the device sends.
 type trigger struct {
-	label string // the pattern as written
-	re    *regexp.Regexp
-	reply string
-	steps []step // set when the reply is "@..." steps
+	pattern Pattern
+	reply   string
+	steps   []step // set when the reply is "@..." steps
 }
 
-// parseTriggers reads lines "pattern => reply". The pattern is text, or /regex/. The reply is text
+// parseTriggers reads lines "pattern => reply". The pattern is text (any case), or /regex/. The reply is text
 // (the session's Enter key is added) or "@" and steps. Empty lines and lines starting with # are skipped.
 func parseTriggers(text string) ([]trigger, error) {
 	var out []trigger
@@ -138,15 +139,11 @@ func parseTriggers(text string) ([]trigger, error) {
 		if !ok || pattern == "" {
 			return nil, fmt.Errorf("trigger %q: use  text => reply", line)
 		}
-		expr := regexp.QuoteMeta(pattern)
-		if len(pattern) > 2 && strings.HasPrefix(pattern, "/") && strings.HasSuffix(pattern, "/") {
-			expr = pattern[1 : len(pattern)-1]
-		}
-		re, err := regexp.Compile(expr)
+		p, err := ParsePattern(pattern)
 		if err != nil {
-			return nil, fmt.Errorf("trigger %q: %w", pattern, err)
+			return nil, fmt.Errorf("trigger: %w", err)
 		}
-		t := trigger{label: pattern, re: re, reply: reply}
+		t := trigger{pattern: p, reply: reply}
 		if steps, isSteps, err := scriptSteps(reply); err != nil {
 			return nil, fmt.Errorf("trigger %q: %w", pattern, err)
 		} else if isSteps {
@@ -241,15 +238,4 @@ func checkQuickData(q quickSend) error {
 		return err
 	}
 	return nil
-}
-
-// expectPattern compiles what expect waits for: text, or /regex/.
-func expectPattern(value string) (*regexp.Regexp, error) {
-	if value == "" {
-		return nil, fmt.Errorf("expect needs the text to wait for")
-	}
-	if len(value) > 2 && strings.HasPrefix(value, "/") && strings.HasSuffix(value, "/") {
-		return regexp.Compile(value[1 : len(value)-1])
-	}
-	return regexp.Compile(regexp.QuoteMeta(value))
 }

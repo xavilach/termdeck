@@ -395,7 +395,7 @@
       <li><b>Highlights</b>: <code>ERROR = red+bold</code> · <code>/warn(ing)?/ = orange</code> · <code>FAULT = red+notify</code> (a desktop notification while the tab is out of sight; allow them in the session settings)</li>
       <li><b>Filter</b> (receive bar): <code>text</code>, <code>/regex/</code>, <code>!hide</code></li>
     </ul>
-    <p>A pattern is text (any case) or <code>/regex/</code>. Lines starting with <code>#</code> are notes.</p>
+    <p>A pattern is the same everywhere (triggers, expect, graph, highlights, filter): text, in any case, or <code>/regex/</code> as written, or <code>/regex/i</code> in any case. Lines starting with <code>#</code> are notes.</p>
     <h3>Receive bar</h3>
     <p>View (Text, Hex, Decimal, Binary, Frames), <b>New line at</b> and the filter are in the bar; <b>More</b> holds the time (clock or since the last line), control characters, new line after a pause, Copy and Save. Changing them redraws the data kept (the last 8 MB), so nothing is lost. A changed setting is marked; <b>Reset view</b> goes back to the session's.</p>
     <h3>Tunnel</h3>

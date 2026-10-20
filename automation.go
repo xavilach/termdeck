@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"time"
 )
 
@@ -29,7 +28,7 @@ func (t *termSession) runSteps(ctx context.Context, steps []step) error {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				return fmt.Errorf("waited %v for %q: %w", timeout, s.label, err)
+				return fmt.Errorf("waited %v for %q: %w", timeout, s.pattern.Text, err)
 			}
 		case "wait":
 			select {
@@ -58,7 +57,7 @@ func (t *termSession) match(ctx context.Context, triggers []trigger, window, tex
 	for fired := true; fired; {
 		fired = false
 		for _, tr := range triggers {
-			if loc := tr.re.FindIndex(window); loc != nil {
+			if loc := tr.pattern.FindIndex(window); loc != nil {
 				window = window[loc[1]:]
 				fired = true
 				t.answer(ctx, tr, enter)
@@ -79,7 +78,7 @@ func (t *termSession) answer(ctx context.Context, tr trigger, enter string) {
 	}
 	if t.pending.Add(1) > maxPendingReplies {
 		t.pending.Add(-1)
-		t.sendJSON(map[string]string{"type": "notice", "text": "trigger replies are backed up: dropped " + tr.label})
+		t.sendJSON(map[string]string{"type": "notice", "text": "trigger replies are backed up: dropped " + tr.pattern.Text})
 		return
 	}
 	go func() {
@@ -89,7 +88,7 @@ func (t *termSession) answer(ctx context.Context, tr trigger, enter string) {
 		if ctx.Err() != nil {
 			return
 		}
-		t.sendJSON(map[string]string{"type": "trigger", "match": tr.label})
+		t.sendJSON(map[string]string{"type": "trigger", "match": tr.pattern.Text})
 		if tr.steps != nil {
 			t.reportSteps(ctx, t.runSteps(ctx, tr.steps))
 			return
@@ -242,7 +241,7 @@ const defaultExpectTimeout = 10 * time.Second
 
 // expect waits until the data received since the last line a script sent (or since the port opened) has the
 // pattern in it; what came up to the match is used up.
-func (t *termSession) expect(ctx context.Context, re *regexp.Regexp, timeout time.Duration) error {
+func (t *termSession) expect(ctx context.Context, re Pattern, timeout time.Duration) error {
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 	for {
