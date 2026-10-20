@@ -1633,3 +1633,14 @@ func TestTheCountersOfHelloComeBeforeTheSession(t *testing.T) {
 		t.Errorf("order %v", order)
 	}
 }
+
+func TestThePortsOfTheCommandLineAreGivenOnce(t *testing.T) {
+	ts := newTestServer(t)
+	ts.srv.startOpen = []string{"COM3@115200", "fake:echo"}
+	if _, out := ts.do(t, "POST", "/api/startopen", "", ts.secret); out != `{"open":["COM3@115200","fake:echo"]}`+"\n" {
+		t.Errorf("first: %q", out)
+	}
+	if _, out := ts.do(t, "POST", "/api/startopen", "", ts.secret); out != `{"open":[]}`+"\n" {
+		t.Errorf("second: %q", out)
+	}
+}

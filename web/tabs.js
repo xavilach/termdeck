@@ -149,13 +149,7 @@ function newTerminal(tab) {
   applyModes(tab);
 }
 
-// The lines are read-only: only the send bar at the bottom sends. Copy, paste, clear and find still work.
-const SHORTCUTS = {
-  KeyC: (tab) => navigator.clipboard.writeText(tab.term.getSelection()).catch(() => {}),
-  KeyV: pasteFromClipboard,
-  KeyL: clearTab,
-  KeyF: (tab) => openFind(tab.pane),
-};
+// The lines are read-only: only the send bar at the bottom sends. The commands of Ctrl+Shift keys still work.
 
 function listenToTerminal(tab) {
   tab.term.onTitleChange((title) => {
@@ -170,9 +164,9 @@ function listenToTerminal(tab) {
   tab.term.attachCustomKeyEventHandler((e) => {
     if (e.type !== "keydown") return true;
     if (e.ctrlKey && e.shiftKey) {
-      const shortcut = SHORTCUTS[e.code];
-      shortcut?.(tab);
-      return !shortcut;
+      const command = commandOfKey(keyName(e));
+      if (command) runCommand(command.id, tab);
+      return !command;
     }
     return e.ctrlKey && e.code === "KeyC" && tab.term.hasSelection();  // Ctrl+C copies a selection; no key sends
   });
@@ -489,20 +483,6 @@ try { if (localStorage.getItem("termdeck.sidebar") === "0") setSidebar(false); }
 
 // ---------------------------------------------------------------- toolbar and keys
 
-const TOOLBAR = {
-  port(tab) { if (tab.state === "connected" || tab.state === "reconnecting") sendMessage(tab, { type: "close" }); else connect(tab); },
-  break: (tab) => sendMessage(tab, { type: "break" }),
-  clear: clearTab,
-  reset(tab) {
-    clearTab(tab);
-    tab.term.reset();
-    applyModes(tab);
-  },
-  log: (tab) => sendMessage(tab, { type: "log", value: !tab.logging }),
-  "font-up": (tab) => changeFont(tab, 1),
-  "font-down": (tab) => changeFont(tab, -1),
-};
-
 function toggleLine(tab, line) {
   const value = !(tab.lines?.[line] ?? tab.profile[line] !== false);
   tab.lines = { ...(tab.lines || {}), [line]: value };  // shown at once; the device's own lines follow
@@ -521,21 +501,19 @@ function openSettings(tab) {
   tell("A tunnel has its settings in the Tunnel dialog: close it and start another.");
 }
 
+// A toolbar button is a command (its data-action); its title says its key, if it has one.
 function onToolbar(pane, e) {
   const action = e.target.closest("[data-action]")?.dataset.action;
   const tab = pane.active;
   if (!action || !tab) return;
-  if (action === "settings") return openSettings(tab);
-  if (action === "line-dtr" || action === "line-rts") toggleLine(tab, action.slice(5));
-  else TOOLBAR[action]?.(tab);
-  tab.term.focus();
+  runCommand(action, tab);
+  if (action !== "settings") tab.term.focus();
 }
 
 addEventListener("resize", fitAll);
 matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
   for (const t of tabs) t.term.options.theme = terminalTheme(t.profile);
 });
-// Alt+Shift shortcuts of the page. A shortcut says whether it applies (an open tab, say) by returning false.
 function moveFocus(step) {
   const list = focusPane.tabs;
   if (!list.length) return false;
@@ -549,28 +527,29 @@ function shiftTab(step) {
   active.tabEl.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
-const PAGE_SHORTCUTS = {
-  KeyN: () => editDevice(null),
-  KeyM: () => (active ? addMark(active) : false),
-  KeyH: openHelp,
-  KeyB: toggleSidebar,
-  KeyS: () => setLayout({ single: "cols", cols: "rows", rows: "single" }[layout]),
-  KeyW: () => (active ? requestClose(active) : false),
-  PageUp: () => moveFocus(-1),
-  PageDown: () => moveFocus(1),
-  ArrowLeft: () => shiftTab(-1),
-  ArrowRight: () => shiftTab(1),
-};
-
 document.addEventListener("click", (e) => {  // a click elsewhere closes the open "More" menus
   for (const menu of document.querySelectorAll(".viewbar details.more[open]")) if (!menu.contains(e.target)) menu.open = false;
 });
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") document.querySelectorAll(".viewbar details.more[open]").forEach((menu) => { menu.open = false; });
-  if (!(e.altKey && e.shiftKey)) return;
-  if (PAGE_SHORTCUTS[e.code]?.() !== false && e.code in PAGE_SHORTCUTS) e.preventDefault();
+  if (!(e.altKey || e.ctrlKey)) return;
+  const name = keyName(e);
+  if (active?.keys?.includes(name)) {  // a key of a rule ("key Alt+1 => ...") of the shown tab
+    e.preventDefault();
+    sendMessage(active, { type: "key", name });
+    return;
+  }
+  const command = commandOfKey(name);
+  if (command && e.altKey && runCommand(command.id)) e.preventDefault();  // Ctrl+Shift keys belong to the lines (listenToTerminal)
 });
+showKeys();
+
+// The ports given on the command line (termdeck COM3@115200) are opened once, by the first page.
+async function openFromCommandLine() {
+  const { open } = await api("/api/startopen", { method: "POST" });
+  for (const text of open || []) quickConnect(text);
+}
 
 // Is the server still there? Checked every few seconds; a restarted server has forgotten our secret.
 let serverUp = null;
@@ -596,6 +575,6 @@ async function checkServer() {
 setInterval(checkServer, 3000);
 setTimeout(pollPorts, portPollMs);
 
-login().then(() => { checkServer(); return Promise.all([loadDevices(), loadPortEntries(), loadPorts(), loadScripts()]); }).then(restoreTabs).catch((error) => {
+login().then(() => { checkServer(); return Promise.all([loadDevices(), loadPortEntries(), loadPorts(), loadScripts()]); }).then(restoreTabs).then(openFromCommandLine).catch((error) => {
   document.body.replaceChildren(el("p", "problem", error.message));
 });

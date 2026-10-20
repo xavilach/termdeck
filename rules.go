@@ -11,7 +11,7 @@ import (
 // Rules: what a session does by itself, one rule per line, "when => do".
 //
 //	when: a pattern (text, any case, or /regex/) in what the device sends · on connect · on disconnect ·
-//	      every 500ms (or 2s, 1m) · button Name (a button above the send bar) · idle 5s (nothing received for
+//	      every 500ms (or 2s, 1m) · button Name (a button above the send bar) · key Alt+1 · idle 5s (nothing received for
 //	      so long) · on CTS (or DSR, DCD, RI: the line changed) · bad frame (a frame whose check fails)
 //	do:   colours and styles of the line (red, green, yellow, blue, magenta, cyan, white, grey, orange, bold,
 //	      dim, underline, inverse) · hide (the line is not shown) · notify (a desktop notification) · sound ·
@@ -78,6 +78,11 @@ func (r *rule) parseWhen(when string) error {
 	case word == "every" || word == "idle":
 		r.when = word
 		r.every, err = parseDuration(rest)
+	case word == "key":
+		r.when, r.name = "key", normalizeKey(strings.TrimSpace(when[len("key"):]))
+		if r.name == "" {
+			err = fmt.Errorf("key is followed by a key such as Alt+1 or Ctrl+Shift+F5, with Alt or Ctrl")
+		}
 	case word == "button":
 		r.when, r.name = "button", strings.TrimSpace(when[len("button"):])
 		if r.name == "" || len(r.name) > 40 {
@@ -181,17 +186,49 @@ func (r rule) lineRule() bool { return r.when == "match" && (r.sgr != "" || r.hi
 // eventRule: the rule does something when its moment comes (a match in the stream, a connect...).
 func (r rule) eventRule() bool { return r.act != "" || r.log != "" || r.notify || r.sound }
 
-// ruleNames are the buttons and the graph series the rules make, in order, for the page.
-func ruleNames(rules []rule) (buttons, series []string) {
+// normalizeKey writes a key the way the page names it: Ctrl, Alt, Shift, Meta in this order, then the key
+// (Alt+1, Ctrl+Shift+F5). A key without Ctrl or Alt is refused: it would be typing.
+func normalizeKey(text string) string {
+	mods := map[string]bool{}
+	key := ""
+	for _, part := range strings.Split(text, "+") {
+		part = strings.TrimSpace(part)
+		switch strings.ToLower(part) {
+		case "ctrl", "alt", "shift", "meta":
+			mods[strings.ToLower(part)] = true
+		default:
+			if key != "" || part == "" {
+				return ""
+			}
+			key = strings.ToUpper(part[:1]) + part[1:]
+		}
+	}
+	if key == "" || (!mods["ctrl"] && !mods["alt"]) {
+		return ""
+	}
+	var out []string
+	for _, m := range []string{"Ctrl", "Alt", "Shift", "Meta"} {
+		if mods[strings.ToLower(m)] {
+			out = append(out, m)
+		}
+	}
+	return strings.Join(append(out, key), "+")
+}
+
+// ruleNames are the buttons, the keys and the graph series the rules make, in order, for the page.
+func ruleNames(rules []rule) (buttons, keys, series []string) {
 	for _, r := range rules {
 		if r.when == "button" {
 			buttons = append(buttons, r.name)
+		}
+		if r.when == "key" {
+			keys = append(keys, r.name)
 		}
 		if r.graph != "" && !oneOf(r.graph, series) {
 			series = append(series, r.graph)
 		}
 	}
-	return buttons, series
+	return buttons, keys, series
 }
 
 // styleOfLine is what the rules do with a line: its colour, and whether it is hidden.

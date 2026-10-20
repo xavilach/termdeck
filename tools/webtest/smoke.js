@@ -456,6 +456,26 @@ const tab = () => run("tabs[0]", "x");
   const made = requests.find((r) => r.url === "/api/devices" && r.method === "POST");
   const moved = requests.find((r) => r.url === "/api/portentries" && r.method === "PUT");
   check("a new device takes the port's changes, and the port opens with it", made && made.body.name === "Bench" && made.body.settings.baud === 9600 && moved && moved.body.device === "Bench" && JSON.stringify(moved.body.settings) === "{}", { made: made && made.body, moved: moved && moved.body });
+
+  // commands: the palette finds commands, ports to open and quick connects; the help lists the keys
+  w.document.dispatchEvent(new w.KeyboardEvent("keydown", { code: "KeyP", key: "P", altKey: true, shiftKey: true, bubbles: true }));
+  check("Alt+Shift+P opens the commands", q("#palette").open);
+  const pin = q("#palette-input");
+  pin.value = "graph"; fire(pin, "input");
+  check("typing narrows the commands", [...w.document.querySelectorAll("#palette-list li")].some((li) => /Show or hide the graph/.test(li.textContent)));
+  pin.value = "/dev/ttyUSB1@9600"; fire(pin, "input");
+  check("a port and a speed offer a quick connect", /Open \/dev\/ttyUSB1 at 9600 baud/.test(q("#palette-list li").textContent), q("#palette-list li")?.textContent);
+  run("closeTab(tabs.find((t) => t.port === '/dev/ttyUSB1'))", "x");
+  pin.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  await sleep(30);
+  const quickTab = run("tabs.find((t) => t.port === '/dev/ttyUSB1')", "x");
+  check("Enter opens the port at that speed, for this tab only", quickTab && quickTab.profile.baud === 9600 && !q("#palette").open, quickTab && quickTab.profile.baud);
+  check("the help lists the keys of the commands", /Alt\+Shift\+P/.test(q("#help-keys").textContent) && /Ctrl\+Shift\+F/.test(q("#help-keys").textContent));
+  json(quickTab.ws, { type: "rules", buttons: [], keys: ["Alt+1"], series: [] });
+  run("activate(tabs.find((t) => t.port === '/dev/ttyUSB1'))", "x");
+  quickTab.ws.sent.length = 0;
+  w.document.dispatchEvent(new w.KeyboardEvent("keydown", { code: "Digit1", key: "1", altKey: true, bubbles: true }));
+  check("a key of a rule goes to the session", quickTab.ws.sent.some((m) => m.type === "key" && m.name === "Alt+1"), quickTab.ws.sent);
   check("no errors", errors.length === 0, errors);
   console.log(failed ? `${failed} FAILED` : "all passed");
   process.exit(failed ? 1 : 0);

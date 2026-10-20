@@ -318,3 +318,13 @@ dialog#tunnel label { display: block; margin: 6px 0; }
 .devices-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
 .devices-head button { border: 0; background: none; min-height: 0; padding: 0; color: var(--muted); width: 20px; height: 20px; border-radius: 3px; font-size: 14px; }
 .devices-head button:hover { color: var(--text); background: var(--border); }
+
+/* ---- the command palette and the keys of the help */
+#palette { width: min(560px, 92vw); padding: 8px; top: 12vh; margin-top: 0; }
+#palette-input { width: 100%; box-sizing: border-box; font-size: 14px; }
+#palette-list { list-style: none; margin: 6px 0 0; padding: 0; max-height: 50vh; overflow: auto; }
+#palette-list li { display: flex; justify-content: space-between; gap: 8px; padding: 5px 8px; border-radius: 3px; cursor: pointer; }
+#palette-list li.selected, #palette-list li:hover { background: var(--select); }
+#palette-list kbd, .keys kbd { color: var(--muted); }
+.keys { columns: 2; padding-left: 0; list-style: none; }
+.keys li { margin: 2px 0; }

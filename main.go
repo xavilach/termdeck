@@ -32,6 +32,10 @@ func main() {
 	noBrowser := flag.Bool("no-browser", false, "only print the URL")
 	showVersion := flag.Bool("version", false, "print the version")
 	home := flag.String("home", "", "folder for the settings (default: the user's config folder; TERMDECK_HOME also sets it)")
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "usage: termdeck [flags] [PORT[@BAUD]...]   (the ports are opened in the page, for example COM3@115200)")
+		flag.PrintDefaults()
+	}
 	flag.Parse()
 	if *home != "" {
 		os.Setenv("TERMDECK_HOME", *home)
@@ -46,6 +50,7 @@ func main() {
 		os.Exit(1)
 	}
 	server := NewServer(dir)
+	server.startOpen = flag.Args()
 	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", *port))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "termdeck:", err)

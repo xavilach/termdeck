@@ -397,8 +397,8 @@ func (t *termSession) sendRuleNames() {
 	t.mu.Lock()
 	rules, _ := parseRules(t.profile.Rules) // checked by Normalize
 	t.mu.Unlock()
-	buttons, series := ruleNames(rules)
-	t.sendJSON(map[string]any{"type": "rules", "buttons": append([]string{}, buttons...), "series": append([]string{}, series...)})
+	buttons, keys, series := ruleNames(rules)
+	t.sendJSON(map[string]any{"type": "rules", "buttons": append([]string{}, buttons...), "keys": append([]string{}, keys...), "series": append([]string{}, series...)})
 }
 
 // sentText is how a line that was sent shows: the text, without its line end, with control characters escaped.
@@ -821,6 +821,7 @@ var messageHandlers = map[string]func(t *termSession, m clientMessage){
 	"end":           func(t *termSession, m clientMessage) { go t.end() },
 	"send":          func(t *termSession, m clientMessage) { t.sendBar(m) },
 	"button":        func(t *termSession, m clientMessage) { t.pressButton(m.Name) },
+	"key":           func(t *termSession, m clientMessage) { t.fire("key", normalizeKey(m.Name), "") },
 	"raw":           func(t *termSession, m clientMessage) { t.writeRaw(m.Bytes) },
 	"resetcounters": func(t *termSession, m clientMessage) { t.resetCounters() },
 	"clear":         func(t *termSession, m clientMessage) { t.clearRecords() },

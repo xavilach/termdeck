@@ -12,7 +12,7 @@ GOOS=windows GOARCH=amd64 go build -o termdeck.exe .   # Windows
 ./termdeck                                             # --port N, --no-browser
 ```
 
-Press Help (left column, Alt+Shift+H) for the keys and the syntax of the settings.
+Press Help (left column, Alt+Shift+H) for the keys and the syntax of the settings. Alt+Shift+P finds any command, a port to open or a script to run; `COM3@115200` opens a port at a speed, also on the command line: `termdeck COM3@115200`.
 
 ## Ports and devices
 

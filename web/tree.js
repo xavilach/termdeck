@@ -92,7 +92,8 @@ function entryOf(port) {
 const deviceOf = (port) => entryOf(port)?.device || GENERIC;
 
 // Open a port with a device (its last one when none is given): the server merges the layers of its settings.
-async function openPort(port, device) {
+// overrides change some settings for this tab only (a quick connect at another speed).
+async function openPort(port, device, overrides = {}) {
   try {
     const serial = portDetails[port]?.serial || "";
     const layers = await api(`/api/layers?port=${encodeURIComponent(port)}&serial=${encodeURIComponent(serial)}&device=${encodeURIComponent(device || "")}`);
@@ -103,7 +104,7 @@ async function openPort(port, device) {
       await api("/api/portentries", { method: "PUT", body: { ...entry, port, serial, device: name } });  // the device it opens with next time
       await loadPortEntries();
     }
-    openTab(layers.profile, { port, device: layers.device.name });
+    openTab({ ...layers.profile, ...overrides }, { port, device: layers.device.name });
   } catch (error) { tell(`Cannot open ${port}: ${error.message}`); }
 }
 

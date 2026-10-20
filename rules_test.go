@@ -52,12 +52,17 @@ FAULT => log on run collect`)
 	if r := rules[14]; r.log != "on" || r.act != "run" || r.arg != "collect" {
 		t.Errorf("FAULT: %+v", r)
 	}
-	buttons, series := ruleNames(rules)
-	if strings.Join(buttons, ",") != "Reset" || strings.Join(series, ",") != "Temp,Hum" {
-		t.Errorf("names %v %v", buttons, series)
+	buttons, keys, series := ruleNames(rules)
+	if strings.Join(buttons, ",") != "Reset" || len(keys) != 0 || strings.Join(series, ",") != "Temp,Hum" {
+		t.Errorf("names %v %v %v", buttons, keys, series)
+	}
+	for in, want := range map[string]string{"alt+1": "Alt+1", "shift+ctrl+f5": "Ctrl+Shift+F5", "Alt+Shift+x": "Alt+Shift+X", "Shift+A": "", "a": "", "Alt+": "", "Alt+1+2": ""} {
+		if got := normalizeKey(in); got != want {
+			t.Errorf("key %q: got %q, want %q", in, got, want)
+		}
 	}
 	for _, bad := range []string{"no arrow", " => red", "x => ", "x => purple", "/(/ => red", "every => send x", "every 1 => send x",
-		"button => send x", "on connect => red", "x => graph", "x => log maybe", "x => run", "x => send @speed=1", "on lunch => note", "idle 99h => note"} {
+		"button => send x", "key a => send x", "key => send x", "on connect => red", "x => graph", "x => log maybe", "x => run", "x => send @speed=1", "on lunch => note", "idle 99h => note"} {
 		if _, err := parseRules(bad); err == nil {
 			t.Errorf("%q should be refused", bad)
 		}
@@ -140,6 +145,7 @@ func TestTheRulesOfASessionActWhenTheirMomentComes(t *testing.T) {
 	rules := "on connect => send @hex=43\n" + // C
 		"every 100ms => send @hex=45\n" + // E (stopped below)
 		"button Go => send @hex=47\n" + // G
+		"key alt+1 => send @hex=4B\n" + // K
 		"ping => notify send @hex=50\n" + // P, at once, without a line end
 		"/temp=([0-9]+)/ => graph T\n" +
 		"FAULT => sound\n" +
@@ -162,6 +168,10 @@ func TestTheRulesOfASessionActWhenTheirMomentComes(t *testing.T) {
 	sendJSON(t, c, ctx, map[string]any{"type": "button", "name": "go"})
 	if got := readDevice(t, master, 1); !strings.HasSuffix(string(got), "G") {
 		t.Errorf("button: %q", got)
+	}
+	sendJSON(t, c, ctx, map[string]any{"type": "key", "name": "Alt+1"})
+	if got := readDevice(t, master, 1); string(got) != "K" {
+		t.Errorf("key: %q", got)
 	}
 	master.Write([]byte("ping"))
 	if got := readDevice(t, master, 1); string(got) != "P" {

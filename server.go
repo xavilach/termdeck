@@ -93,6 +93,9 @@ type Server struct {
 	portEntries *Store[PortEntry]
 	scripts     *Store[Script]
 	auth        *Auth
+
+	startMu   sync.Mutex
+	startOpen []string // ports given on the command line (COM3@115200), opened by the first page that asks
 }
 
 // NewServer keeps its settings in dir: devices.json, ports.json and scripts.json.
@@ -221,7 +224,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/scripts/{name}", s.deleteScript)
 	mux.HandleFunc("GET /api/info", func(w http.ResponseWriter, r *http.Request) {
 		home, _ := configDir()
-		writeJSON(w, http.StatusOK, map[string]string{"version": version, "os": runtime.GOOS, "home": home})
+		writeJSON(w, http.StatusOK, map[string]any{"version": version, "os": runtime.GOOS, "home": home})
+	})
+	mux.HandleFunc("POST /api/startopen", func(w http.ResponseWriter, r *http.Request) {
+		s.startMu.Lock()
+		open := append([]string{}, s.startOpen...)
+		s.startOpen = nil // once: a reload does not open them again
+		s.startMu.Unlock()
+		writeJSON(w, http.StatusOK, map[string]any{"open": open})
 	})
 	mux.HandleFunc("GET /api/putty", s.putty)
 	mux.HandleFunc("POST /api/putty", s.putty)

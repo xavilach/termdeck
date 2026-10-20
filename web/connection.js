@@ -28,6 +28,7 @@ const MESSAGES = {
   // the buttons and the graph series the rules of the settings make
   rules(tab, m) {
     tab.buttons = m.buttons;
+    tab.keys = m.keys;
     tab.graph.names = m.series;
     if (tab === tab.pane.active) { showQuick(tab.pane); syncGraph(tab.pane); }
   },

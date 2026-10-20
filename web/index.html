@@ -373,12 +373,16 @@
     <div class="buttons"><span class="spacer"></span><button type="button" id="tunnel-close">Cancel</button><button type="button" id="tunnel-start" class="primary">Start</button></div>
   </article>
 </dialog>
+<dialog id="palette" aria-label="Commands">
+  <input id="palette-input" type="search" spellcheck="false" autocomplete="off" placeholder="A command, a port to open (COM3@115200), a script to run" aria-label="Command, port or script" aria-controls="palette-list">
+  <ul id="palette-list" role="listbox" aria-label="Choices"></ul>
+</dialog>
 <dialog id="help" aria-label="Help">
   <article>
     <header><h2>termdeck help</h2><button type="button" data-close-help>Close</button></header>
     <h3>Keys</h3>
-    <p><kbd>Alt+Shift+N</kbd> new device · <kbd>W</kbd> close tab · <kbd>S</kbd> layout · <kbd>B</kbd> left column · <kbd>M</kbd> mark · <kbd>PageUp</kbd>/<kbd>PageDown</kbd> other tab · <kbd>←</kbd>/<kbd>→</kbd> move the tab · <kbd>H</kbd> this help.<br>
-    <kbd>Ctrl+Shift+C</kbd> copy · <kbd>V</kbd> paste into the send bar · <kbd>L</kbd> clear · <kbd>F</kbd> find. In the send bar: <kbd>Enter</kbd> sends, <kbd>↑</kbd>/<kbd>↓</kbd> recall, <kbd>Alt+T</kbd>/<kbd>H</kbd>/<kbd>D</kbd>/<kbd>B</kbd> choose Text, Hex, Decimal, Binary.</p>
+    <ul id="help-keys" class="keys"></ul>
+    <p>In the send bar: <kbd>Enter</kbd> sends, <kbd>↑</kbd>/<kbd>↓</kbd> recall, <kbd>Alt+T</kbd>/<kbd>H</kbd>/<kbd>D</kbd>/<kbd>B</kbd> choose Text, Hex, Decimal, Binary. A rule <code>key Alt+1 =&gt; send …</code> gives a key of your own. <kbd>Alt+Shift+P</kbd> finds any command, a port to open, or a script to run; type <code>COM3@115200</code> to open a port at a speed (also on the command line: <code>termdeck COM3@115200</code>).</p>
     <h3>Sending</h3>
     <p>Only the send bar sends; the output is read-only. Text accepts <code>\r \n \t \0 \\ \xNN</code>. Hex, Decimal and Binary refuse wrong characters and group the digits. <b>Cmd</b> takes steps (below). <b>End</b> is added after the data (None, CR, LF, CR LF, Custom); <b>Check</b> adds a sum, XOR or CRC after byte data. <b>Auto</b> sends again every N ms. <b>File…</b> sends a file as it is.</p>
     <h3>Steps (Cmd, scripts, the send of a rule)</h3>
@@ -434,6 +438,7 @@
 <script src="/transfer.js"></script>
 <script src="/tunnel.js"></script>
 <script src="/connection.js"></script>
+<script src="/commands.js"></script>
 <script src="/tabs.js"></script>
 </body>
 </html>
