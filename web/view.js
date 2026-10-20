@@ -284,7 +284,7 @@ function frameParserOf(tab) {
 
 function showFrames(tab, ev) {
   if (!tab.frameFeed) {
-    if (!tab.frameWarned) { tab.frameWarned = true; note(tab, `Frames view: ${tab.frameSpec?.error || "no frame description"} (set it under Advanced > Frames in the session settings)`); }
+    if (!tab.frameWarned) { tab.frameWarned = true; note(tab, `Frames view: ${tab.frameSpec?.error || "no frame description"} (set it on the Receive page, Frames, in the session settings)`); }
     return hexWrite(tab, ev.raw, "rx", ev.t);  // without a description the bytes show as hex
   }
   for (const row of tab.frameFeed(ev.raw)) {

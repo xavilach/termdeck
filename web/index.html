@@ -87,13 +87,13 @@
       <span class="spacer"></span>
       <span class="counters" title="Bytes received since the port opened (in a tunnel: carried from A to B). Clear resets it.">Rx <b data-count="rx">0</b></span>
       <span class="marks" role="group" aria-label="Marks"><button data-mark title="Add a mark: a line of its own in the output and in the log, to find a moment again (Alt+Shift+M)">Mark</button><button data-mark-prev title="Go to the previous mark" aria-label="Previous mark">◀</button><button data-mark-next title="Go to the next mark" aria-label="Next mark">▶</button></span>
-      <button data-graph aria-pressed="false" title="Draw numbers found in the received lines as a graph (set the series under Advanced in the session settings)">Graph</button>
+      <button data-graph aria-pressed="false" title="Draw numbers found in the received lines as a graph (set the series on the Receive page of the session settings)">Graph</button>
       <button data-freeze aria-pressed="false" title="Keep the screen as it is while the device goes on sending. The data is still received, counted and kept; Resume shows it all.">Freeze</button>
       <button data-action="find" title="Search the lines on screen (Ctrl+Shift+F)">Find</button>
     </div>
     <div class="graphbar" hidden>
       <div class="graph-head">
-        <span class="bar-title" title="Numbers found in the received lines, drawn over time. The series are set in the session settings, under Advanced.">Graph</span>
+        <span class="bar-title" title="Numbers found in the received lines, drawn over time. The series are set in the session settings, on the Receive page.">Graph</span>
         <label>Show <select data-graph-window><option value="10">10 s</option><option value="30">30 s</option><option value="60">1 min</option><option value="300">5 min</option><option value="900">15 min</option><option value="3600">1 hour</option><option value="0">All</option></select></label>
         <label class="check" title="Draw each series over its own range (0 to 100 %), for series of very different sizes such as 21 and 1000."><input type="checkbox" data-graph-each> Each on its own scale</label>
         <span class="graph-legend"></span>
@@ -143,6 +143,14 @@
 <dialog id="panel" aria-label="Edit">
         <form id="profile-form" class="panel-page" autocomplete="off">
           <header><h2 id="profile-title">Profile</h2></header>
+          <nav class="form-tabs" aria-label="Settings pages">
+            <button type="button" data-form-page="port" aria-pressed="true">Port</button>
+            <button type="button" data-form-page="receive" aria-pressed="false">Receive</button>
+            <button type="button" data-form-page="send" aria-pressed="false">Send</button>
+            <button type="button" data-form-page="log" aria-pressed="false">Log</button>
+            <button type="button" data-form-page="display" aria-pressed="false">Display</button>
+          </nav>
+          <div class="form-page" data-form-page="port">
           <div class="grid">
             <label title="The name this session has in the list on the left, for example &quot;Router console&quot; or &quot;Dev board&quot;.">Name <input name="name" required spellcheck="false"></label>
             <label title="Sessions and scripts are organised in groups, like folders. A script is offered only for sessions of its group. Leave empty (or type General) to keep it in the General group.">Group <input name="group" list="groups" spellcheck="false" placeholder="General"></label>
@@ -169,10 +177,12 @@
               <label title="How long RTS stays in the sending state after the last byte (milliseconds), for adapters that need time to finish.">RTS hold (ms) <input name="rtsDelayMs" type="number" min="0" max="1000" value="0"></label>
             </div>
           </fieldset>
+          </div>
+          <div class="form-page" data-form-page="receive" hidden>
           <fieldset>
             <legend>Received data</legend>
             <div class="grid">
-              <label title="How received data is shown when the session opens. Hex, Decimal and Binary show each byte as a number, for binary data; Frames cuts the bytes into frames (describe them under Advanced). You can change it later from the bar above the lines.">View <select name="view"><option value="text">Text</option><option value="hex">Hex</option><option value="dec">Decimal</option><option value="bin">Binary</option><option value="frames">Frames</option></select></label>
+              <label title="How received data is shown when the session opens. Hex, Decimal and Binary show each byte as a number, for binary data; Frames cuts the bytes into frames (describe them on the Receive page). You can change it later from the bar above the lines.">View <select name="view"><option value="text">Text</option><option value="hex">Hex</option><option value="dec">Decimal</option><option value="bin">Binary</option><option value="frames">Frames</option></select></label>
               <label title="Start a new line when nothing was received for this long (milliseconds), for data without line ends. CR and LF are then shown as &lt;CR&gt; and &lt;LF&gt; instead of ending lines. 0 means never.">New line after pause (ms) <input name="linePauseMs" type="number" min="0" max="60000" value="0"></label>
             </div>
             <div class="grid">
@@ -192,6 +202,39 @@
               <label title="Text added at the start of each line you send, to tell it apart from what the device sent. For example &quot;TX&gt; &quot;. It appears for lines termdeck shows itself: local echo, the send bar and scripts. A device that echoes your typing shows it as received text. Leave empty for nothing.">Sent <input name="txMarker" spellcheck="false"></label>
             </div>
           </fieldset>
+            <fieldset>
+              <legend>Frames</legend>
+              <label title="How the Frames view cuts the received bytes into frames, one line each, with the check verified. One setting per line: sync = AA 55 (the bytes a frame starts with) · size = u8@2 + 5 (the size of the frame: a field, u8 or u16be or u16le at an offset, plus a number; or just a number) · end = 0D 0A (the frame ends with these bytes; instead of size) · header = 3 (bytes shown apart before the payload) · check = crc16modbus (the check at the end of the frame, over the bytes before it: sum8, xor8, crc8, crc16modbus, crc16ccitt, crc16xmodem, crc32). Bytes outside a frame show as ??.">Description <textarea name="frameSpec" rows="4" spellcheck="false" placeholder="sync = AA 55&#10;size = u8@2 + 5&#10;header = 3&#10;check = crc16modbus"></textarea></label>
+            </fieldset>
+            <fieldset>
+              <legend>Highlights and filter</legend>
+              <label title="Colour the received lines that match, one rule per line: pattern = colour. The pattern is text (any case) or /regex/. Colours: red, green, yellow, blue, magenta, cyan, white, grey, orange; add bold, dim, underline or inverse with +. Add notify to ask for a desktop notification when such a line arrives while the tab is not in sight (ERROR = red+notify; allow notifications with the button below). Example: ERROR = red+bold. Lines starting with # are notes. A line is coloured when it arrives in one piece.">Highlights <textarea name="highlights" rows="3" spellcheck="false" placeholder="ERROR = red+bold&#10;/warn(ing)?/ = orange"></textarea></label>
+              <label title="Show only the lines that contain this text or match /regex/; ! in front hides them instead. You can change it later from the receive bar.">Filter <input name="filter" spellcheck="false" placeholder="text, /regex/ or !text"></label>
+              <p><button type="button" id="allow-notifications" title="The browser asks once; notifications only come for rules with notify">Allow desktop notifications</button> <span id="notification-state" class="muted"></span></p>
+            </fieldset>
+            <fieldset>
+              <legend>Graph</legend>
+              <label title="Numbers to draw as lines, one series per line: name | prefix | suffix takes the number after the prefix, up to the suffix if there is one; name | /regex/ takes the first group of the match. Example: Temp | Temperature: | degC   or   Hum | /hum=([0-9.]+)%/. Open the graph with the Graph button in the receive bar. Lines starting with # are notes.">Series <textarea name="graphSeries" rows="3" spellcheck="false" placeholder="Temp | Temperature: | degC&#10;Hum | /hum=([0-9.]+)%/"></textarea></label>
+            </fieldset>
+          </div>
+          <div class="form-page" data-form-page="send" hidden>
+            <fieldset>
+              <legend>Quick sends</legend>
+              <label title="Buttons above the send bar, one per line: name | type | data. The type is text, hex, dec, bin or cmd. Text gets the line end of the session, the others nothing; add | end=cr (or lf, crlf, none, session) and | check=crc16modbus (or sum8, xor8, crc8, crc16ccitt, crc16xmodem, crc32) to choose. Examples: Version | text | AT+GMR    Reset | hex | 7E 01 00 7E | end=none    Wiggle | cmd | dtr=0; wait=100; dtr=1. Lines starting with # are notes.">Buttons <textarea name="quickSends" rows="3" spellcheck="false" placeholder="Version | text | AT+GMR&#10;Reset | cmd | dtr=0; wait=100; dtr=1"></textarea></label>
+            </fieldset>
+            <fieldset>
+              <legend>Slow send</legend>
+              <div class="grid">
+                <label title="For devices that lose characters sent at full speed: wait this long (milliseconds) after each character sent from the send bar, a script or a trigger. 0 sends at full speed. The delays also apply to files.">Pause after each character (ms) <input name="charDelayMs" type="number" min="0" max="5000" value="0"></label>
+                <label title="An extra wait (milliseconds) after a CR or LF sent, for devices that need time to take a line in.">Extra pause after a line end (ms) <input name="lineDelayMs" type="number" min="0" max="5000" value="0"></label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Triggers</legend>
+              <label title="Answer what the device sends, one rule per line: text =&gt; reply. The text is looked for in the received data; write /regex/ for a regular expression. The reply is sent with the Enter key of the session; start it with @ for steps such as @dtr=1; wait=500; hex=0D. Lines starting with # are notes. Example: login: =&gt; admin">Rules <textarea name="triggers" rows="3" spellcheck="false" placeholder="login: => admin&#10;/Password:?/ => secret"></textarea></label>
+            </fieldset>
+          </div>
+          <div class="form-page" data-form-page="log" hidden>
           <fieldset>
             <legend>Log</legend>
             <label title="Where to save everything sent and received, one line each. Leave empty to keep no log. {name}, {date} and {time} are replaced by the session name, the day and the time, for example logs/{name}-{date}.log. The file is created only once the port is open, and is added to if it exists.">File <input name="logPath" spellcheck="false" placeholder="logs/{name}-{date}.log"></label>
@@ -210,8 +253,8 @@
               <label title="Text written at the start of each sent line in the log file, for example &quot;TX &quot;. Leave empty for nothing. Independent of the markers shown on screen.">Sent <input name="logTxMarker" spellcheck="false"></label>
             </div>
           </fieldset>
-          <details id="advanced">
-            <summary>Advanced</summary>
+          </div>
+          <div class="form-page" data-form-page="display" hidden>
             <div class="checks">
               <label class="check" title="Fixes text that shifts to the right line after line (a staircase). Tick it if the device ends its lines with only LF (line feed): the cursor then also returns to the start of the line."><input name="implicitCR" type="checkbox"> CR in every LF</label>
               <label class="check" title="Fixes lines that overwrite each other on the same row. Tick it if the device ends its lines with only CR (carriage return): the cursor then also moves down a line."><input name="implicitLF" type="checkbox"> LF in every CR</label>
@@ -246,35 +289,6 @@
               </div>
             </fieldset>
             <fieldset>
-              <legend>Frames</legend>
-              <label title="How the Frames view cuts the received bytes into frames, one line each, with the check verified. One setting per line: sync = AA 55 (the bytes a frame starts with) · size = u8@2 + 5 (the size of the frame: a field, u8 or u16be or u16le at an offset, plus a number; or just a number) · end = 0D 0A (the frame ends with these bytes; instead of size) · header = 3 (bytes shown apart before the payload) · check = crc16modbus (the check at the end of the frame, over the bytes before it: sum8, xor8, crc8, crc16modbus, crc16ccitt, crc16xmodem, crc32). Bytes outside a frame show as ??.">Description <textarea name="frameSpec" rows="4" spellcheck="false" placeholder="sync = AA 55&#10;size = u8@2 + 5&#10;header = 3&#10;check = crc16modbus"></textarea></label>
-            </fieldset>
-            <fieldset>
-              <legend>Highlights and filter</legend>
-              <label title="Colour the received lines that match, one rule per line: pattern = colour. The pattern is text (any case) or /regex/. Colours: red, green, yellow, blue, magenta, cyan, white, grey, orange; add bold, dim, underline or inverse with +. Add notify to ask for a desktop notification when such a line arrives while the tab is not in sight (ERROR = red+notify; allow notifications with the button below). Example: ERROR = red+bold. Lines starting with # are notes. A line is coloured when it arrives in one piece.">Highlights <textarea name="highlights" rows="3" spellcheck="false" placeholder="ERROR = red+bold&#10;/warn(ing)?/ = orange"></textarea></label>
-              <label title="Show only the lines that contain this text or match /regex/; ! in front hides them instead. You can change it later from the receive bar.">Filter <input name="filter" spellcheck="false" placeholder="text, /regex/ or !text"></label>
-              <p><button type="button" id="allow-notifications" title="The browser asks once; notifications only come for rules with notify">Allow desktop notifications</button> <span id="notification-state" class="muted"></span></p>
-            </fieldset>
-            <fieldset>
-              <legend>Graph</legend>
-              <label title="Numbers to draw as lines, one series per line: name | prefix | suffix takes the number after the prefix, up to the suffix if there is one; name | /regex/ takes the first group of the match. Example: Temp | Temperature: | degC   or   Hum | /hum=([0-9.]+)%/. Open the graph with the Graph button in the receive bar. Lines starting with # are notes.">Series <textarea name="graphSeries" rows="3" spellcheck="false" placeholder="Temp | Temperature: | degC&#10;Hum | /hum=([0-9.]+)%/"></textarea></label>
-            </fieldset>
-            <fieldset>
-              <legend>Quick sends</legend>
-              <label title="Buttons above the send bar, one per line: name | type | data. The type is text, hex, dec, bin or cmd. Text gets the line end of the session, the others nothing; add | end=cr (or lf, crlf, none, session) and | check=crc16modbus (or sum8, xor8, crc8, crc16ccitt, crc16xmodem, crc32) to choose. Examples: Version | text | AT+GMR    Reset | hex | 7E 01 00 7E | end=none    Wiggle | cmd | dtr=0; wait=100; dtr=1. Lines starting with # are notes.">Buttons <textarea name="quickSends" rows="3" spellcheck="false" placeholder="Version | text | AT+GMR&#10;Reset | cmd | dtr=0; wait=100; dtr=1"></textarea></label>
-            </fieldset>
-            <fieldset>
-              <legend>Slow send</legend>
-              <div class="grid">
-                <label title="For devices that lose characters sent at full speed: wait this long (milliseconds) after each character sent from the send bar, a script or a trigger. 0 sends at full speed. The delays also apply to files.">Pause after each character (ms) <input name="charDelayMs" type="number" min="0" max="5000" value="0"></label>
-                <label title="An extra wait (milliseconds) after a CR or LF sent, for devices that need time to take a line in.">Extra pause after a line end (ms) <input name="lineDelayMs" type="number" min="0" max="5000" value="0"></label>
-              </div>
-            </fieldset>
-            <fieldset>
-              <legend>Triggers</legend>
-              <label title="Answer what the device sends, one rule per line: text =&gt; reply. The text is looked for in the received data; write /regex/ for a regular expression. The reply is sent with the Enter key of the session; start it with @ for steps such as @dtr=1; wait=500; hex=0D. Lines starting with # are notes. Example: login: =&gt; admin">Rules <textarea name="triggers" rows="3" spellcheck="false" placeholder="login: => admin&#10;/Password:?/ => secret"></textarea></label>
-            </fieldset>
-            <fieldset>
               <legend>Colours</legend>
               <label title="Overrides colours of the theme, one per line as NAME=#rrggbb. Names: foreground, background, cursor, selection, black, red, green, yellow, blue, magenta, cyan, white, and brightBlack... brightWhite. Example: background=#101820">Colour lines <textarea name="colours" rows="4" spellcheck="false" placeholder="background=#101820"></textarea></label>
               <div class="grid">
@@ -288,7 +302,7 @@
               </div>
               <label title="A sound to play instead of the beep (a short .wav or .mp3, up to 300 KB). It is saved in the session.">Bell sound <input type="file" id="bell-file" accept="audio/*"> <span id="bell-name" class="muted"></span> <button type="button" id="bell-clear" title="Go back to the default beep">Remove</button><input type="hidden" name="bellSound"></label>
             </fieldset>
-          </details>
+          </div>
           <p id="profile-error" class="problem" hidden></p>
           <div class="buttons">
             <button type="button" id="profile-delete" class="danger">Delete</button>
@@ -387,7 +401,7 @@
     <h3>Tunnel</h3>
     <p>The Tunnel button joins two ports: what one receives is written to the other, both directions are shown (green A→B, cyan B→A) and can be logged. Rx counts A to B, Tx counts B to A. Nothing is sent from the send bar into a tunnel.</p>
     <h3>Frames</h3>
-    <p>View: Frames cuts the received bytes into frames. Describe them in the session settings (Advanced, Frames), one setting per line: <code>sync = AA 55</code> · <code>size = u8@2 + 5</code> (the size of the frame: u8, u16be or u16le at an offset, plus a number; or a plain number) · <code>end = 0D 0A</code> (instead of size) · <code>header = 3</code> · <code>check = crc16modbus</code>. A bad check shows as BAD with what it should be.</p>
+    <p>View: Frames cuts the received bytes into frames. Describe them in the session settings (Receive page, Frames), one setting per line: <code>sync = AA 55</code> · <code>size = u8@2 + 5</code> (the size of the frame: u8, u16be or u16le at an offset, plus a number; or a plain number) · <code>end = 0D 0A</code> (instead of size) · <code>header = 3</code> · <code>check = crc16modbus</code>. A bad check shows as BAD with what it should be.</p>
     <h3>About</h3>
     <p id="about" class="muted"></p>
     <h3>Virtual ports</h3>

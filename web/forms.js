@@ -52,6 +52,7 @@ function editProfile(profile, prefill = {}) {
   $("#profile-delete").hidden = !profile;
   resetDelete($("#profile-delete"));
   showText($("#profile-error"), "");
+  showFormPage("port");
   fillForm(form, profile || { ...DEFAULTS, group: selectedGroup ?? "", ...prefill });
   $("#bell-file").value = "";
   $("#bell-name").textContent = form.elements.bellSound.value ? "custom sound set" : "";
@@ -105,10 +106,11 @@ function applyProfile(tab, p) {
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (!formIsValid()) return;
   try { await saveProfile(); showLines(); } catch (error) { showText($("#profile-error"), error.message); }
 });
 $("#profile-connect").addEventListener("click", async () => {
-  if (!form.reportValidity()) return;
+  if (!formIsValid()) return;
   try {
     const saved = await saveProfile();
     const tab = tabs.find((t) => t.profile.name === saved.name);
@@ -215,3 +217,22 @@ $("#allow-notifications").addEventListener("click", async () => {
   if (typeof Notification !== "undefined") await Notification.requestPermission();
   showNotificationState();
 });
+
+// The settings of a session are on pages: Port, Receive, Send, Log, Display.
+function showFormPage(name) {
+  for (const page of form.querySelectorAll(".form-page")) page.hidden = page.dataset.formPage !== name;
+  for (const button of form.querySelectorAll(".form-tabs button")) button.setAttribute("aria-pressed", String(button.dataset.formPage === name));
+  stored.write("termdeck.formPage", name);
+}
+form.querySelectorAll(".form-tabs button").forEach((button) => button.addEventListener("click", () => showFormPage(button.dataset.formPage)));
+// The browser cannot focus a field on a page that is not shown, so the form checks itself:
+// it shows the page of the first field that is not valid and reports that field.
+form.noValidate = true;
+function formIsValid() {
+  const invalid = form.querySelector(":invalid");
+  if (!invalid) return true;
+  showFormPage(invalid.closest(".form-page")?.dataset.formPage || "port");
+  invalid.reportValidity();
+  return false;
+}
+

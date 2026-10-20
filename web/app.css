@@ -291,3 +291,8 @@ dialog#tunnel label { display: block; margin: 6px 0; }
 .empty .try button { margin-right: 6px; font-family: ui-monospace, Consolas, monospace; }
 .item.port { flex-direction: column; align-items: flex-start; gap: 0; }
 .item.port .detail { font-family: var(--font); font-size: 11px; color: var(--muted); white-space: normal; }
+
+.form-tabs { display: flex; gap: 2px; margin: 8px 0 4px; border-bottom: 1px solid var(--border); }
+.form-tabs button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 6px 14px; min-height: 0; }
+.form-tabs button[aria-pressed=true] { border-bottom-color: var(--accent); font-weight: 600; }
+.form-page { min-height: 380px; }

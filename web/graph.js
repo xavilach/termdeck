@@ -80,7 +80,7 @@ function drawGraph(tab) {
   ctx.fillStyle = colour("--muted");
   const graph = tab.graph;
   if (!graph.names.length) {
-    ctx.fillText("No series. Add lines such as  Temp | Temperature: | degC  under Advanced > Graph in the settings of the session.", 12, 22);
+    ctx.fillText("No series. Add lines such as  Temp | Temperature: | degC  on the Receive page (Graph) in the settings of the session.", 12, 22);
     return;
   }
   const { shown, all, from, to } = graphView(graph, Date.now());

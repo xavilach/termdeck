@@ -48,6 +48,7 @@ async function startServer() {
   await page.goto(server.url);
   await page.waitForSelector("#port-tree .item.port", { state: "attached" });
   // the "More" menu is checked on its own below; the other checks use what is in it as if it were always open
+  const formPage = (name) => page.click(`#profile-form .form-tabs [data-form-page=${name}]`);
   const openMore = () => page.evaluate(() => document.querySelectorAll(".viewbar details.more").forEach((d) => { d.open = true; }));
   // (the other checks open the menu before they use what is in it)
   check("with no serial port and no session the empty pane offers virtual ports to try", await page.locator("[data-empty-try] button").count() === 3 && /Try a virtual one/.test(await page.locator("[data-empty-try]").first().textContent()));
@@ -223,10 +224,12 @@ async function startServer() {
   await form.locator("[name=name]").fill("Auto login");
   await form.locator("[name=device]").fill("fake:shell");
   await form.locator("[name=localEcho]").check();
+  await formPage("receive");
   await form.locator("[name=rxMarker]").fill("RX ");
   await form.locator("[name=txMarker]").fill("TX ");
+  await formPage("log");
   await form.locator("[name=logPath]").fill(path.join(server.dir, "auto-login.log"));
-  await form.locator("#advanced").evaluate((d) => { d.open = true; });
+  await formPage("send");
   await form.locator("[name=triggers]").fill("login: => admin\n/Password:/ => admin");
   await form.locator("[name=quickSends]").fill("Hello | text | echo quick\nHex | hex | 65 63 68 6f 20 68 71 0d | end=none");
   await page.click("#profile-connect");
@@ -262,7 +265,7 @@ async function startServer() {
   await page.keyboard.press("Alt+Shift+N");
   await form.locator("[name=name]").fill("Slow echo");
   await form.locator("[name=device]").fill("fake:echo");
-  await form.locator("#advanced").evaluate((d) => { d.open = true; });
+  await formPage("send");
   await form.locator("[name=charDelayMs]").fill("50");
   await page.click("#profile-connect");
   await page.waitForSelector(".tab:has-text('Slow echo')");
@@ -301,7 +304,7 @@ async function startServer() {
   await page.keyboard.press("Alt+Shift+N");
   await form.locator("[name=name]").fill("Graphed");
   await form.locator("[name=device]").fill("fake:counter");
-  await form.locator("#advanced").evaluate((d) => { d.open = true; });
+  await formPage("receive");
   await form.locator("[name=graphSeries]").fill("Temp | temp=\nTick | tick ");
   await page.click("#profile-connect");
   await page.waitForSelector(".tab:has-text('Graphed')");
@@ -379,7 +382,7 @@ async function startServer() {
   await page.keyboard.press("Alt+Shift+N");
   await form.locator("[name=name]").fill("Coloured");
   await form.locator("[name=device]").fill("fake:counter");
-  await form.locator("#advanced").evaluate((d) => { d.open = true; });
+  await formPage("receive");
   await form.locator("[name=highlights]").fill("tick 2 = red");
   await page.click("#profile-connect");
   await page.waitForSelector(".tab:has-text('Coloured')");
@@ -394,6 +397,24 @@ async function startServer() {
   await page.fill(".viewbar [data-filter]", "");
   await page.locator(".tab", { hasText: "Coloured" }).locator(".close").click();
   await page.locator(".tab", { hasText: "Coloured" }).locator(".close").click();
+
+  // the settings of a session are on pages, and the dialog always opens on the first
+  await page.keyboard.press("Alt+Shift+N");
+  check("the settings dialog opens on the Port page", await form.locator(".form-page[data-form-page=port]").isVisible() && !(await form.locator(".form-page[data-form-page=send]").isVisible()));
+  await formPage("send");
+  check("a page shows its settings and hides the others", await form.locator("[name=triggers]").isVisible() && !(await form.locator("[name=device]").isVisible()));
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Alt+Shift+N");
+  check("and the next time it opens on Port again", await form.locator("[name=device]").isVisible());
+  // an invalid field on a page that is not shown brings that page up on Save
+  await form.locator("[name=name]").fill("x");
+  await form.locator("[name=device]").fill("fake:echo");
+  await formPage("display");
+  await form.locator("[name=fontSize]").fill("3");
+  await formPage("port");
+  await form.locator("button[type=submit]").click();
+  check("an invalid setting on another page brings that page up when saving", await form.locator("[name=fontSize]").isVisible());
+  await page.keyboard.press("Escape");
 
   // a session can be duplicated: the dialog opens with its settings and a new name
   await page.locator(`button[title="Duplicate Slow echo"]`).click();

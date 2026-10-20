@@ -65,17 +65,20 @@ const pick = (list) => list[Math.floor(random() * list.length)];
       } else if (action === "settings") {
         // the settings dialog of the active tab: random values in its fields, then Save
         await page.locator(".toolbar [data-action=settings]:visible").first().click({ timeout: 1500 });
-        await page.evaluate(() => { document.querySelector("#advanced").open = true; });
-        const fields = await page.locator("#profile-form input:not([type=hidden]):not([type=file]), #profile-form select, #profile-form textarea").all();
-        for (const f of fields) {
-          if (random() < 0.7) continue;
-          const tag = await f.evaluate((e) => e.tagName + ":" + e.type);
-          try {
-            if (tag.startsWith("SELECT")) await f.selectOption(pick(await f.locator("option").evaluateAll((os) => os.map((o) => o.value))), { timeout: 500 });
-            else if (tag.endsWith("checkbox")) await f.setChecked(random() < 0.5, { timeout: 500 });
-            else if (tag.endsWith("number")) await f.fill(pick(["0", "5", "100", "-1", "99999999", "abc"]), { timeout: 500 });
-            else await f.fill(pick(["", "ERROR = red", "x | y | z", "a => b", "name | text | hi", "sync = AA\nsize = 4", "/(/", "logs/x-{date}.log", "..", "ä€"]), { timeout: 500 });
-          } catch { /* a field that cannot be filled */ }
+        const pages = await page.locator("#profile-form .form-tabs button").all();
+        for (const tabButton of pages) {  // every page of the dialog gets some random values
+          await tabButton.click({ timeout: 1000 });
+          const fields = await page.locator("#profile-form .form-page:not([hidden]) :is(input:not([type=hidden]):not([type=file]), select, textarea)").all();
+          for (const f of fields) {
+            if (random() < 0.7) continue;
+            const tag = await f.evaluate((e) => e.tagName + ":" + e.type);
+            try {
+              if (tag.startsWith("SELECT")) await f.selectOption(pick(await f.locator("option").evaluateAll((os) => os.map((o) => o.value))), { timeout: 500 });
+              else if (tag.endsWith("checkbox")) await f.setChecked(random() < 0.5, { timeout: 500 });
+              else if (tag.endsWith("number")) await f.fill(pick(["0", "5", "100", "-1", "99999999", "abc"]), { timeout: 500 });
+              else await f.fill(pick(["", "ERROR = red", "x | y | z", "a => b", "name | text | hi", "sync = AA\nsize = 4", "/(/", "logs/x-{date}.log", "..", "ä€"]), { timeout: 500 });
+            } catch { /* a field that cannot be filled */ }
+          }
         }
         await page.locator("#profile-form button[type=submit]").click({ timeout: 1500 });
         await page.waitForTimeout(150);
