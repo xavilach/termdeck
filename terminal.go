@@ -58,6 +58,7 @@ type termSession struct {
 	hasProfile bool
 	state      string // as last told to the page: connecting, connected, failed, closed, ended, reconnecting
 	marks      int
+	meters     meters
 	dtr        bool // the lines as we last set them
 	rts        bool
 	log        *Logger
@@ -72,7 +73,7 @@ type termSession struct {
 	codec         *Codec          // device character set; nil for UTF-8
 	rx, tx        atomic.Int64    // bytes received and sent since the port opened
 	rules         []rule          // what the session does by itself, from its settings
-	framer        *frameParser    // the frames of what the device sends, for the rules on bad frames
+	framer        *frameParser    // the frames of what the device sends: counted, and for the rules on bad frames
 	lastRx        time.Time       // when the device last sent something, for the idle rules
 	idleFired     map[int]bool    // the idle rules that fired since then
 	replyMu       sync.Mutex      // trigger replies go out one at a time, in order
@@ -111,6 +112,7 @@ var sessionGrace = time.Minute
 func newSession(srv *Server, id string) *termSession {
 	ctx, stop := context.WithCancel(context.Background())
 	t := &termSession{srv: srv, id: id, ctx: ctx, stop: stop, answers: make(chan string, 1), state: "closed"}
+	t.resetMeters()
 	t.view = viewOf(Profile{})
 	t.screen = t.newScreen()
 	t.lines = t.newLines()
@@ -468,9 +470,10 @@ func (t *termSession) openPort(profile Profile, reconnecting bool) bool {
 	}
 	t.rules, _ = parseRules(profile.Rules) // checked by Normalize
 	t.framer, t.lastRx, t.idleFired = nil, time.Now(), map[int]bool{}
-	if spec, err := parseFrameSpec(profile.FrameSpec); err == nil && spec != nil && hasRule(t.rules, "frame") {
-		t.framer = &frameParser{spec: spec}
+	if spec, err := parseFrameSpec(profile.FrameSpec); err == nil && spec != nil {
+		t.framer = &frameParser{spec: spec} // the frames are counted, and the rules on bad frames fire
 	}
+	t.resetMeters()
 	t.runCtx, t.runStop = context.WithCancel(t.ctx)
 	t.startWriter(profile, t.runCtx)
 	t.trigMu.Lock()
@@ -525,7 +528,7 @@ func (t *termSession) askAboutLog(profile Profile) string {
 
 func (t *termSession) read(gen int, port serial.Port, codec *Codec, ctx context.Context) {
 	buf := make([]byte, 4096)
-	var window []byte // the end of what the device sent, to match the rules across chunks
+	windows := map[int][]byte{} // the end of what the device sent, to match the rules across chunks
 	for {
 		n, err := port.Read(buf)
 		if n > 0 && t.feedTransfer(buf[:n]) {
@@ -537,7 +540,7 @@ func (t *termSession) read(gen int, port serial.Port, codec *Codec, ctx context.
 			t.expectFeed(text)
 			t.emit(record{at: time.Now(), src: srcRx, raw: raw, text: text})
 			t.stopLogOnError()
-			window = t.matchRules(ctx, window, text)
+			t.matchRules(ctx, windows, text)
 			t.frameRules(raw)
 		}
 		if err != nil || n == 0 {
@@ -762,7 +765,7 @@ func (t *termSession) hello(m clientMessage) {
 	info["jobs"] = t.listJobs()
 	// the counters go first: the page opens the port when it reads the session, and the counters of the
 	// port that opens must not be overtaken by these
-	t.sendJSON(map[string]any{"type": "counters", "rx": t.rx.Load(), "tx": t.tx.Load()})
+	t.sendJSON(t.meterMessage(0, 0))
 	t.sendJSON(info)
 	t.sendRuleNames()
 	t.redraw()

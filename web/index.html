@@ -85,7 +85,8 @@
         </div>
       </details>
       <span class="spacer"></span>
-      <span class="counters" title="Bytes received since the port opened (in a tunnel: carried from A to B). Clear resets it.">Rx <b data-count="rx">0</b></span>
+      <span class="counters" title="Bytes received since the port opened (in a tunnel: carried from A to B), and how many came in the last second. Clear resets it.">Rx <b data-count="rx">0</b> <span class="muted" data-rate="rx"></span></span>
+      <span class="meters muted" data-meters title="The meters: the counts of the rules (count Name), the frames whose check is OK or BAD, the laps (lap)"></span>
       <span class="marks" role="group" aria-label="Marks"><button data-mark title="Add a mark: a line of its own in the output and in the log, to find a moment again (Alt+Shift+M)">Mark</button><button data-mark-prev title="Go to the previous mark" aria-label="Previous mark">◀</button><button data-mark-next title="Go to the next mark" aria-label="Next mark">▶</button></span>
       <button data-graph aria-pressed="false" title="Draw numbers found in the received lines as a graph (the series are rules with graph, on the Rules page of the settings)">Graph</button>
       <button data-freeze aria-pressed="false" title="Keep the screen as it is while the device goes on sending. The data is still received, counted and kept; Resume shows it all.">Freeze</button>
@@ -134,7 +135,7 @@
       <button data-send-file title="Send the content of a file to the device, as it is">File…</button>
       <button data-xmodem title="Send a file to the device, or receive one from it, with the XMODEM or YMODEM protocol">Transfer…</button>
       <input type="file" data-file hidden>
-      <span class="counters" title="Bytes sent since the port opened (in a tunnel: carried from B to A). Clear resets it.">Tx <b data-count="tx">0</b></span>
+      <span class="counters" title="Bytes sent since the port opened (in a tunnel: carried from B to A), and how many went in the last second. Clear resets it.">Tx <b data-count="tx">0</b> <span class="muted" data-rate="tx"></span></span>
     </div>
   </section>
 </template>
@@ -227,7 +228,7 @@
             <fieldset>
               <legend>Rules</legend>
               <label title="What the session does by itself, one rule per line: when =&gt; do. See Help, Rules, for every word.">Rules <textarea name="rules" rows="10" spellcheck="false" placeholder="ERROR =&gt; red bold notify&#10;login: =&gt; send admin&#10;Temperature: =&gt; graph Temp&#10;button Reset =&gt; send @dtr=0; wait=100; dtr=1&#10;every 5s =&gt; send @hex=01 03 00 00 00 01; check=crc16modbus&#10;on CTS =&gt; note"></textarea></label>
-              <p class="muted">When: a pattern (text in any case, or /regex/) · on connect · on disconnect · every 2s · button Name · idle 30s · on CTS (DSR, DCD, RI) · bad frame. Do: colours (red, green, yellow, blue, magenta, cyan, white, grey, orange, bold, dim, underline, inverse), hide, notify, sound, graph Name, log on|off, then send …, run script, mark …, note ….</p>
+              <p class="muted">When: a pattern (text in any case, or /regex/) · on connect · on disconnect · every 2s · button Name · idle 30s · on CTS (DSR, DCD, RI) · bad frame. Do: colours (red, green, yellow, blue, magenta, cyan, white, grey, orange, bold, dim, underline, inverse), hide, notify, sound, graph Name, count Name, lap, log on|off, then send …, run script, mark …, note ….</p>
               <p><button type="button" id="allow-notifications" title="The browser asks once; notifications only come for rules with notify">Allow desktop notifications</button> <span id="notification-state" class="muted"></span></p>
             </fieldset>
           </div>
@@ -369,6 +370,7 @@
       <label>Flow control <select name="flow"><option value="none">None</option><option value="rtscts">RTS/CTS</option><option value="xonxoff">XON/XOFF</option><option value="dsrdtr">DSR/DTR (Windows only)</option></select></label>
     </div>
     <label title="Where to save both directions, one line each, marked A&gt;B and B&gt;A. Leave empty for no log. {name}, {date} and {time} are replaced.">Log file <input name="logPath" spellcheck="false" placeholder="logs/tunnel-{date}.log"></label>
+    <div class="checks"><label class="check" title="Only listen to both ports, as with a sniffer cable that taps the two wires of a line: what one receives is shown, and not written to the other."><input name="monitor" type="checkbox"> Only listen (monitor)</label></div>
     <p id="tunnel-error" class="problem" hidden></p>
     <div class="buttons"><span class="spacer"></span><button type="button" id="tunnel-close">Cancel</button><button type="button" id="tunnel-start" class="primary">Start</button></div>
   </article>
@@ -391,8 +393,8 @@
     <h3>Rules</h3>
     <p>What a session does by itself, one rule per line (settings, Rules page): <code>when =&gt; do</code>. Lines starting with <code>#</code> are notes.</p>
     <ul>
-      <li><b>When</b>: a pattern in what the device sends · <code>on connect</code> · <code>on disconnect</code> · <code>every 500ms</code> (or <code>2s</code>, <code>1m</code>) · <code>button Name</code> (a button above the send bar) · <code>idle 30s</code> (nothing received for so long) · <code>on CTS</code> (or DSR, DCD, RI: the line changed) · <code>bad frame</code> (a frame of the Frames description whose check fails).</li>
-      <li><b>Do</b>: colours of the line (red, green, yellow, blue, magenta, cyan, white, grey, orange, bold, dim, underline, inverse) · <code>hide</code> · <code>notify</code> (a desktop notification while the tab is out of sight; allow them on the Rules page) · <code>sound</code> · <code>graph Name</code> (the number after the match, or the first group of a /regex/) · <code>log on</code> or <code>off</code>; then one of <code>send</code> and a script line (text with the Enter key, or <code>@</code> and steps) · <code>run</code> a script · <code>mark</code> or <code>note</code> and words.</li>
+      <li><b>When</b>: a pattern in what the device sends · <code>on connect</code> · <code>on disconnect</code> · <code>every 500ms</code> (or <code>2s</code>, <code>1m</code>) · <code>button Name</code> (a button above the send bar) · <code>key Alt+1</code> · <code>idle 30s</code> (nothing received for so long) · <code>on CTS</code> (or DSR, DCD, RI: the line changed) · <code>bad frame</code> (a frame of the Frames description whose check fails).</li>
+      <li><b>Do</b>: colours of the line (red, green, yellow, blue, magenta, cyan, white, grey, orange, bold, dim, underline, inverse) · <code>hide</code> · <code>notify</code> (a desktop notification while the tab is out of sight; allow them on the Rules page) · <code>sound</code> · <code>graph Name</code> (the number after the match, or the first group of a /regex/) · <code>count Name</code> (a meter, shown next to Rx and drawn on the graph) · <code>lap</code> (the time since the last lap: a stopwatch) · <code>log on</code> or <code>off</code>; then one of <code>send</code> and a script line (text with the Enter key, or <code>@</code> and steps) · <code>run</code> a script · <code>mark</code> or <code>note</code> and words.</li>
       <li>Examples: <code>ERROR =&gt; red bold notify</code> · <code>heartbeat =&gt; hide</code> · <code>login: =&gt; send admin</code> · <code>/temp=([0-9.]+)/ =&gt; graph Temp</code> · <code>button Reset =&gt; send @dtr=0; wait=100; dtr=1</code> · <code>every 5s =&gt; send @hex=01 03 00 00 00 01; check=crc16modbus</code> · <code>/\x05/ =&gt; send termdeck</code> (the answerback) · <code>on CTS =&gt; note</code>.</li>
       <li>A pattern's colours, hide and graph work on whole lines; its other actions happen as soon as the text arrives (a prompt has no line end). Rules that send in a loop are paused.</li>
       <li><b>Filter</b> (receive bar): <code>text</code>, <code>/regex/</code>, <code>!hide</code>, for the view of the tab.</li>
@@ -401,13 +403,13 @@
     <h3>Receive bar</h3>
     <p>View (Text, Hex, Decimal, Binary, Frames), <b>New line at</b> and the filter are in the bar; <b>More</b> holds the time (clock or since the last line), control characters, new line after a pause, Copy and Save. Changing them redraws the data kept (the last 8 MB), so nothing is lost. A changed setting is marked; <b>Reset view</b> goes back to the session's.</p>
     <h3>Tunnel</h3>
-    <p>The Tunnel button joins two ports: what one receives is written to the other, both directions are shown (green A→B, cyan B→A) and can be logged. Rx counts A to B, Tx counts B to A. Nothing is sent from the send bar into a tunnel.</p>
+    <p>The Tunnel button joins two ports: what one receives is written to the other, both directions are shown (green A→B, cyan B→A) and can be logged. Rx counts A to B, Tx counts B to A. Nothing is sent from the send bar into a tunnel. <b>Only listen (monitor)</b> shows both ports without carrying anything, for a sniffer cable.</p>
     <h3>Frames</h3>
     <p>View: Frames cuts the received bytes into frames. Describe them in the session settings (Receive page, Frames), one setting per line: <code>sync = AA 55</code> · <code>size = u8@2 + 5</code> (the size of the frame: u8, u16be or u16le at an offset, plus a number; or a plain number) · <code>end = 0D 0A</code> (instead of size) · <code>header = 3</code> · <code>check = crc16modbus</code>. A bad check shows as BAD with what it should be.</p>
     <h3>About</h3>
     <p id="about" class="muted"></p>
     <h3>Virtual ports</h3>
-    <p><code>fake:echo</code>, <code>fake:shell</code> (admin/admin), <code>fake:counter</code>, <code>fake:binary</code>, <code>fake:flaky</code> (drops and returns), <code>fake:stream</code> (600 KB/s for 5 s), <code>fake:link-a</code> and <code>fake:link-b</code> (a null-modem cable).</p>
+    <p><code>fake:echo</code>, <code>fake:shell</code> (admin/admin), <code>fake:counter</code>, <code>fake:binary</code>, <code>fake:flaky</code> (drops and returns), <code>fake:stream</code> (600 KB/s for 5 s), <code>fake:link-a</code> and <code>fake:link-b</code> (a null-modem cable). <code>replay:</code> and the path of a file (a capture saved with Save raw) plays it as if a device sent it, at the speed of the port: open it with Alt+Shift+P, <code>replay:C:\captures\board.bin@115200</code>.</p>
   </article>
 </dialog>
 <dialog id="log-ask" aria-label="Log file exists">

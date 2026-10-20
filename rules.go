@@ -15,7 +15,8 @@ import (
 //	      so long) · on CTS (or DSR, DCD, RI: the line changed) · bad frame (a frame whose check fails)
 //	do:   colours and styles of the line (red, green, yellow, blue, magenta, cyan, white, grey, orange, bold,
 //	      dim, underline, inverse) · hide (the line is not shown) · notify (a desktop notification) · sound ·
-//	      graph Name (the number after the match, or the first group of a /regex/) · log on|off ·
+//	      graph Name (the number after the match, or the first group of a /regex/) · count Name (a meter,
+//	      drawn on the graph too) · lap (the time since the last lap, a stopwatch) · log on|off ·
 //	      then one of: send <script line> · run <script> · mark [words] · note [words]
 //
 // A pattern's colours, hide and graph apply to the whole line; its other actions happen as soon as the
@@ -34,6 +35,8 @@ type rule struct {
 	notify bool
 	sound  bool
 	graph  string
+	count  string // the name of a count to add one to
+	lap    bool   // a lap of the stopwatch
 	log    string // on, off or ""
 
 	act  string // send, run, mark, note or ""
@@ -111,13 +114,19 @@ func (r *rule) parseDo(do string) error {
 			r.notify = true
 		case lower == "sound":
 			r.sound = true
-		case lower == "graph" || lower == "log":
+		case lower == "lap":
+			r.lap = true
+		case lower == "graph" || lower == "count" || lower == "log":
 			value, more, _ := strings.Cut(after, " ")
-			if lower == "graph" {
+			if lower != "log" {
 				if value == "" || len(value) > 30 {
-					return fmt.Errorf("graph needs the name of the series (up to 30 characters)")
+					return fmt.Errorf("%s needs a name (up to 30 characters)", lower)
 				}
-				r.graph = value
+				if lower == "graph" {
+					r.graph = value
+				} else {
+					r.count = value
+				}
 			} else {
 				if value = strings.ToLower(value); value != "on" && value != "off" {
 					return fmt.Errorf("log is on or off")
@@ -140,7 +149,7 @@ func (r *rule) parseDo(do string) error {
 			}
 			return nil
 		default:
-			return fmt.Errorf("%q: do is colours, hide, notify, sound, graph Name, log on|off, then send, run, mark or note", word)
+			return fmt.Errorf("%q: do is colours, hide, notify, sound, graph Name, count Name, lap, log on|off, then send, run, mark or note", word)
 		}
 		rest = after
 	}
@@ -183,8 +192,8 @@ func checkRules(text string) error {
 // lineRule: the rule acts on whole lines (their colour, whether they show, the numbers in them).
 func (r rule) lineRule() bool { return r.when == "match" && (r.sgr != "" || r.hide || r.graph != "") }
 
-// eventRule: the rule does something when its moment comes (a match in the stream, a connect...).
-func (r rule) eventRule() bool { return r.act != "" || r.log != "" || r.notify || r.sound }
+// streamRule: a pattern rule that does something as soon as its text comes (not only to its line).
+func (r rule) streamRule() bool { return r.act != "" || r.log != "" || r.count != "" || r.lap }
 
 // normalizeKey writes a key the way the page names it: Ctrl, Alt, Shift, Meta in this order, then the key
 // (Alt+1, Ctrl+Shift+F5). A key without Ctrl or Alt is refused: it would be typing.
@@ -224,8 +233,10 @@ func ruleNames(rules []rule) (buttons, keys, series []string) {
 		if r.when == "key" {
 			keys = append(keys, r.name)
 		}
-		if r.graph != "" && !oneOf(r.graph, series) {
-			series = append(series, r.graph)
+		for _, name := range []string{r.graph, r.count} {
+			if name != "" && !oneOf(name, series) {
+				series = append(series, name)
+			}
 		}
 	}
 	return buttons, keys, series

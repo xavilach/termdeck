@@ -24,6 +24,7 @@ type Profile struct {
 	Flow      string   `json:"flow"`      // none, rtscts, xonxoff
 	Enter     string   `json:"enter"`     // what the Enter key sends: cr, lf, crlf
 	Peer      *Profile `json:"peer"`      // the second port of a tunnel: what one port receives is written to the other
+	Monitor   bool     `json:"monitor"`   // a tunnel that only listens to both ports (a sniffer cable): nothing is carried
 	Reconnect bool     `json:"reconnect"` // open the port again when it comes back after it went away
 	LocalEcho bool     `json:"localEcho"`
 

@@ -54,6 +54,9 @@ func openPort(p Profile) (serial.Port, error) {
 	if isFake(p.Device) {
 		return openFake(p.Device, asserted(p.DTR), asserted(p.RTS))
 	}
+	if isReplay(p.Device) {
+		return openReplay(p.Device, p.Baud)
+	}
 	mode := serialMode(p)
 	if !asserted(p.DTR) || !asserted(p.RTS) { // the default (both asserted) needs no call, which some ports refuse
 		mode.InitialStatusBits = &serial.ModemOutputBits{DTR: asserted(p.DTR), RTS: asserted(p.RTS)}

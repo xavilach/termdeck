@@ -10,27 +10,42 @@ import (
 
 // What a session reports about the port besides its data: the control lines and the byte counters.
 
-// watchCounters reports the bytes received and sent when they change.
+// watchCounters reports the counters, their speed and the meters (meters.go) when they change.
 func (t *termSession) watchCounters(gen int) {
-	var rx, tx int64 = -1, -1
-	for ; ; time.Sleep(250 * time.Millisecond) {
+	var last string
+	var rxs, txs [4]int64 // the counters of the last second, a sample every 250 ms
+	for i := 0; ; i++ {
+		if i > 0 {
+			time.Sleep(250 * time.Millisecond)
+		}
 		t.mu.Lock()
 		current := t.gen == gen
 		t.mu.Unlock()
 		if !current {
 			return
 		}
-		if r, x := t.rx.Load(), t.tx.Load(); r != rx || x != tx {
-			rx, tx = r, x
-			t.sendJSON(map[string]any{"type": "counters", "rx": r, "tx": x})
+		r, x := t.rx.Load(), t.tx.Load()
+		slot := i % 4
+		rxRate, txRate := r-rxs[slot], x-txs[slot]
+		if i < 4 { // less than a second yet
+			rxRate, txRate = r-rxs[0], x-txs[0]
+		}
+		rxs[slot], txs[slot] = r, x
+		message := t.meterMessage(max(rxRate, 0), max(txRate, 0))
+		if text := fmt.Sprint(message); text != last {
+			last = text
+			t.sendJSON(message)
 		}
 	}
 }
 
-// resetCounters sets both counters to zero.
+// resetCounters sets the counters and the meters to zero.
 func (t *termSession) resetCounters() {
 	t.rx.Store(0)
 	t.tx.Store(0)
+	t.mu.Lock()
+	t.resetMeters()
+	t.mu.Unlock()
 }
 
 // watchLines reports the control lines (the ones we drive and the ones the device drives) when they change,

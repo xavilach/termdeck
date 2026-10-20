@@ -1,6 +1,6 @@
 "use strict";
 
-// The tunnel dialog: two ports joined, one tab showing what goes through in both directions.
+// The tunnel dialog: two ports joined (or only listened to, a monitor), one tab showing both directions.
 
 const tunnelDialog = $("#tunnel");
 
@@ -12,7 +12,8 @@ function startTunnel() {
   if (!a || !b) return showText(error, "Choose the two ports.");
   if (a.toLowerCase() === b.toLowerCase()) return showText(error, "A tunnel needs two different ports.");
   const line = { dataBits: Number(field("dataBits")), parity: field("parity"), stopBits: field("stopBits"), flow: field("flow") };
-  const profile = { name: `${a} ⇄ ${b}`, device: a, baud: Number(field("baudA")) || 115200, ...line, logPath: field("logPath"),
+  const monitor = tunnelDialog.querySelector("[name=monitor]").checked;
+  const profile = { name: `${a} ${monitor ? "+" : "⇄"} ${b}`, device: a, baud: Number(field("baudA")) || 115200, ...line, logPath: field("logPath"), monitor,
                     peer: { device: b, baud: Number(field("baudB")) || 115200, ...line } };
   showText(error, "");
   tunnelDialog.close();

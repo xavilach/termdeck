@@ -107,9 +107,20 @@ async function saveRaw(tab) {
   } catch (error) { tell(`Cannot save: ${error.message}`); }
 }
 
+const rateText = (n) => (n >= 1024 * 1024 ? `${(n / 1048576).toFixed(1)} MB/s` : n >= 1024 ? `${(n / 1024).toFixed(1)} KB/s` : `${n} B/s`);
+
+// The counters, their speed, and the meters of the rules and the frames.
 function updateCounters(tab) {
   if (tab !== tab.pane.active) return;
-  for (const key of ["rx", "tx"]) tab.pane.el.querySelector(`[data-count=${key}]`).textContent = (tab.counters[key] || 0).toLocaleString();
+  const c = tab.counters;
+  for (const key of ["rx", "tx"]) {
+    tab.pane.el.querySelector(`[data-count=${key}]`).textContent = (c[key] || 0).toLocaleString();
+    tab.pane.el.querySelector(`[data-rate=${key}]`).textContent = c[`${key}Rate`] ? rateText(c[`${key}Rate`]) : "";
+  }
+  const meters = (c.counts || []).map((m) => `${m.name} ${m.value.toLocaleString()}`);
+  if (c.framesOK || c.framesBad) meters.push(`frames OK ${c.framesOK} BAD ${c.framesBad}`);
+  if (c.laps) meters.push(`laps ${c.laps}`);
+  tab.pane.el.querySelector("[data-meters]").textContent = meters.join(" · ");
 }
 
 // ---- find in the lines on screen

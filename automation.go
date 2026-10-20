@@ -242,38 +242,32 @@ func (t *termSession) pressButton(name string) {
 }
 
 // matchRules looks for the patterns of the rules in what the device sent, and does what they say as soon
-// as the text is there. It returns the end of the data, to look at again with the next chunk.
-func (t *termSession) matchRules(ctx context.Context, window, text []byte) []byte {
+// as the text is there. Each rule has its own window (the end of the data it has not matched yet, to look
+// at again with the next chunk), so rules on the same text do not take it from each other.
+func (t *termSession) matchRules(ctx context.Context, windows map[int][]byte, text []byte) {
 	t.mu.Lock()
 	t.lastRx = time.Now()
 	clear(t.idleFired)
 	t.mu.Unlock()
-	var rules []rule
-	for _, r := range t.ruleList() {
-		if r.when == "match" && (r.act != "" || r.log != "") {
-			rules = append(rules, r)
+	for i, r := range t.ruleList() {
+		if r.when != "match" || !r.streamRule() {
+			continue
 		}
-	}
-	if len(rules) == 0 {
-		return nil
-	}
-	window = append(window, text...)
-	for fired := true; fired; {
-		fired = false
-		for _, r := range rules {
-			if loc := r.pattern.FindIndex(window); loc != nil {
-				match := string(window[loc[0]:loc[1]])
-				window = window[loc[1]:]
-				fired = true
-				t.act(ctx, r, match)
+		window := append(windows[i], text...)
+		for {
+			loc := r.pattern.FindIndex(window)
+			if loc == nil || loc[1] == 0 {
 				break
 			}
+			match := string(window[loc[0]:loc[1]])
+			window = window[loc[1]:]
+			t.act(ctx, r, match)
 		}
+		if len(window) > 4096 {
+			window = window[len(window)-4096:]
+		}
+		windows[i] = window
 	}
-	if len(window) > 4096 {
-		window = window[len(window)-4096:]
-	}
-	return window
 }
 
 // lineRules: a complete line that matches a rule with notify or sound tells the page.
@@ -307,6 +301,9 @@ func (t *termSession) frameRules(raw []byte) {
 		return
 	}
 	for _, row := range framer.feed(raw) {
+		if row.checked {
+			t.countFrame(row.ok)
+		}
 		if row.checked && !row.ok {
 			t.fire("frame", "", "bad frame "+frameLine(framer.spec, row))
 		}
@@ -337,6 +334,12 @@ func (t *termSession) idleRules(now time.Time) {
 func (t *termSession) act(ctx context.Context, r rule, context string) {
 	if r.when != "match" {
 		t.alert(r, context) // a line that matches alerts by itself, with the whole line (lineRules)
+	}
+	if r.count != "" {
+		t.countUp(r.count)
+	}
+	if r.lap {
+		t.lap(context)
 	}
 	if r.act == "" && r.log == "" {
 		return

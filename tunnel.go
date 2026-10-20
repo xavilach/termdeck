@@ -15,6 +15,7 @@ type tunnel struct {
 	a, b           serial.Port
 	devA, devB     string
 	cancel         context.CancelFunc
+	monitor        bool // both ports are listened to, nothing is carried
 	a2b, b2a       atomic.Int64
 	writeA, writeB chanMutex // one write at a time to each port
 }
@@ -81,7 +82,7 @@ func (t *termSession) openTunnel(profile Profile, reconnecting bool) bool {
 	}
 	log, logErr := OpenLog(logProfile, existing)
 	ctx, cancel := context.WithCancel(t.ctx)
-	tun := &tunnel{a: a, b: b, devA: profile.Device, devB: peer.Device, cancel: cancel, writeA: newChanMutex(), writeB: newChanMutex()}
+	tun := &tunnel{a: a, b: b, devA: profile.Device, devB: peer.Device, cancel: cancel, monitor: profile.Monitor, writeA: newChanMutex(), writeB: newChanMutex()}
 	t.mu.Lock()
 	t.gen++
 	gen := t.gen
@@ -105,9 +106,12 @@ func (t *termSession) pump(gen int, ctx context.Context, tun *tunnel, from, to s
 		n, err := from.Read(buf)
 		if n > 0 {
 			data := append([]byte(nil), buf[:n]...)
-			toLock.lock()
-			_, werr := to.Write(data)
-			toLock.unlock()
+			var werr error
+			if !tun.monitor { // a monitor only listens
+				toLock.lock()
+				_, werr = to.Write(data)
+				toLock.unlock()
+			}
 			count.Add(int64(n))
 			t.emit(record{at: time.Now(), src: dir, raw: data, text: data})
 			if werr != nil && err == nil {

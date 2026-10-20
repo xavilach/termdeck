@@ -39,12 +39,13 @@ Press Help (left column, Alt+Shift+H) for the keys and the syntax of the setting
 - All tabs: send the same data to every connected tab (a test bench); Open all (▶▶) opens every port of a device.
 - Transfer: XMODEM and YMODEM, send or receive (checked against lrzsz).
 - What runs over time (a script, Auto, a file, a transfer) shows in the toolbar with its progress and a Stop; it goes on while the page reloads or another tab is shown.
-- Rules, one per line, `when => do`: what a session does by itself. When: a pattern in what the device sends, `on connect`, `on disconnect`, `every 2s`, `button Name`, `idle 30s`, `on CTS` (DSR, DCD, RI), `bad frame`. Do: colours, `hide`, `notify`, `sound`, `graph Name`, `log on|off`, then `send` (a script line), `run` (a script), `mark` or `note`. For example `ERROR => red bold notify`, `login: => send admin`, `button Reset => send @dtr=0; wait=100; dtr=1`. Rules that send in a loop are paused.
+- Rules, one per line, `when => do`: what a session does by itself. When: a pattern in what the device sends, `on connect`, `on disconnect`, `every 2s`, `button Name`, `key Alt+1`, `idle 30s`, `on CTS` (DSR, DCD, RI), `bad frame`. Do: colours, `hide`, `notify`, `sound`, `graph Name`, `count Name` (a meter), `lap` (a stopwatch), `log on|off`, then `send` (a script line), `run` (a script), `mark` or `note`. For example `ERROR => red bold notify`, `login: => send admin`, `button Reset => send @dtr=0; wait=100; dtr=1`. Rules that send in a loop are paused.
 - A pattern is the same everywhere: text in any case, `/regex/` as written, `/regex/i`.
 
 ## Tools
 
-- Tunnel: join two ports, both directions shown and logged.
+- Tunnel: join two ports, both directions shown and logged; or only listen to both (a monitor, for a sniffer cable). `replay:PATH` plays a saved capture as a port.
+- Meters next to Rx/Tx: the speed, the counts of the rules, frames OK/BAD, laps.
 - Log per session: markers, times, a new file when it gets big, append / overwrite / ask, start / stop.
 
 ## Data

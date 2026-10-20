@@ -98,6 +98,8 @@ const tab = () => run("tabs[0]", "x");
   check("what the server draws shows", t.term.text().includes("hello\r\nworld"), t.term.text());
   json(ws, { type: "counters", rx: 14, tx: 3 });
   check("counters shown", q("[data-count=rx]").textContent === "14" && q("[data-count=tx]").textContent === "3");
+  json(ws, { type: "counters", rx: 3000, tx: 3, rxRate: 2048, txRate: 0, counts: [{ name: "Errors", value: 2 }], framesOK: 5, framesBad: 1, laps: 0 });
+  check("the speed and the meters show next to the counters", q("[data-rate=rx]").textContent === "2.0 KB/s" && q("[data-meters]").textContent === "Errors 2 · frames OK 5 BAD 1", q("[data-meters]").textContent);
 
   // the view: the server draws everything again
   const view = q("[data-view]");

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -280,3 +281,36 @@ func (f *fakePort) ResetInputBuffer() error            { f.mu.Lock(); f.rx = nil
 func (f *fakePort) ResetOutputBuffer() error           { return nil }
 func (f *fakePort) SetReadTimeout(time.Duration) error { return nil }
 func (f *fakePort) Break(time.Duration) error          { f.feed([]byte("<break>\r\n")); return nil }
+
+// A replay port plays a file (a capture saved with Save raw, say) as if a device sent it, at the speed of
+// the session (a byte is 10 bits), then stays quiet. What is written to it is dropped. Its name is
+// "replay:" and the path of the file.
+
+const replayPrefix = "replay:"
+
+func isReplay(device string) bool { return strings.HasPrefix(strings.ToLower(device), replayPrefix) }
+
+func openReplay(device string, baud int) (serial.Port, error) {
+	data, err := os.ReadFile(device[len(replayPrefix):])
+	if err != nil {
+		return nil, fmt.Errorf("cannot open %s: %w", device, err)
+	}
+	f := &fakePort{kind: "replay", stop: make(chan struct{}), dtr: true, rts: true}
+	f.cond = sync.NewCond(&f.mu)
+	perTick := max(baud/10/100, 1) // bytes every 10 ms
+	go func() {
+		tick := time.NewTicker(10 * time.Millisecond)
+		defer tick.Stop()
+		for len(data) > 0 {
+			select {
+			case <-f.stop:
+				return
+			case <-tick.C:
+			}
+			n := min(perTick, len(data))
+			f.feed(data[:n])
+			data = data[n:]
+		}
+	}()
+	return f, nil
+}
