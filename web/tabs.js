@@ -116,15 +116,12 @@ function applyModes(tab) {
 
 const portName = (device) => device.replace(/^\\\\\.\\/, "").toLowerCase();
 
-// The same session, or the same port, is never opened twice: its tab is shown instead.
-// The session or the port is already open in a tab: the tab, or null.
+// The same port is never opened twice: its tab is shown instead. The tab that has a port of the profile, or null.
 function openElsewhere(profile) {
   const portsOf = (p) => [p.device, p.peer?.device].filter(Boolean).map(portName);
-  const sameSession = tabs.find((t) => t.profile.name === profile.name);
-  const samePort = tabs.find((t) => (t.state === "connected" || t.state === "connecting") && portsOf(t.profile).some((port) => portsOf(profile).includes(port)));
-  const existing = sameSession || samePort;
+  const existing = tabs.find((t) => portsOf(t.profile).some((port) => portsOf(profile).includes(port)));
   if (!existing) return null;
-  const why = sameSession ? `${profile.name} is already open` : `${profile.device} is already open in the tab ${existing.profile.name}`;
+  const why = `${profile.device} is already open in the tab ${existing.profile.name}`;
   activate(existing);
   showLines();
   tell(existing.state === "connected" ? `${why}: showing it.` : `${why}: showing it (use Open port to connect again).`);
@@ -217,7 +214,7 @@ function newTabElement(tab) {
 const TABS_KEY = "termdeck.tabs";
 
 function saveTabs() {
-  const data = { active: tabs.indexOf(active), tabs: tabs.map((t) => ({ id: t.id, profile: t.profile, view: t.view, pane: panes.indexOf(t.pane) })) };
+  const data = { active: tabs.indexOf(active), tabs: tabs.map((t) => ({ id: t.id, profile: t.profile, port: t.port, device: t.device, view: t.view, pane: panes.indexOf(t.pane) })) };
   try { sessionStorage.setItem(TABS_KEY, JSON.stringify(data)); } catch { /* no storage */ }
 }
 
@@ -227,7 +224,7 @@ function restoreTabs() {
   if (!data || !Array.isArray(data.tabs)) return;
   for (const saved of data.tabs) {
     focusPane = panes[Math.min(Math.max(saved.pane, 0), panes.length - 1)];
-    openTab(saved.profile, { connect: false, id: saved.id, view: saved.view });
+    openTab(saved.profile, { connect: false, id: saved.id, view: saved.view, port: saved.port, device: saved.device });
   }
   if (tabs[data.active]) { activate(tabs[data.active]); showLines(); }
 }
@@ -237,12 +234,13 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && ac
 
 const newTabId = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, "0")).join("");
 
-// Open a tab for a profile. A restored tab brings the id of its session (and its view); connect opens the port.
-function openTab(profile, { connect: doConnect = true, id = newTabId(), view = null } = {}) {
+// Open a tab for a profile: the merged settings of a port (and the device it opens with), or a tunnel's. A
+// restored tab brings the id of its session (and its view); connect opens the port.
+function openTab(profile, { connect: doConnect = true, id = newTabId(), view = null, port = profile.peer ? null : profile.device, device = GENERIC } = {}) {
   if (openElsewhere(profile)) return;
   const pane = focusPane || panes[0];
-  const tab = { id, profile, pane, state: "closed", ws: null, fontSize: profile.fontSize || 14, script: null, view: view || viewOf(profile),
-                sendEnd: { mode: profile.enter || "cr", custom: "" }, sendCheck: "none", counters: { rx: 0, tx: 0 }, sent: loadHistory(profile.name), sentAt: 0, graph: newGraph(profile) };
+  const tab = { id, profile, port, device, pane, state: "closed", ws: null, fontSize: profile.fontSize || 14, script: null, view: view || viewOf(profile),
+                sendEnd: { mode: profile.enter || "cr", custom: "" }, sendCheck: "none", counters: { rx: 0, tx: 0 }, sent: loadHistory(port || profile.name), sentAt: 0, graph: newGraph(profile) };
   tab.sentAt = tab.sent.length;
   newTerminal(tab);
   newTabElement(tab);
@@ -505,9 +503,8 @@ function changeFont(tab, step) {
 }
 
 function openSettings(tab) {
-  const saved = profiles.find((p) => p.name === tab.profile.name);
-  editProfile(saved || null);
-  if (!saved) fillForm(form, tab.profile);  // a quick-connect tab: start from its settings
+  if (tab.port) return editPort(tab.port);
+  tell("A tunnel has its settings in the Tunnel dialog: close it and start another.");
 }
 
 function onToolbar(pane, e) {
@@ -539,7 +536,7 @@ function shiftTab(step) {
 }
 
 const PAGE_SHORTCUTS = {
-  KeyN: () => editProfile(null),
+  KeyN: () => editDevice(null),
   KeyM: () => (active ? addMark(active) : false),
   KeyH: openHelp,
   KeyB: toggleSidebar,
@@ -585,6 +582,6 @@ async function checkServer() {
 setInterval(checkServer, 3000);
 setTimeout(pollPorts, portPollMs);
 
-login().then(() => { checkServer(); return Promise.all([loadProfiles(), loadGroups(), loadPorts(), loadScripts()]); }).then(restoreTabs).catch((error) => {
+login().then(() => { checkServer(); return Promise.all([loadDevices(), loadPortEntries(), loadPorts(), loadScripts()]); }).then(restoreTabs).catch((error) => {
   document.body.replaceChildren(el("p", "problem", error.message));
 });

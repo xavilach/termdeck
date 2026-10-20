@@ -296,3 +296,23 @@ dialog#tunnel label { display: block; margin: 6px 0; }
 .form-tabs button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 6px 14px; min-height: 0; }
 .form-tabs button[aria-pressed=true] { border-bottom-color: var(--accent); font-weight: 600; }
 .form-page { min-height: 380px; }
+
+/* ---- settings in layers: what the edited layer sets, and what it takes from the layers below */
+#profile-form .for-device, #profile-form .for-port { display: none; }
+#profile-form.editing-device .for-device, #profile-form.editing-port .for-port { display: block; }
+#profile-form .for-port input { color: var(--muted); }
+#layer-note { margin: 0 0 6px; }
+.layer-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; }
+#profile-form label.inherited { color: var(--muted); }
+#profile-form label.inherited[data-from]:not([data-from=""])::after { content: "from " attr(data-from); font-size: 10px; color: var(--muted); margin-left: 4px; }
+#profile-form label.own { color: var(--text); }
+#profile-form label.own::before { content: "●"; color: var(--accent); font-size: 8px; margin-right: 3px; }
+#profile-form label .reset { border: 0; background: none; min-height: 0; padding: 0 3px; color: var(--accent); cursor: pointer; }
+
+/* ---- the left column: a port and the device it opens with */
+.item.port .port-line { display: flex; align-items: center; gap: 6px; width: 100%; }
+.item.port .port-line .name { flex: 1; min-width: 0; }
+.device-choice { font-size: 11px; min-height: 0; padding: 0 2px; max-width: 50%; }
+.devices-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.devices-head button { border: 0; background: none; min-height: 0; padding: 0; color: var(--muted); width: 20px; height: 20px; border-radius: 3px; font-size: 14px; }
+.devices-head button:hover { color: var(--text); background: var(--border); }

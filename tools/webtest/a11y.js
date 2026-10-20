@@ -17,7 +17,7 @@ const path = require("path");
   await page.goto(url);
   await page.waitForSelector("#port-tree .item.port", { state: "attached" });
   await page.locator("#port-tree .node-head", { hasText: "Virtual ports" }).locator(".toggle").click();
-  await page.locator("#port-tree .item.port", { hasText: "fake:counter" }).dblclick();
+  await page.locator("#port-tree .item.port .name", { hasText: /^fake:counter$/ }).dblclick();
   await page.waitForFunction(() => tabs[0]?.state === "connected");
   for (const scheme of ["light", "dark"]) {
     await page.emulateMedia({ colorScheme: scheme });
@@ -25,7 +25,7 @@ const path = require("path");
     await page.reload();
     await page.waitForFunction(() => tabs[0]?.state === "connected", null, { timeout: 8000 });
     const states = {
-      "session open": async () => {},
+      "port open": async () => {},
       "more menu": async () => { await page.locator(".viewbar details.more > summary").click(); },
       "graph": async () => { await page.locator(".viewbar details.more > summary").click(); await page.click(".viewbar [data-graph]"); },
       "settings dialog": async () => { await page.click(".toolbar [data-action=settings]"); },

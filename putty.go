@@ -50,7 +50,6 @@ func puttyProfile(name string, settings map[string]string) (Profile, bool) {
 	}
 	p := Profile{
 		Name:     unescapePuttyName(name),
-		Group:    "PuTTY",
 		Device:   settings["SerialLine"],
 		Baud:     number("SerialSpeed", 9600),
 		DataBits: number("SerialDataBits", 8),
@@ -173,7 +172,20 @@ func foundPuttySessions() []Profile {
 	return nil
 }
 
-// putty finds the serial sessions of PuTTY on this computer (GET), or in a file the page sends (POST).
+// puttyBackup makes settings to import of PuTTY sessions: each session is a device (its name and its line
+// settings), and its port is remembered with that device.
+func puttyBackup(sessions []Profile) backup {
+	out := backup{Version: backupVersion, Devices: []Device{}, Ports: []PortEntry{}, Scripts: []Script{}}
+	for _, p := range sessions {
+		out.Devices = append(out.Devices, Device{Name: p.Name, Settings: map[string]any{"baud": p.Baud, "dataBits": p.DataBits,
+			"parity": p.Parity, "stopBits": p.StopBits, "flow": p.Flow}})
+		out.Ports = append(out.Ports, PortEntry{Port: p.Device, Device: p.Name, Settings: map[string]any{}})
+	}
+	return out
+}
+
+// putty finds the serial sessions of PuTTY on this computer (GET), or in a file the page sends (POST), as
+// settings the page can import.
 func (s *Server) putty(w http.ResponseWriter, r *http.Request) {
 	sessions := foundPuttySessions()
 	if r.Method == http.MethodPost {
@@ -183,8 +195,5 @@ func (s *Server) putty(w http.ResponseWriter, r *http.Request) {
 		}
 		sessions = parsePuttyFile(in.Name, []byte(in.Text))
 	}
-	if sessions == nil {
-		sessions = []Profile{}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"sessions": sessions})
+	writeJSON(w, http.StatusOK, puttyBackup(sessions))
 }

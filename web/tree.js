@@ -1,19 +1,16 @@
 "use strict";
 
-// The left column: groups with their sessions and scripts, and the ports.
+// The left column: the ports (each with the device it opens with), then the devices with their scripts and
+// the ports remembered with them.
 
 // ---------------------------------------------------------------- the tree on the left
-// Groups, each with its sessions and scripts, then the serial ports; every level can be reduced.
 
-let storedGroups = [];
 let portNames = [];
 let virtualPortList = [];
-let portDetails = {};  // what each port is (the USB product), by port name
-let selectedGroup = null;     // the group "+ Session" and "+ Script" create in
-let selectedSession = null;
+let portDetails = {};  // what each port is (the USB product, its serial number), by port name
+let selectedDevice = null;     // the device "+ Script" creates in
 let selectedScript = null;
-const GENERAL = "General";
-const NO_GROUP = "";           // stored as the empty group, shown as General
+const GENERIC = "Generic";
 const collapsed = new Set();
 
 try { for (const key of JSON.parse(localStorage.getItem("termdeck.collapsed") || "[]")) collapsed.add(key); } catch { /* no storage */ }
@@ -29,9 +26,6 @@ try {
 function remember() {
   try { localStorage.setItem("termdeck.collapsed", JSON.stringify([...collapsed])); } catch { /* no storage */ }
 }
-
-const allGroups = () => [...new Set([...storedGroups, ...profiles.map((p) => p.group), ...scripts.map((s) => s.group)])]
-  .filter(Boolean).sort((a, b) => a.localeCompare(b));
 
 function toolButton(text, title, handler, disabled) {
   const button = el("button", "", text);
@@ -70,7 +64,7 @@ function node(key, titleText, className, tools, buildBody, onTitle) {
   return { wrap, head };
 }
 
-// A short message where the action happened: in the lines of the current session, or in the bottom bar when none is open.
+// A short message where the action happened: in the lines of the current tab, or in the bottom bar when none is open.
 let tellTimer = null;
 function tell(text) {
   if (active) return localNote(active, text);
@@ -87,32 +81,86 @@ function selectRow(row, remember) {
   remember();
 }
 
-function sessionRow(p) {
-  const row = el("div", "item");
+// ---- ports and their device
+
+// What termdeck remembers about a port: found by its adapter's serial number first, then by its name.
+function entryOf(port) {
+  const serial = portDetails[port]?.serial;
+  return (serial && portEntries.find((e) => e.serial === serial)) || portEntries.find((e) => portName(e.port) === portName(port)) || null;
+}
+
+const deviceOf = (port) => entryOf(port)?.device || GENERIC;
+
+// Open a port with a device (its last one when none is given): the server merges the layers of its settings.
+async function openPort(port, device) {
+  try {
+    const serial = portDetails[port]?.serial || "";
+    const layers = await api(`/api/layers?port=${encodeURIComponent(port)}&serial=${encodeURIComponent(serial)}&device=${encodeURIComponent(device || "")}`);
+    if (layers.error) throw new Error(layers.error);
+    const name = layers.device.name === GENERIC ? "" : layers.device.name;
+    const entry = layers.port;
+    if (!entryOf(port) || (entry.device || "") !== name || portName(entry.port) !== portName(port)) {
+      await api("/api/portentries", { method: "PUT", body: { ...entry, port, serial, device: name } });  // the device it opens with next time
+      await loadPortEntries();
+    }
+    openTab(layers.profile, { port, device: layers.device.name });
+  } catch (error) { tell(`Cannot open ${port}: ${error.message}`); }
+}
+
+// Another device for a port: remembered, and an open tab of the port follows it.
+async function chooseDevice(port, device) {
+  if (device === "+new") return newDeviceFromPort(port);
+  const entry = entryOf(port) || { port, settings: {} };
+  try {
+    await api("/api/portentries", { method: "PUT", body: { ...entry, port, serial: portDetails[port]?.serial || "", device: device === GENERIC ? "" : device } });
+    await loadPortEntries();
+    await refreshTabs();
+  } catch (error) { showText($("#problem"), error.message); }
+}
+
+// A select of the devices for a port: Generic, the devices, and a new one made of the port's changes.
+function deviceChooser(port) {
+  const select = el("select", "device-choice");
+  select.setAttribute("aria-label", `Device of ${port}`);
+  select.title = "The device this port opens with: its settings come first, then the port's own changes";
+  for (const d of devices) {
+    const option = el("option", "", d.name);
+    option.value = d.name;
+    select.append(option);
+  }
+  const make = el("option", "", "New device…");
+  make.value = "+new";
+  select.append(make);
+  select.value = deviceOf(port);
+  select.addEventListener("click", (e) => e.stopPropagation());
+  select.addEventListener("dblclick", (e) => e.stopPropagation());
+  select.addEventListener("change", () => chooseDevice(port, select.value));
+  return select;
+}
+
+function portRow(port, detail, title) {
+  const row = el("div", "item port");
   row.tabIndex = 0;
-  row.setAttribute("role", "option");
-  makeDraggable(row, { kind: "session", name: p.name });
-  if (selectedSession === p.name) row.classList.add("selected");
-  const text = el("span", "text");
-  text.append(el("span", "name", p.name), el("span", "detail", summary(p)));
-  row.append(text, toolButton("❐", `Duplicate ${p.name}`, () => editProfile(null, { ...p, name: `${p.name} copy` })),
-    toolButton("✎", `Edit ${p.name}`, () => editProfile(p)));
-  row.addEventListener("click", () => selectRow(row, () => { selectedSession = p.name; }));
-  row.addEventListener("dblclick", () => openTab(p));
+  const line = el("span", "port-line");
+  line.append(el("span", "name", port), deviceChooser(port));
+  row.append(line);
+  if (detail) row.append(el("span", "detail", detail));
+  row.title = `${title}Double-click to open it with its device; right-click for its settings`;
+  row.addEventListener("click", () => selectRow(row, () => {}));
+  row.addEventListener("dblclick", () => openPort(port));
   row.addEventListener("keydown", (e) => {
     if (e.target !== row) return;
-    if (e.key === "Enter") openTab(p);
-    else if (e.key === "F2") editProfile(p);
-    else if (e.key === "ArrowDown") row.nextElementSibling?.focus();
-    else if (e.key === "ArrowUp") row.previousElementSibling?.focus();
+    if (e.key === "Enter") openPort(port);
+    else if (e.key === "F2") editPort(port);
   });
-  row.addEventListener("contextmenu", (e) => { e.preventDefault(); editProfile(p); });
+  row.addEventListener("contextmenu", (e) => { e.preventDefault(); editPort(port); });
   return row;
 }
 
+// ---- devices
+
 function scriptRow(sc) {
   const row = el("div", "item");
-  makeDraggable(row, { kind: "script", name: sc.name });
   const running = active?.script === sc.name;
   const text = el("span", "text");
   text.append(el("span", "name", sc.name), el("span", "detail", scriptSummary(sc)));
@@ -120,10 +168,10 @@ function scriptRow(sc) {
   const play = () => {
     if (running) return stopScript(active);
     if (canRun) return runScript(active, sc.name);
-    tell(`Script ${sc.name} not run: ${active ? "the port of the current session is not open" : "no session is open"}.`);
+    tell(`Script ${sc.name} not run: ${active ? "the port of the current tab is not open" : "no port is open"}.`);
   };
   if (selectedScript === sc.name) row.classList.add("selected");
-  row.append(text, toolButton(running ? "■" : "▶", running ? "Stop the script" : "Run on the current session", play, !canRun),
+  row.append(text, toolButton(running ? "■" : "▶", running ? "Stop the script" : "Run on the current tab", play, !canRun),
     toolButton("✎", `Edit ${sc.name}`, () => editScript(sc)));
   row.addEventListener("click", () => selectRow(row, () => { selectedScript = sc.name; }));
   row.addEventListener("dblclick", play);
@@ -131,123 +179,58 @@ function scriptRow(sc) {
   return row;
 }
 
-// Drag a session or script onto a group to move it there; drag a port onto a group to make a session.
-let dragItem = null;
-
-function makeDraggable(row, item) {
-  row.draggable = true;
-  row.addEventListener("dragstart", (e) => {
-    dragItem = item;
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", item.name);
-  });
-  row.addEventListener("dragend", () => {
-    dragItem = null;
-    document.querySelectorAll(".drop-target").forEach((n) => n.classList.remove("drop-target"));
-  });
+// A port remembered with a device, under the device.
+function rememberedRow(entry, device) {
+  const row = el("div", "item");
+  const text = el("span", "text");
+  const changes = Object.keys(entry.settings || {}).length;
+  text.append(el("span", "name", entry.port), el("span", "detail", changes ? `${changes} change${changes === 1 ? "" : "s"} of its own` : "the device's settings"));
+  row.append(text, toolButton("✎", `Settings of ${entry.port}`, () => editPort(entry.port)));
+  row.title = "Double-click to open it with this device; right-click for its settings";
+  row.addEventListener("click", () => selectRow(row, () => {}));
+  row.addEventListener("dblclick", () => openPort(entry.port, device));
+  row.addEventListener("contextmenu", (e) => { e.preventDefault(); editPort(entry.port); });
+  return row;
 }
 
-async function dropOnGroup(group) {
-  const item = dragItem;
-  dragItem = null;
-  if (!item) return;
-  try {
-    if (item.kind === "port") {
-      selectedGroup = group;
-      return editProfile(null, { group, device: item.name, name: item.name });
-    }
-    const list = item.kind === "session" ? profiles : scripts;
-    const found = list.find((x) => x.name === item.name);
-    if (!found || found.group === group) return;
-    const path = item.kind === "session" ? "/api/profiles/" : "/api/scripts/";
-    await api(path + encodeURIComponent(item.name), { method: "PUT", body: { ...found, group } });
-    collapsed.delete(`g:${group}`);
-    await Promise.all([loadProfiles(), loadScripts()]);
-  } catch (error) { showText($("#problem"), error.message); }
-}
-
-function makeDropTarget(wrap, group) {
-  wrap.addEventListener("dragover", (e) => {
-    if (!dragItem) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    wrap.classList.add("drop-target");
-  });
-  wrap.addEventListener("dragleave", (e) => {
-    if (!wrap.contains(e.relatedTarget)) wrap.classList.remove("drop-target");
-  });
-  wrap.addEventListener("drop", (e) => {
-    e.preventDefault();
-    wrap.classList.remove("drop-target");
-    dropOnGroup(group);
-  });
-}
-
-// Each group has its own colour (General and the ports are grey), so groups are easy to tell apart.
-function groupColor(group) {
-  if (!group) return "var(--control)";
+// Each device has its own colour (Generic and the ports are grey), so devices are easy to tell apart.
+function deviceColor(name) {
+  if (name === GENERIC) return "var(--control)";
   let hash = 0;
-  for (const ch of group) hash = (hash * 31 + ch.codePointAt(0)) % 360;
+  for (const ch of name) hash = (hash * 31 + ch.codePointAt(0)) % 360;
   return `hsl(${hash} 55% 52%)`;
 }
 
-function groupNode(group) {
-  const label = group || GENERAL;
-  const mine = profiles.filter((p) => p.group === group);
-  const mineScripts = scripts.filter((s) => s.group === group);
-  const tools = [];
-  if (!group) tools.push(toolButton("+", "New group", () => { addingGroup = true; renderTree(); $("#new-group-input").focus(); }));
-  if (group && !mine.length && !mineScripts.length) tools.push(toolButton("✕", `Delete the empty group ${group}`, () => deleteGroup(group)));
-  const select = () => { selectedGroup = group; renderTree(); };
-  const { wrap, head } = node(`g:${group}`, label, "group", tools, (body) => {
-    const sessions = node(`g:${group}/s`, `Sessions · ${mine.length}`, "sub",
-      [toolButton("▶▶", `Open all ${mine.length} sessions of ${label}`, () => mine.forEach((p) => openTab(p)), mine.length < 2),
-       toolButton("+", `New session in ${label}`, () => editProfile(null, { group }))], (inner) => {
-        for (const p of mine) inner.append(sessionRow(p));
-        if (!mine.length) inner.append(el("div", "empty-note", "none yet"));
+function deviceNode(device) {
+  const name = device.name;
+  const generic = name === GENERIC;
+  const stored = generic ? "" : name;
+  const mineScripts = scripts.filter((s) => (s.device || "") === stored);
+  const minePorts = portEntries.filter((e) => (e.device || "") === stored);
+  const settings = Object.keys(device.settings || {}).length;
+  const tools = [toolButton("✎", `Settings of ${name}`, () => editDevice(device))];
+  if (!generic) tools.push(toolButton("❐", `A new device starting from ${name}`, () => editDevice(null, { name: `${name} copy`, settings: device.settings })));
+  const select = () => { selectedDevice = name; renderTree(); };
+  const { wrap, head } = node(`d:${name}`, name, "group", tools, (body) => {
+    body.append(el("div", "empty-note", generic ? `what every port starts from · ${settings} change${settings === 1 ? "" : "s"}` : `${settings} setting${settings === 1 ? "" : "s"}`));
+    const portsNode = node(`d:${name}/p`, `Ports · ${minePorts.length}`, "sub",
+      [toolButton("▶▶", `Open all ${minePorts.length} ports of ${name}`, () => minePorts.forEach((e) => openPort(e.port, name)), minePorts.length < 2)], (inner) => {
+        for (const e of minePorts) inner.append(rememberedRow(e, name));
+        if (!minePorts.length) inner.append(el("div", "empty-note", "none yet"));
       });
-    const scriptsNode = node(`g:${group}/c`, `Scripts · ${mineScripts.length}`, "sub",
-      [toolButton("+", `New script in ${label}`, () => editScript(null, group))], (inner) => {
+    const scriptsNode = node(`d:${name}/c`, `Scripts · ${mineScripts.length}`, "sub",
+      [toolButton("+", `New script for ${name}`, () => editScript(null, stored))], (inner) => {
         for (const sc of mineScripts) inner.append(scriptRow(sc));
         if (!mineScripts.length) inner.append(el("div", "empty-note", "none yet"));
       });
-    body.append(sessions.wrap, scriptsNode.wrap);
+    body.append(portsNode.wrap, scriptsNode.wrap);
   }, select);
   wrap.classList.add("group-node");
-  wrap.style.setProperty("--gc", groupColor(group));
-  makeDropTarget(wrap, group);
-  if (selectedGroup === group) head.classList.add("selected");
-  head.title = group ? "Click to select the group" : "Sessions and scripts without a group";
-  if (!group && addingGroup) head.after(addGroupForm());
+  wrap.style.setProperty("--gc", deviceColor(name));
+  if (selectedDevice === name) head.classList.add("selected");
+  head.title = generic ? "The settings every port starts from (click to select)" : "Click to select the device";
+  head.addEventListener("contextmenu", (e) => { e.preventDefault(); editDevice(device); });
   return wrap;
-}
-
-// The name field for a new group, shown under the General header.
-let addingGroup = false;
-function addGroupForm() {
-  const formEl = el("form", "add-group");
-  formEl.autocomplete = "off";
-  const input = el("input");
-  input.id = "new-group-input";
-  input.placeholder = "New group name, then Enter";
-  input.spellcheck = false;
-  input.setAttribute("aria-label", "New group name");
-  input.addEventListener("keydown", (e) => { if (e.key === "Escape") { addingGroup = false; renderTree(); } });
-  formEl.append(input);
-  formEl.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const name = input.value.trim();
-    if (!name) { addingGroup = false; return renderTree(); }
-    try {
-      await api("/api/groups", { method: "POST", body: { name } });
-      addingGroup = false;
-      selectedGroup = name;
-      collapsed.delete(`g:${name}`);
-      showText($("#problem"), "");
-      await loadGroups();
-    } catch (error) { showText($("#problem"), error.message); }
-  });
-  return formEl;
 }
 
 // The empty pane says what to do, and offers the virtual ports to try when the computer has no serial port.
@@ -255,13 +238,13 @@ function renderEmpty() {
   for (const pane of panes) {
     const hint = pane.empty.querySelector("[data-empty-try]");
     if (!hint) continue;
-    const show = portNames.length === 0 && profiles.length === 0 && virtualPortList.length > 0;
+    const show = portNames.length === 0 && portEntries.length === 0 && virtualPortList.length > 0;
     hint.hidden = !show;
     hint.querySelectorAll("button").forEach((b) => b.remove());
     if (!show) continue;
     for (const name of ["fake:shell", "fake:counter", "fake:echo"]) {
       const button = el("button", "", name);
-      button.addEventListener("click", () => openTab(quickProfile(name, 115200)));
+      button.addEventListener("click", () => openPort(name));
       hint.append(button);
     }
   }
@@ -269,55 +252,35 @@ function renderEmpty() {
 
 function renderTree() {
   renderEmpty();
-  const tree = $("#tree");
-  const portTree = $("#port-tree");
-  tree.replaceChildren();
   const ports = node("ports", `Serial ports (${portNames.length})`, "group",
     [toolButton("⟳", "List the ports again (this also happens every few seconds)", () => loadPorts())], (body) => {
-      for (const port of portNames) {
-        const row = el("div", "item port");
-        row.append(el("span", "name", port));
-        const detail = portDetails[port];
-        if (detail) row.append(el("span", "detail", detail.info));
-        row.title = `${detail ? detail.info + ". " : ""}Double-click to open with default settings; drag onto a group to make a session`;
-        makeDraggable(row, { kind: "port", name: port });
-        row.addEventListener("click", () => selectRow(row, () => {}));
-        row.addEventListener("dblclick", () => openTab(quickProfile(port, 115200)));
-        body.append(row);
-      }
+      for (const port of portNames) body.append(portRow(port, portDetails[port]?.info, portDetails[port] ? `${portDetails[port].info}. ` : ""));
       if (!portNames.length) body.append(el("div", "empty-note", "none found"));
     });
   ports.wrap.classList.add("group-node");
   ports.wrap.style.setProperty("--gc", "var(--control)");
-  const virtual = node("virtual", `Virtual ports (${virtualPortList.length})`, "group",
-    [], (body) => {
-      for (const port of virtualPortList) {
-        const row = el("div", "item port", port.name);
-        row.title = `${port.what}. Double-click to open; drag onto a group to make a session`;
-        makeDraggable(row, { kind: "port", name: port.name });
-        row.addEventListener("click", () => selectRow(row, () => {}));
-        row.addEventListener("dblclick", () => openTab(quickProfile(port.name, 115200)));
-        body.append(row);
-      }
-    });
+  const virtual = node("virtual", `Virtual ports (${virtualPortList.length})`, "group", [], (body) => {
+    for (const port of virtualPortList) body.append(portRow(port.name, port.what, `${port.what}. `));
+  });
   virtual.wrap.classList.add("group-node");
   virtual.wrap.style.setProperty("--gc", "var(--control)");
-  portTree.replaceChildren(ports.wrap, virtual.wrap);
-  const groups = allGroups();
-  tree.append(groupNode(NO_GROUP));
-  for (const group of groups) tree.append(groupNode(group));
-  $("#groups").replaceChildren(...groups.map((g) => { const o = el("option"); o.value = g; return o; }));
+  $("#port-tree").replaceChildren(ports.wrap, virtual.wrap);
+  const head = el("div", "devices-head");
+  head.append(el("span", "", "Devices"), toolButton("+", "New device", () => editDevice(null)));
+  $("#tree").replaceChildren(head, ...devices.map(deviceNode));
+  $("#devices").replaceChildren(...devices.map((d) => { const o = el("option"); o.value = d.name; return o; }));
 }
 
-async function loadProfiles() {
-  const data = await api("/api/profiles");
-  profiles = data.profiles;
+async function loadDevices() {
+  const data = await api("/api/devices");
+  devices = data.devices;
   showText($("#problem"), data.error);
   renderTree();
 }
 
-async function loadGroups() {
-  storedGroups = (await api("/api/groups")).groups;
+async function loadPortEntries() {
+  const data = await api("/api/portentries");
+  portEntries = data.ports;
   renderTree();
 }
 
@@ -343,12 +306,4 @@ async function loadPorts(quiet = false) {
 function pollPorts() {
   if (!document.hidden && secret) loadPorts(true);
   setTimeout(pollPorts, portPollMs);
-}
-
-async function deleteGroup(group) {
-  try {
-    await api(`/api/groups/${encodeURIComponent(group)}`, { method: "DELETE" });
-    if (selectedGroup === group) selectedGroup = null;
-    await loadGroups();
-  } catch (error) { showText($("#problem"), error.message); }
 }

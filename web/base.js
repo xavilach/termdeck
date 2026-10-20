@@ -11,7 +11,8 @@ const el = (tag, className, text) => {
 };
 
 let secret = "";
-let profiles = [];
+let devices = [];      // Generic first, then the devices
+let portEntries = [];  // the ports termdeck remembers: their device and their own changes
 let scripts = [];
 const tabs = [];
 let active = null;

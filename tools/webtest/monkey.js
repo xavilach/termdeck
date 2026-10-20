@@ -37,7 +37,8 @@ const pick = (list) => list[Math.floor(random() * list.length)];
     log.push(action);
     try {
       if (action === "open") {
-        await page.locator("#port-tree .item.port", { hasText: pick(ports) }).dblclick({ timeout: 1500 });
+        const port = pick(ports);
+        await page.locator("#port-tree .item.port .name").filter({ hasText: new RegExp(`^${port}$`) }).dblclick({ timeout: 1500 });
       } else if (action === "click") {
         const buttons = await page.locator("button:visible:not([disabled])").all();
         const skip = /Close port|Reset|Clear|Import|Export|Cancel transfer/;
@@ -65,6 +66,7 @@ const pick = (list) => list[Math.floor(random() * list.length)];
       } else if (action === "settings") {
         // the settings dialog of the active tab: random values in its fields, then Save
         await page.locator(".toolbar [data-action=settings]:visible").first().click({ timeout: 1500 });
+        await page.waitForFunction(() => document.querySelector("#panel").open, null, { timeout: 1500 });
         const pages = await page.locator("#profile-form .form-tabs button").all();
         for (const tabButton of pages) {  // every page of the dialog gets some random values
           await tabButton.click({ timeout: 1000 });
@@ -83,7 +85,7 @@ const pick = (list) => list[Math.floor(random() * list.length)];
         await page.locator("#profile-form button[type=submit]").click({ timeout: 1500 });
         await page.waitForTimeout(150);
       } else if (action === "script") {
-        await page.locator("button[title='New script in General']").first().click({ timeout: 1500 });
+        await page.locator("button[title='New script for Generic']").first().click({ timeout: 1500 });
         await page.fill("#script-form [name=name]", "m" + Math.floor(random() * 1000));
         await page.fill("#script-form [name=commands]", pick(["echo hi", "@expect=x; timeout=50", "@dtr=0; wait=10", "a\nb\n@hex=41", "@@x", "@speed=1"]));
         await page.locator("#script-form button[type=submit]").click({ timeout: 1500 });

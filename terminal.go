@@ -726,9 +726,11 @@ func (t *termSession) hello(m clientMessage) {
 	t.mu.Lock()
 	info := map[string]any{"type": "session", "state": t.state, "logging": t.log != nil, "script": t.scriptName, "profile": t.profile}
 	t.mu.Unlock()
+	// the counters go first: the page opens the port when it reads the session, and the counters of the
+	// port that opens must not be overtaken by these
+	t.sendJSON(map[string]any{"type": "counters", "rx": t.rx.Load(), "tx": t.tx.Load()})
 	t.sendJSON(info)
 	t.redraw()
-	t.sendJSON(map[string]any{"type": "counters", "rx": t.rx.Load(), "tx": t.tx.Load()})
 }
 
 // mark puts a numbered mark in the stream, to find a moment again.

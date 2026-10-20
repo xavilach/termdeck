@@ -42,7 +42,7 @@ async function startServer() {
   page.on("pageerror", (e) => problems.push("pageerror: " + e.message));
   page.on("console", (m) => { if (m.type() === "error") problems.push("console: " + m.text()); });
   const shot = async (name) => { if (shots) await page.screenshot({ path: path.join(shots, name + ".png") }); };
-  const screen = (i = 0) => page.evaluate((n) => { const b = tabs[n].term.buffer.active; let s = ""; for (let r = 0; r < b.length; r++) s += (b.getLine(r)?.translateToString(true) ?? "") + "\n"; return s; }, i);
+  const screen = (i = 0) => page.evaluate((n) => { const b = tabs[n]?.term.buffer.active; if (!b) return ""; let s = ""; for (let r = 0; r < b.length; r++) s += (b.getLine(r)?.translateToString(true) ?? "") + "\n"; return s; }, i);
   const waitScreen = async (re, i = 0, ms = 5000) => { const end = Date.now() + ms; let s = ""; while (Date.now() < end) { s = await screen(i); if (re.test(s)) return s; await sleep(50); } return s; };
 
   await page.goto(server.url);
@@ -50,6 +50,21 @@ async function startServer() {
   // the "More" menu is checked on its own below; the other checks use what is in it as if it were always open
   const formPage = (name) => page.click(`#profile-form .form-tabs [data-form-page=${name}]`);
   const openMore = () => page.evaluate(() => document.querySelectorAll(".viewbar details.more").forEach((d) => { d.open = true; }));
+  // a port in the list on the left, by its exact name, and a device (made or changed) that a port opens with
+  const portRow = (name) => page.locator("#port-tree .item.port").filter({ has: page.locator(".name", { hasText: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) }) }).first();
+  const withDevice = (port, device, settings = {}, own = {}) => page.evaluate(async ([port, device, settings, own]) => {
+    const known = devices.some((d) => d.name === device);
+    if (device) await api(known ? `/api/devices/${encodeURIComponent(device)}` : "/api/devices", { method: known ? "PUT" : "POST", body: { name: device, settings } });
+    await api("/api/portentries", { method: "PUT", body: { port, device, settings: own } });
+    await Promise.all([loadDevices(), loadPortEntries()]);
+  }, [port, device, settings, own]);
+  const closeAll = async () => {
+    while ((await page.locator(".tab").count()) > 0) {
+      const close = page.locator(".tab .close").first();
+      await close.click();
+      if (await page.locator(".tab .close.confirm").count()) await close.click();
+    }
+  };
   // (the other checks open the menu before they use what is in it)
   check("with no serial port and no session the empty pane offers virtual ports to try", await page.locator("[data-empty-try] button").count() === 3 && /Try a virtual one/.test(await page.locator("[data-empty-try]").first().textContent()));
   check("page loads with the start link and lists the ports", (await page.locator("#port-tree .node-head").first().textContent()).includes("Serial ports"));
@@ -60,7 +75,7 @@ async function startServer() {
   await shot("01-start");
 
   // open the fake shell
-  await page.locator("#port-tree .item.port", { hasText: "fake:shell" }).dblclick();
+  await portRow("fake:shell").locator(".name").dblclick();
   let s = await waitScreen(/login: /);
   check("fake:shell opens and shows its login", /connected to fake:shell/.test(s) && /login: /.test(s), s);
   check("the toolbar says Connected", (await page.locator(".pane .toolbar .status").first().textContent()) === "Connected");
@@ -103,11 +118,11 @@ async function startServer() {
 
   // hex view and hex send
   await page.selectOption(".viewbar [data-view]", "hex");
-  s = await screen();
+  s = await waitScreen(/6c 6f 67 69 6e/);
   check("hex view redraws the kept data", /6c 6f 67 69 6e/.test(s), s.slice(0, 300));
   await shot("03-hex-view");
   await page.selectOption(".viewbar [data-view]", "text");
-  s = await screen();
+  s = await waitScreen(/login: admin|hello A/);
   check("and back to text without loss", /login: admin/.test(s) || /hello A/.test(s), s);
 
   await page.selectOption(".sendbar [data-send-type]", "hex");
@@ -131,7 +146,7 @@ async function startServer() {
   check("counters count", Number((await page.locator("[data-count=rx]").first().textContent()).replace(/\D/g, "")) > 50 && Number((await page.locator("[data-count=tx]").first().textContent()).replace(/\D/g, "")) > 10);
 
   // counter port with times and a pause
-  await page.locator("#port-tree .item.port", { hasText: "fake:counter" }).dblclick();
+  await portRow("fake:counter").locator(".name").dblclick();
   s = await waitScreen(/tick 2 /, 1);
   check("fake:counter streams", /tick 1 /.test(s) && /tick 2 /.test(s), s);
   await openMore();
@@ -218,11 +233,12 @@ async function startServer() {
   // the same port is never opened twice: free fake:shell first
   await page.locator(".tab", { hasText: "fake:shell" }).locator(".close").click();
   await page.locator(".tab", { hasText: "fake:shell" }).locator(".close").click();
-  // a saved session with triggers, markers, local echo and a log, made in the dialog
+  // a device made in the dialog: triggers, markers, local echo and a log; then a port opens with it
   await page.keyboard.press("Alt+Shift+N");
+  await page.waitForFunction(() => document.querySelector("#panel").open && document.querySelector("#profile-title").textContent === "New device");
   const form = page.locator("#profile-form");
+  check("Alt+Shift+N opens a new device", (await page.locator("#profile-title").textContent()) === "New device" && await form.locator("[name=name]").isVisible());
   await form.locator("[name=name]").fill("Auto login");
-  await form.locator("[name=device]").fill("fake:shell");
   await form.locator("[name=localEcho]").check();
   await formPage("receive");
   await form.locator("[name=rxMarker]").fill("RX ");
@@ -232,10 +248,15 @@ async function startServer() {
   await formPage("send");
   await form.locator("[name=triggers]").fill("login: => admin\n/Password:/ => admin");
   await form.locator("[name=quickSends]").fill("Hello | text | echo quick\nHex | hex | 65 63 68 6f 20 68 71 0d | end=none");
-  await page.click("#profile-connect");
-  await sleep(500);
-  check("the session dialog saves and opens", await page.locator(".tab", { hasText: "Auto login" }).count() === 1, { error: await page.locator("#profile-error").textContent(), open: await page.locator("#panel").evaluate((d) => d.open), tabs: await page.locator(".tab .label").allTextContents() });
-  const autoTab = (await page.locator(".tab .label").allTextContents()).indexOf("Auto login");
+  await form.locator("button[type=submit]").click();
+  await page.waitForSelector("#tree .node-head.group:has-text('Auto login')", { timeout: 3000 }).catch(() => {});
+  check("the device is saved and listed", await page.locator("#tree .node-head.group", { hasText: "Auto login" }).count() === 1, await page.locator("#profile-error").textContent());
+  await portRow("fake:shell").locator(".device-choice").selectOption("Auto login");
+  await sleep(300);
+  await portRow("fake:shell").locator(".name").dblclick();
+  await page.waitForSelector(".tab:has-text('Auto login · fake:shell')", { timeout: 3000 }).catch(() => {});
+  check("a port opens with the device chosen for it", await page.locator(".tab", { hasText: "Auto login · fake:shell" }).count() === 1, await page.locator(".tab .label").allTextContents());
+  const autoTab = (await page.locator(".tab .label").allTextContents()).indexOf("Auto login · fake:shell");
   s = await waitScreen(/admin# /, autoTab);
   check("triggers log in by themselves", /Welcome/.test(s), s);
   check("Rx and Tx markers and local echo", /^RX login: /m.test(s) && /^TX admin/m.test(s), s);
@@ -261,15 +282,17 @@ async function startServer() {
   await page.locator(".tab", { hasText: "Auto login" }).locator(".close").click();  // a second click confirms
   check("closing a connected tab asks first, then closes", await page.locator(".tab", { hasText: "Auto login" }).count() === 0);
 
-  // slow send, set in the dialog: a pause after each character
-  await page.keyboard.press("Alt+Shift+N");
-  await form.locator("[name=name]").fill("Slow echo");
-  await form.locator("[name=device]").fill("fake:echo");
+  // slow send, set for the port in its own settings (right click): a pause after each character
+  await portRow("fake:echo").click({ button: "right" });
+  await page.waitForSelector("#profile-form.editing-port", { timeout: 3000 }).catch(() => {});
+  check("a right click on a port opens its own settings", (await page.locator("#profile-title").textContent()) === "Port fake:echo", await page.locator("#profile-title").textContent());
   await formPage("send");
+  check("the values come from below until changed", await form.locator("label.inherited:has([name=charDelayMs])").count() === 1);
   await form.locator("[name=charDelayMs]").fill("50");
+  check("a value changed for the port is its own", await form.locator("label.own:has([name=charDelayMs])").count() === 1);
   await page.click("#profile-connect");
-  await page.waitForSelector(".tab:has-text('Slow echo')");
-  const slowTab = (await page.locator(".tab .label").allTextContents()).indexOf("Slow echo");
+  await page.waitForSelector(".tab:has-text('fake:echo')");
+  const slowTab = (await page.locator(".tab .label").allTextContents()).indexOf("fake:echo");
   const slowInput = page.locator(".sendbar [data-send-text]").first();
   await slowInput.fill("0123456789");
   await page.selectOption(".sendbar [data-send-end]", "none");
@@ -278,16 +301,13 @@ async function startServer() {
   await waitScreen(/0123456789/, slowTab, 5000);
   const slowTook = Date.now() - slowStart;
   check("slow send: ten characters take about half a second", slowTook >= 400 && slowTook < 3000, slowTook);
-  await page.locator(".tab", { hasText: "Slow echo" }).locator(".close").click();
-  await page.locator(".tab", { hasText: "Slow echo" }).locator(".close").click();
+  await page.locator(".tab", { hasText: "fake:echo" }).locator(".close").click();
+  await page.locator(".tab", { hasText: "fake:echo" }).locator(".close").click();
 
   // reconnect: the flaky virtual port drops 400 ms after it opens and is back 2 s later
-  await page.keyboard.press("Alt+Shift+N");
-  await form.locator("[name=name]").fill("Flaky");
-  await form.locator("[name=device]").fill("fake:flaky");
-  await form.locator("[name=reconnect]").check();
-  await page.click("#profile-connect");
-  await page.waitForSelector(".tab:has-text('Flaky')");
+  await withDevice("fake:flaky", "", {}, { reconnect: true });
+  await portRow("fake:flaky").locator(".name").dblclick();
+  await page.waitForSelector(".tab:has-text('fake:flaky')");
   await page.waitForFunction(() => /Reconnecting/.test(document.querySelector(".toolbar .status").textContent), null, { timeout: 4000 });
   check("a port that went away shows Reconnecting and can be stopped", (await page.locator("[data-action=port]").first().textContent()) === "Stop reconnecting");
   await page.waitForFunction(() => /^Connected/.test(document.querySelector(".toolbar .status").textContent), null, { timeout: 8000 });
@@ -296,18 +316,14 @@ async function startServer() {
   await page.click("[data-action=port]");
   await sleep(3500);
   check("Stop reconnecting leaves the port closed", /Port closed/.test(await page.locator(".toolbar .status").first().textContent()));
-  await page.locator(".tab", { hasText: "Flaky" }).locator(".close").click();
+  await page.locator(".tab", { hasText: "fake:flaky" }).locator(".close").click();
 
   // graph: numbers of the received lines drawn as lines (the counter port is free for it first)
   await page.locator(".tab", { hasText: "fake:counter" }).locator(".close").click();
   await page.locator(".tab", { hasText: "fake:counter" }).locator(".close").click();
-  await page.keyboard.press("Alt+Shift+N");
-  await form.locator("[name=name]").fill("Graphed");
-  await form.locator("[name=device]").fill("fake:counter");
-  await formPage("receive");
-  await form.locator("[name=graphSeries]").fill("Temp | temp=\nTick | tick ");
-  await page.click("#profile-connect");
-  await page.waitForSelector(".tab:has-text('Graphed')");
+  await withDevice("fake:counter", "Graphed", { graphSeries: "Temp | temp=\nTick | tick " });
+  await portRow("fake:counter").locator(".name").dblclick();
+  await page.waitForSelector(".tab:has-text('Graphed · fake:counter')");
   await page.click(".viewbar [data-graph]");
   await page.waitForFunction(() => document.querySelector(".graph-legend")?.textContent.includes("Tick: 4"), null, { timeout: 8000 });
   const drawn = await page.evaluate(() => { const c = document.querySelector(".graph-canvas"); const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; });
@@ -327,40 +343,46 @@ async function startServer() {
   await page.locator(".tab", { hasText: "Graphed" }).locator(".close").click();
   await page.locator(".tab", { hasText: "Graphed" }).locator(".close").click();
 
-  // PuTTY: the sessions found on this computer are added, with PuTTY's own settings
+  // PuTTY: each serial session found on this computer becomes a device, and its port opens with it
   await page.click("#import-putty");
-  await page.waitForSelector("#tree .item .name:text-is('Bench board')", { timeout: 4000 });
-  const benchBoard = await page.evaluate(() => profiles.find((p) => p.name === "Bench board"));
-  check("PuTTY import adds the serial sessions of the computer", benchBoard && benchBoard.device === "COM7" && benchBoard.baud === 57600 && benchBoard.dataBits === 7 && benchBoard.parity === "even" && benchBoard.stopBits === "2" && benchBoard.flow === "rtscts" && benchBoard.group === "PuTTY", benchBoard);
+  await page.waitForSelector("#tree .node-head.group:has-text('Bench board')", { timeout: 4000 });
+  const benchBoard = await page.evaluate(async () => (await api("/api/layers?port=COM7")).profile);
+  check("PuTTY import makes a device of each serial session, and its port opens with it", benchBoard && benchBoard.name === "Bench board · COM7" && benchBoard.baud === 57600 && benchBoard.dataBits === 7 && benchBoard.parity === "even" && benchBoard.stopBits === "2" && benchBoard.flow === "rtscts", benchBoard);
   const puttyReg = path.join(server.dir, "sessions.reg");
   fs.writeFileSync(puttyReg, "Windows Registry Editor Version 5.00\r\n\r\n[HKEY_CURRENT_USER\\Software\\SimonTatham\\PuTTY\\Sessions\\From%20reg]\r\n\"Protocol\"=\"serial\"\r\n\"SerialLine\"=\"COM9\"\r\n\"SerialSpeed\"=dword:00002580\r\n");
   await page.setInputFiles("#putty-file", puttyReg);
-  await page.waitForSelector("#tree .item .name:text-is('From reg')", { timeout: 4000 }).catch(() => {});
+  await page.waitForSelector("#tree .node-head.group:has-text('From reg')", { timeout: 4000 }).catch(() => {});
   check("(a .reg export can be chosen too)", true);
-  await page.evaluate(async () => { for (const n of ["Bench board", "From reg"]) await api(`/api/profiles/${encodeURIComponent(n)}`, { method: "DELETE" }).catch(() => {}); await api("/api/groups/PuTTY", { method: "DELETE" }).catch(() => {}); await Promise.all([loadProfiles(), loadGroups()]); });
+  await page.evaluate(async () => {
+    for (const n of ["Bench board", "From reg"]) await api(`/api/devices/${encodeURIComponent(n)}`, { method: "DELETE" }).catch(() => {});
+    for (const p of ["COM7", "COM9"]) await api(`/api/portentries/${p}`, { method: "DELETE" }).catch(() => {});
+    await Promise.all([loadDevices(), loadPortEntries()]);
+  });
 
   // export and import of the settings
   const [settingsDownload] = await Promise.all([page.waitForEvent("download"), page.click("#export-settings")]);
   const settingsFile = path.join(server.dir, "settings.json");
   await settingsDownload.saveAs(settingsFile);
   const settings = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
-  check("Export saves the sessions, scripts and groups", settings.version === 1 && settings.profiles.some((p) => p.name === "Slow echo") && Array.isArray(settings.scripts) && Array.isArray(settings.groups), Object.keys(settings));
-  settings.profiles.push({ name: "Imported one", device: "fake:echo" });
-  settings.profiles = settings.profiles.filter((p) => p.name !== "Slow echo");
+  check("Export saves the devices, ports and scripts", settings.version === 2 && settings.devices.some((d) => d.name === "Auto login") && settings.ports.some((p) => p.port === "fake:echo") && Array.isArray(settings.scripts), Object.keys(settings));
+  settings.devices.push({ name: "Imported one", settings: { baud: 9600 } });
+  settings.devices = settings.devices.filter((d) => d.name !== "Graphed");
+  settings.ports = settings.ports.filter((p) => p.device !== "Graphed");
   const importFile = path.join(server.dir, "import.json");
   fs.writeFileSync(importFile, JSON.stringify(settings));
   await page.setInputFiles("#import-file", importFile);
-  await page.waitForSelector("#tree .item .name:text-is('Imported one')", { timeout: 4000 });
-  check("Import adds the sessions of the file", await page.locator("#tree .item .name", { hasText: /^Imported one$/ }).count() === 1);
-  check("and keeps what was there", await page.locator("#tree .item .name", { hasText: /^Slow echo$/ }).count() === 1);
+  await page.waitForSelector("#tree .node-head.group:has-text('Imported one')", { timeout: 4000 });
+  check("Import adds the devices of the file", await page.locator("#tree .node-head.group .title", { hasText: /^Imported one$/ }).count() === 1);
+  check("and keeps what was there", await page.locator("#tree .node-head.group", { hasText: "Graphed" }).count() === 1);
   fs.writeFileSync(importFile, "{ not json");
   await page.setInputFiles("#import-file", importFile);
   await page.waitForSelector("#problem:not([hidden])", { timeout: 3000 });
   check("a broken file is reported and changes nothing", /Import failed/.test(await page.locator("#problem").textContent()));
-  await page.evaluate(async () => { await api("/api/profiles/Imported%20one", { method: "DELETE" }); await loadProfiles(); });
+  await page.evaluate(async () => { await api("/api/devices/Imported%20one", { method: "DELETE" }); await loadDevices(); });
 
   // a check added to hex data: the Modbus frame "read register 0 of slave 1" gets its CRC 84 0A
-  await page.locator("#port-tree .item.port", { hasText: "fake:echo" }).dblclick();
+  await portRow("fake:echo").locator(".name").dblclick();
+  await page.waitForFunction(() => tabs.some((t) => t.profile.device === "fake:echo"));
   const echoTab = await page.evaluate(() => tabs.findIndex((t) => t.profile.device === "fake:echo"));
   await page.selectOption(".sendbar [data-send-type]", "hex");
   check("the Check box shows for hex data and not for text", await page.locator(".sendbar [data-send-check]").first().isVisible());
@@ -379,14 +401,10 @@ async function startServer() {
   await page.locator(".tab", { hasText: "fake:echo" }).locator(".close").click();
 
   // highlights and the filter in the real terminal: the cell colours of the lines
-  await page.keyboard.press("Alt+Shift+N");
-  await form.locator("[name=name]").fill("Coloured");
-  await form.locator("[name=device]").fill("fake:counter");
-  await formPage("receive");
-  await form.locator("[name=highlights]").fill("tick 2 = red");
-  await page.click("#profile-connect");
+  await withDevice("fake:counter", "Coloured", { highlights: "tick 2 = red" });
+  await portRow("fake:counter").locator(".name").dblclick();
   await page.waitForSelector(".tab:has-text('Coloured')");
-  const colouredTab = (await page.locator(".tab .label").allTextContents()).indexOf("Coloured");
+  const colouredTab = (await page.locator(".tab .label").allTextContents()).indexOf("Coloured · fake:counter");
   await waitScreen(/tick 3 /, colouredTab);
   const colours = await page.evaluate((n) => { const b = tabs[n].term.buffer.active; const out = {}; for (let r = 0; r < b.length; r++) { const line = b.getLine(r); const text = line.translateToString(true); const m = /^tick (\d)/.exec(text); if (m) out[m[1]] = line.getCell(0).getFgColor(); } return out; }, colouredTab);
   check("a highlighted line has its colour in the terminal and the others do not", colours[2] === 1 && colours[1] !== 1 && colours[3] !== 1, colours);
@@ -398,17 +416,18 @@ async function startServer() {
   await page.locator(".tab", { hasText: "Coloured" }).locator(".close").click();
   await page.locator(".tab", { hasText: "Coloured" }).locator(".close").click();
 
-  // the settings of a session are on pages, and the dialog always opens on the first
+  // the settings are on pages, and the dialog always opens on the first
   await page.keyboard.press("Alt+Shift+N");
+  await page.waitForFunction(() => document.querySelector("#panel").open && document.querySelector("#profile-title").textContent === "New device");
   check("the settings dialog opens on the Port page", await form.locator(".form-page[data-form-page=port]").isVisible() && !(await form.locator(".form-page[data-form-page=send]").isVisible()));
   await formPage("send");
-  check("a page shows its settings and hides the others", await form.locator("[name=triggers]").isVisible() && !(await form.locator("[name=device]").isVisible()));
+  check("a page shows its settings and hides the others", await form.locator("[name=triggers]").isVisible() && !(await form.locator("[name=baud]").isVisible()));
   await page.keyboard.press("Escape");
   await page.keyboard.press("Alt+Shift+N");
-  check("and the next time it opens on Port again", await form.locator("[name=device]").isVisible());
+  await page.waitForFunction(() => document.querySelector("#panel").open && document.querySelector("#profile-title").textContent === "New device");
+  check("and the next time it opens on Port again", await form.locator("[name=baud]").isVisible());
   // an invalid field on a page that is not shown brings that page up on Save
   await form.locator("[name=name]").fill("x");
-  await form.locator("[name=device]").fill("fake:echo");
   await formPage("display");
   await form.locator("[name=fontSize]").fill("3");
   await formPage("port");
@@ -416,9 +435,10 @@ async function startServer() {
   check("an invalid setting on another page brings that page up when saving", await form.locator("[name=fontSize]").isVisible());
   await page.keyboard.press("Escape");
 
-  // a session can be duplicated: the dialog opens with its settings and a new name
-  await page.locator(`button[title="Duplicate Slow echo"]`).click();
-  check("Duplicate opens a new session with the same settings", (await form.locator("[name=name]").inputValue()) === "Slow echo copy" && (await form.locator("[name=charDelayMs]").inputValue()) === "50" && (await page.locator("#profile-title").textContent()) === "New profile");
+  // a device can be copied: the dialog opens with its settings and a new name
+  await page.locator(`button[title="A new device starting from Auto login"]`).click();
+  await page.waitForFunction(() => document.querySelector("#panel").open && document.querySelector("#profile-title").textContent === "New device");
+  check("a copy of a device opens with its settings", (await form.locator("[name=name]").inputValue()) === "Auto login copy" && (await form.locator("[name=localEcho]").isChecked()) && (await page.locator("#profile-title").textContent()) === "New device");
   await page.keyboard.press("Escape");
 
   // the left column can be made wider or narrower, and the width is remembered
@@ -452,12 +472,10 @@ async function startServer() {
   check("the Help button opens it and Close closes it", !(await page.locator("#help").evaluate((d) => d.open)));
 
   // the Frames view: fake:binary sends AA 55 <len> <payload> <sum> every second
-  await page.evaluate(async () => {
-    await api("/api/profiles", { method: "POST", body: { name: "Framed", device: "fake:binary", view: "frames", frameSpec: "sync = AA 55\nsize = u8@2 + 4\nheader = 3\ncheck = sum8" } });
-    await loadProfiles();
-  });
-  await page.locator("#tree .item .name", { hasText: /^Framed$/ }).dblclick();
-  const framedTab = await page.evaluate(() => tabs.findIndex((t) => t.profile.name === "Framed"));
+  await withDevice("fake:binary", "Framed", { view: "frames", frameSpec: "sync = AA 55\nsize = u8@2 + 4\nheader = 3\ncheck = sum8" });
+  await portRow("fake:binary").locator(".name").dblclick();
+  await page.waitForSelector(".tab:has-text('Framed · fake:binary')");
+  const framedTab = await page.evaluate(() => tabs.findIndex((t) => t.profile.name === "Framed · fake:binary"));
   s = await waitScreen(/AA 55 05 \| 00 02 10 20 30 \| [0-9A-F]{2}  OK/, framedTab, 8000);
   check("the Frames view shows the frames of fake:binary with their check OK", /AA 55 05 \| 00 01 10 20 30 \| [0-9A-F]{2}  OK/.test(s), s);
   await shot("17-frames");
@@ -465,8 +483,8 @@ async function startServer() {
   await page.locator(".tab", { hasText: "Framed" }).locator(".close").click();
 
   // null-modem pair
-  await page.locator("#port-tree .item.port", { hasText: "fake:link-a" }).dblclick();
-  await page.locator("#port-tree .item.port", { hasText: "fake:link-b" }).dblclick();
+  await portRow("fake:link-a").locator(".name").dblclick();
+  await portRow("fake:link-b").locator(".name").dblclick();
   await sleep(300);
   const tabNames = await page.locator(".tab .label").allTextContents();
   const a = tabNames.indexOf("fake:link-a"), b = tabNames.indexOf("fake:link-b");
@@ -535,6 +553,7 @@ async function startServer() {
 
   // settings dialog
   await page.locator(".toolbar [data-action=settings]").first().click();
+  await page.waitForFunction(() => document.querySelector("#panel").open, null, { timeout: 3000 }).catch(() => {});
   await shot("08-settings");
   check("the settings dialog opens", await page.locator("#panel").evaluate((d) => d.open));
   check("no keyboard options remain", (await page.locator("#profile-form").textContent()).includes("Function keys") === false);
@@ -568,46 +587,50 @@ async function startServer() {
     if (await page.locator(".tab .close.confirm").count()) await close.click();
   }
   await page.click(".layout [data-layout=single]");
-  await page.locator("#port-tree .item.port", { hasText: "fake:shell" }).dblclick();
-  await waitScreen(/login: /);   // the port was released by the reload and can be opened again
+  await withDevice("fake:shell", "");  // back to Generic: the triggers of Auto login would answer the prompts below
+  await portRow("fake:shell").locator(".name").dblclick();
+  await waitScreen(/login: /);   // the port was released when its tab was closed, and can be opened again
   await input.focus();
   await input.press("ArrowUp");
   check("the send history survives a reload", (await input.inputValue()) !== "", await input.inputValue());
   await input.fill("");
 
-  // ---- groups, scripts and sessions in the tree
+  // ---- devices, their scripts and their ports in the tree
   const btn = (title) => page.locator(`button[title="${title}"]`);
   const row = (name) => page.locator("#tree .item").filter({ has: page.locator(".name", { hasText: new RegExp(`^${name}$`) }) }).first();
-  await btn("New group").click();
-  await page.fill("#new-group-input", "Lab");
-  await page.keyboard.press("Enter");
+  await btn("New device").click();
+  await page.waitForFunction(() => document.querySelector("#panel").open && document.querySelector("#profile-title").textContent === "New device");
+  await form.locator("[name=name]").fill("Lab");
+  await form.locator("button[type=submit]").click();
   await page.waitForSelector("#tree .node-head.group:has-text('Lab')", { timeout: 3000 }).catch(() => {});
-  check("a group is created", await page.locator("#tree .node-head.group", { hasText: "Lab" }).count() === 1);
+  check("a device is created from the + of the Devices", await page.locator("#tree .node-head.group .title", { hasText: /^Lab$/ }).count() === 1);
 
   await page.locator(".tab .close").first().click();
   await page.locator(".tab .close").first().click();  // free the shell tab; scripts run on fake:echo below
-  await page.locator("#port-tree .item.port", { hasText: "fake:echo" }).dblclick();
+  await withDevice("fake:echo", "", {}, {});   // no slow send for the scripts
+  await portRow("fake:echo").locator(".name").dblclick();
   await waitScreen(/connected/);
   const txNow = () => page.evaluate(() => active.counters.tx);
-  await btn("New script in Lab").click();
+  await btn("New script for Lab").click();
   const sf = page.locator("#script-form");
+  check("the device is prefilled in a new script", (await sf.locator("[name=device]").inputValue()) === "Lab");
   await sf.locator("[name=name]").fill("boot");
   await sf.locator("[name=commands]").fill("echo one\n@wait=100; hex=41 0d\necho two");
   await sf.locator("[name=delayMs]").fill("50");
   await sf.locator("button[type=submit]").click();
   await page.waitForSelector("#tree .item:has-text('boot')");
   const tx0 = await txNow();
-  await row("boot").locator("button[title='Run on the current session']").click();
+  await row("boot").locator("button[title='Run on the current tab']").click();
   await page.waitForFunction((n) => active.counters.tx >= n + 20, tx0, { timeout: 5000 }).catch(() => {});
-  check("a script runs on the open session (text lines and steps: 9 + 2 + 9 bytes)", (await txNow()) - tx0 === 20, (await txNow()) - tx0);
+  check("a script runs on the open tab (text lines and steps: 9 + 2 + 9 bytes)", (await txNow()) - tx0 === 20, (await txNow()) - tx0);
 
-  await btn("New script in Lab").click();
+  await btn("New script for Lab").click();
   await sf.locator("[name=name]").fill("spin");
   await sf.locator("[name=commands]").fill("tick");
   await sf.locator("[name=delayMs]").fill("30");
   await sf.locator("[name=loop]").check();
   await sf.locator("button[type=submit]").click();
-  await row("spin").locator("button[title='Run on the current session']").click();
+  await row("spin").locator("button[title='Run on the current tab']").click();
   await sleep(400);
   const stop = row("spin").locator("button[title='Stop the script']");
   check("a running script offers Stop", await stop.count() === 1);
@@ -617,29 +640,27 @@ async function startServer() {
   await sleep(300);
   check("Stop ends a looping script", t1 > tx0 + 40 && (await txNow()) === t1, { t1, now: await txNow() });
 
-  await btn("New session in Lab").click();
-  const pf = page.locator("#profile-form");
-  check("the group is prefilled in a new session", (await pf.locator("[name=group]").inputValue()) === "Lab");
-  await pf.locator("[name=name]").fill("Counter");
-  await pf.locator("[name=device]").fill("fake:counter");
-  await pf.locator("button[type=submit]").click();
-  await page.waitForSelector("#tree .item .name:text-is('Counter')");
-  await row("Counter").dragTo(page.locator("#tree .node-head.group", { hasText: "General" }));
-  await sleep(400);
-  check("a session dragged onto a group moves there", await page.locator("#tree .group-node").first().locator(".item .name", { hasText: /^Counter$/ }).count() === 1, await page.locator("#tree").innerText());
-  await row("Counter").dblclick();
+  // a port remembered with a device is listed under it, opens from there, and follows a rename
+  await portRow("fake:counter").locator(".device-choice").selectOption("Lab");
+  await page.waitForSelector("#tree .item:has-text('fake:counter')", { timeout: 3000 }).catch(() => {});
+  check("a port with a device is listed under the device", await page.locator("#tree .group-node", { has: page.locator(".node-head.group .title", { hasText: /^Lab$/ }) }).locator(".item .name", { hasText: /^fake:counter$/ }).count() === 1);
+  await row("fake:counter").dblclick();
   await waitScreen(/tick 1/, 1);
-  await row("Counter").locator("button[title='Edit Counter']").click();
-  await pf.locator("[name=name]").fill("Counter 2");
-  await pf.locator("button[type=submit]").click();
-  await sleep(600);
-  check("renaming an open session renames its tab", (await page.locator(".tab .label").allTextContents()).includes("Counter 2"));
-  await row("Counter 2").locator("button[title='Edit Counter 2']").click();
+  check("and opens from there with the device", (await page.locator(".tab .label").allTextContents()).includes("Lab · fake:counter"), await page.locator(".tab .label").allTextContents());
+  await btn("Settings of Lab").click();
+  await page.waitForFunction(() => document.querySelector("#profile-title").textContent === "Device Lab");
+  await form.locator("[name=name]").fill("Lab 2");
+  await form.locator("button[type=submit]").click();
+  await sleep(800);
+  check("renaming a device renames its open tabs", (await page.locator(".tab .label").allTextContents()).includes("Lab 2 · fake:counter"), await page.locator(".tab .label").allTextContents());
+  await btn("Settings of Lab 2").click();
+  await page.waitForFunction(() => document.querySelector("#profile-title").textContent === "Device Lab 2");
   const del = page.locator("#profile-delete");
   await del.click();
   await del.click();
   await sleep(400);
-  check("a session is deleted by a second click", await page.locator("#tree .item:has-text('Counter 2')").count() === 0);
+  check("a device that has scripts is not deleted, and says why", /still has scripts/.test(await page.locator("#profile-error").textContent()), await page.locator("#profile-error").textContent());
+  await page.keyboard.press("Escape");
 
   const tabBefore = await page.evaluate(() => tabs.indexOf(active));
   await page.keyboard.press("Alt+Shift+PageUp");
@@ -657,7 +678,8 @@ async function startServer() {
   await page.click(".layout [data-layout=single]");
 
   // ---- a flood of lines is kept and the view switches quickly
-  await page.locator("#port-tree .item.port", { hasText: "fake:shell" }).dblclick();
+  await portRow("fake:shell").locator(".name").dblclick();
+  await page.waitForFunction(() => tabs.some((t) => t.profile.device === "fake:shell"));
   const shellTab = await page.evaluate(() => tabs.findIndex((t) => t.profile.device === "fake:shell"));
   await waitScreen(/login: /, shellTab);
   for (const line of ["admin", "admin"]) { await input.fill(line); await input.press("Enter"); await sleep(150); }
@@ -666,13 +688,13 @@ async function startServer() {
   await waitScreen(/line 5000 of 5000/, shellTab, 8000);
   const t0 = Date.now();
   await page.selectOption(".viewbar [data-view]", "hex");
-  await page.waitForFunction((n) => { const b = tabs[n].term.buffer.active; for (let r = Math.max(0, b.length - 40); r < b.length; r++) if (/^([0-9a-f]{2} ){16} \|/.test(b.getLine(r)?.translateToString(true) || "")) return true; return false; }, shellTab);  // hex rows drawn
+  await page.waitForFunction((n) => { const b = tabs[n].term.buffer.active; for (let r = Math.max(0, b.length - 40); r < b.length; r++) if (/([0-9a-f]{2} ){16} \|/.test(b.getLine(r)?.translateToString(true) || "")) return true; return false; }, shellTab);  // hex rows drawn
   check("5000 lines are kept and a view switch takes under 3 s", Date.now() - t0 < 3000, Date.now() - t0);
   await page.selectOption(".viewbar [data-view]", "text");
 
   // a script that waits for what the device says (expect): log out, then log in again step by step
   await page.evaluate(async () => {
-    await api("/api/scripts", { method: "POST", body: { name: "relogin", group: "", commands: ["logout", "@expect=login: ", "admin", "@expect=Password:", "admin", "@expect=/admin# /", "echo scripted-ok"], delayMs: 0 } });
+    await api("/api/scripts", { method: "POST", body: { name: "relogin", device: "", commands: ["logout", "@expect=login: ", "admin", "@expect=Password:", "admin", "@expect=/admin# /", "echo scripted-ok"], delayMs: 0 } });
     await loadScripts();
   });
   await page.locator("#tree .item .name", { hasText: /^relogin$/ }).dblclick();
@@ -691,18 +713,11 @@ async function startServer() {
 
   // a button in the pane that does not have the focus works on the first click (the page must not
   // draw it again while the mouse button is down)
-  while ((await page.locator(".tab").count()) > 0) {
-    const close = page.locator(".tab .close").first();
-    await close.click();
-    if (await page.locator(".tab .close.confirm").count()) await close.click();
-  }
-  await page.evaluate(async () => {
-    await api("/api/profiles", { method: "POST", body: { name: "QA", device: "fake:echo", quickSends: "Hi | text | hello A" } });
-    await api("/api/profiles", { method: "POST", body: { name: "QB", device: "fake:counter", quickSends: "Yo | text | hello B" } });
-    await loadProfiles();
-  });
-  await page.locator("#tree .item .name", { hasText: /^QA$/ }).dblclick();
-  await page.locator("#tree .item .name", { hasText: /^QB$/ }).dblclick();
+  await closeAll();
+  await withDevice("fake:echo", "QA", { quickSends: "Hi | text | hello A" });
+  await withDevice("fake:counter", "QB", { quickSends: "Yo | text | hello B" });
+  await portRow("fake:echo").locator(".name").dblclick();
+  await portRow("fake:counter").locator(".name").dblclick();
   await page.click(".layout [data-layout=cols]");
   await sleep(300);
   await page.locator(".pane").first().locator(".terminals").click();
@@ -737,7 +752,8 @@ async function startServer() {
 
   // speed: 3 MB of lines in 5 seconds must neither freeze the page nor grow without bound
   await page.evaluate(() => { window.__max = 0; let last = performance.now(); const loop = () => { const now = performance.now(); window.__max = Math.max(window.__max, now - last); last = now; requestAnimationFrame(loop); }; requestAnimationFrame(loop); });
-  await page.locator("#port-tree .item.port", { hasText: "fake:stream" }).dblclick();
+  await portRow("fake:stream").locator(".name").dblclick();
+  await page.waitForFunction(() => tabs.length === 1);
   await page.waitForFunction(() => tabs[0].counters.rx > 2_500_000, null, { timeout: 30000 }).catch(() => {});
   const speed = await page.evaluate(() => ({ rx: tabs[0].counters.rx, gap: Math.round(window.__max), rows: tabs[0].term.buffer.active.length }));
   check("a fast stream (600 KB/s) is taken without freezing the page (longest frame under 400 ms)", speed.rx > 2_500_000 && speed.gap < 400, speed);
@@ -745,8 +761,8 @@ async function startServer() {
   await page.locator(".tab .close").first().click();
 
   // a tab that is not shown and receives data is marked, and the browser tab title counts such tabs
-  await page.locator("#port-tree .item.port", { hasText: "fake:counter" }).dblclick();
-  await page.locator("#port-tree .item.port", { hasText: "fake:echo" }).dblclick();   // the echo tab is now the one shown
+  await portRow("fake:counter").locator(".name").dblclick();
+  await portRow("fake:echo").locator(".name").dblclick();   // the echo tab is now the one shown
   await page.waitForSelector(".tab.activity:has-text('fake:counter')", { timeout: 6000 });
   check("a tab that gets data in the background is marked and the title counts it", (await page.title()) === "(1) termdeck", await page.title());
   await page.locator(".tab", { hasText: "fake:counter" }).click();
@@ -757,15 +773,12 @@ async function startServer() {
     if (await page.locator(".tab .close.confirm").count()) await close.click();
   }
 
-  // open all the sessions of a group, and send to all of them at once
-  await page.evaluate(async () => {
-    await api("/api/profiles", { method: "POST", body: { name: "Bench 1", group: "Bench", device: "fake:echo" } });
-    await api("/api/profiles", { method: "POST", body: { name: "Bench 2", group: "Bench", device: "fake:shell" } });
-    await loadProfiles();
-  });
-  await page.locator(`button[title="Open all 2 sessions of Bench"]`).click();
+  // open all the ports of a device, and send to all of them at once
+  await withDevice("fake:echo", "Bench");
+  await withDevice("fake:shell", "Bench");
+  await page.locator(`button[title="Open all 2 ports of Bench"]`).click();
   await page.waitForFunction(() => tabs.length === 2 && tabs.every((t) => t.state === "connected"));
-  check("Open all opens every session of the group", (await page.locator(".tab .label").allTextContents()).sort().join() === "Bench 1,Bench 2");
+  check("Open all opens every port of the device", (await page.locator(".tab .label").allTextContents()).sort().join() === "Bench · fake:echo,Bench · fake:shell", await page.locator(".tab .label").allTextContents());
   await page.locator(".sendbar [data-all]").first().check();
   await page.locator(".sendbar [data-send-text]").first().fill("to every bench");
   await page.locator(".sendbar [data-send]").first().click();
@@ -783,14 +796,13 @@ async function startServer() {
   await page.evaluate(async () => {
     window.__notes = [];
     window.Notification = class { constructor(title, options) { window.__notes.push({ title, body: options.body }); } static get permission() { return "granted"; } };
-    await api("/api/profiles", { method: "POST", body: { name: "Noti", device: "fake:counter", highlights: "tick 2 = bold+notify" } });
-    await loadProfiles();
   });
-  await page.locator("#tree .item .name", { hasText: /^Noti$/ }).dblclick();
-  await page.locator("#port-tree .item.port", { hasText: "fake:echo" }).dblclick();   // Noti is now out of sight
+  await withDevice("fake:counter", "Noti", { highlights: "tick 2 = bold+notify" });
+  await portRow("fake:counter").locator(".name").dblclick();
+  await portRow("fake:echo").locator(".name").dblclick();   // Noti is now out of sight
   await page.waitForFunction(() => window.__notes.length > 0, null, { timeout: 8000 });
   const notes = await page.evaluate(() => window.__notes);
-  check("a notify rule gives a desktop notification for a tab that is out of sight", notes.length === 1 && notes[0].title === "Noti" && /tick 2/.test(notes[0].body), notes);
+  check("a notify rule gives a desktop notification for a tab that is out of sight", notes.length === 1 && notes[0].title === "Noti · fake:counter" && /tick 2/.test(notes[0].body), notes);
   while ((await page.locator(".tab").count()) > 0) {
     const close = page.locator(".tab .close").first();
     await close.click();
@@ -798,12 +810,9 @@ async function startServer() {
   }
 
   // RS-485 direction control: RTS of link-a is high only while it sends, and link-b sees it as CTS
-  await page.evaluate(async () => {
-    await api("/api/profiles", { method: "POST", body: { name: "RS485 A", device: "fake:link-a", rtsMode: "high", rtsDelayMs: 1000 } });
-    await loadProfiles();
-  });
-  await page.locator("#tree .item .name", { hasText: /^RS485 A$/ }).dblclick();
-  await page.locator("#port-tree .item.port", { hasText: "fake:link-b" }).dblclick();
+  await withDevice("fake:link-a", "RS485 A", { rtsMode: "high", rtsDelayMs: 1000 });
+  await portRow("fake:link-a").locator(".name").dblclick();
+  await portRow("fake:link-b").locator(".name").dblclick();
   await page.waitForFunction(() => tabs.length === 2 && tabs.every((t) => t.state === "connected"));
   const ctsOfB = () => page.evaluate(() => tabs.find((t) => t.profile.device === "fake:link-b").lines?.cts);
   await page.waitForFunction(() => tabs.find((t) => t.profile.device === "fake:link-b").lines !== null, null, { timeout: 4000 });
@@ -821,7 +830,8 @@ async function startServer() {
     if (await page.locator(".tab .close.confirm").count()) await close.click();
   }
 
-  check("no page errors or console errors", problems.length === 0, problems);
+  const unexpected = problems.filter((p) => !/status of 409/.test(p));  // the device with scripts that was not deleted, on purpose
+  check("no page errors or console errors", unexpected.length === 0, unexpected);
   check("the program reports no data race or panic", !/DATA RACE|panic:/.test(server.child.stderrText), server.child.stderrText.slice(0, 600));
   await browser.close();
   server.child.kill();

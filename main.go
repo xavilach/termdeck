@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 )
 
@@ -46,7 +45,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "termdeck:", err)
 		os.Exit(1)
 	}
-	server := NewServer(NewStore(filepath.Join(dir, "profiles.json")), NewScriptStore(filepath.Join(dir, "scripts.json")), NewGroupStore(filepath.Join(dir, "groups.json")))
+	server := NewServer(dir)
 	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", *port))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "termdeck:", err)

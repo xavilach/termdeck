@@ -24,7 +24,7 @@ func TestAPuttySessionFileGivesASerialSession(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 	p := got[0]
-	if p.Name != "Bench board" || p.Device != "COM7" || p.Baud != 57600 || p.DataBits != 7 || p.StopBits != "2" || p.Parity != "even" || p.Flow != "rtscts" || p.Group != "PuTTY" {
+	if p.Name != "Bench board" || p.Device != "COM7" || p.Baud != 57600 || p.DataBits != 7 || p.StopBits != "2" || p.Parity != "even" || p.Flow != "rtscts" {
 		t.Errorf("%+v", p)
 	}
 	if n := len(parsePuttyFile("ssh", []byte("Protocol=ssh\nHostName=example.invalid\n"))); n != 0 {
@@ -72,14 +72,21 @@ func TestSessionsAreReadFromAFolderAndOverHTTP(t *testing.T) {
 	}
 }
 
-func TestPuttyFileCanBePostedToTheServer(t *testing.T) {
+func TestAPuttySessionBecomesADeviceAndItsPortIsRemembered(t *testing.T) {
 	ts := newTestServer(t)
 	body := `{"name":"x.reg","text":` + jsonString(puttyReg) + `}`
-	code, out := ts.do(t, "POST", "/api/putty", body, ts.secret)
-	if code != 200 || !strings.Contains(out, `"Dev board"`) {
-		t.Errorf("%d %s", code, out)
+	code, found := ts.do(t, "POST", "/api/putty", body, ts.secret)
+	if code != 200 || !strings.Contains(found, `"Dev board"`) {
+		t.Fatalf("%d %s", code, found)
 	}
-	if code, out := ts.do(t, "POST", "/api/putty", `{"name":"junk","text":"nothing here"}`, ts.secret); code != 200 || !strings.Contains(out, `"sessions":[]`) {
+	if code, out := ts.do(t, "POST", "/api/import", found, ts.secret); code != 200 || !strings.Contains(out, `"devices":1`) {
+		t.Fatalf("import %d %s", code, out)
+	}
+	_, layers := ts.do(t, "GET", "/api/layers?port=COM3", "", ts.secret)
+	if !strings.Contains(layers, `"name":"Dev board · COM3"`) || !strings.Contains(layers, `"baud":115200`) || !strings.Contains(layers, `"stopBits":"1.5"`) {
+		t.Errorf("COM3 opens with the device of the PuTTY session: %s", layers)
+	}
+	if code, out := ts.do(t, "POST", "/api/putty", `{"name":"junk","text":"nothing here"}`, ts.secret); code != 200 || !strings.Contains(out, `"devices":[]`) {
 		t.Errorf("%d %s", code, out)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -86,16 +87,18 @@ type Server struct {
 	sessionsMu sync.Mutex
 	sessions   map[string]*termSession // the sessions of the tabs, by the tab's id
 
-	portsMu sync.Mutex
-	ports   map[string]*termSession // ports that are open, by device, so no two tabs open the same one
-	store   *Store[Profile]
-	scripts *Store[Script]
-	groups  *Store[string]
-	auth    *Auth
+	portsMu     sync.Mutex
+	ports       map[string]*termSession // ports that are open, by device, so no two tabs open the same one
+	devices     *Store[Device]
+	portEntries *Store[PortEntry]
+	scripts     *Store[Script]
+	auth        *Auth
 }
 
-func NewServer(store *Store[Profile], scripts *Store[Script], groups *Store[string]) *Server {
-	return &Server{store: store, scripts: scripts, groups: groups, auth: NewAuth(), ports: map[string]*termSession{}, sessions: map[string]*termSession{}}
+// NewServer keeps its settings in dir: devices.json, ports.json and scripts.json.
+func NewServer(dir string) *Server {
+	return &Server{devices: newDeviceStore(filepath.Join(dir, "devices.json")), portEntries: newPortStore(filepath.Join(dir, "ports.json")),
+		scripts: NewScriptStore(filepath.Join(dir, "scripts.json")), auth: NewAuth(), ports: map[string]*termSession{}, sessions: map[string]*termSession{}}
 }
 
 func wsSecret(r *http.Request) string {
@@ -203,17 +206,19 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/virtual", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, virtualPorts())
 	})
-	mux.HandleFunc("GET /api/profiles", s.listProfiles)
-	mux.HandleFunc("POST /api/profiles", s.saveProfile)
-	mux.HandleFunc("PUT /api/profiles/{name}", s.saveProfile)
-	mux.HandleFunc("DELETE /api/profiles/{name}", s.deleteProfile)
+	mux.HandleFunc("GET /api/devices", s.listDevices)
+	mux.HandleFunc("POST /api/devices", s.saveDevice)
+	mux.HandleFunc("PUT /api/devices/{name}", s.saveDevice)
+	mux.HandleFunc("DELETE /api/devices/{name}", s.deleteDevice)
+	mux.HandleFunc("GET /api/portentries", s.listPortEntries)
+	mux.HandleFunc("PUT /api/portentries", s.savePortEntry)
+	mux.HandleFunc("DELETE /api/portentries/{port...}", s.deletePortEntry)
+	mux.HandleFunc("GET /api/layers", s.getLayers)
+	mux.HandleFunc("GET /api/presets", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, presets) })
 	mux.HandleFunc("GET /api/scripts", s.listScripts)
 	mux.HandleFunc("POST /api/scripts", s.saveScript)
 	mux.HandleFunc("PUT /api/scripts/{name}", s.saveScript)
 	mux.HandleFunc("DELETE /api/scripts/{name}", s.deleteScript)
-	mux.HandleFunc("GET /api/groups", s.listGroups)
-	mux.HandleFunc("POST /api/groups", s.addGroup)
-	mux.HandleFunc("DELETE /api/groups/{name}", s.deleteGroup)
 	mux.HandleFunc("GET /api/info", func(w http.ResponseWriter, r *http.Request) {
 		home, _ := configDir()
 		writeJSON(w, http.StatusOK, map[string]string{"version": version, "os": runtime.GOOS, "home": home})
@@ -256,35 +261,6 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"secret": secret})
 }
 
-func (s *Server) listProfiles(w http.ResponseWriter, r *http.Request) {
-	profiles, err := s.store.List()
-	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"profiles": []Profile{}, "error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"profiles": profiles})
-}
-
-func (s *Server) saveProfile(w http.ResponseWriter, r *http.Request) {
-	var p Profile
-	if !readJSON(w, r, &p) {
-		return
-	}
-	if err := s.store.Put(r.PathValue("name"), p); err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, p)
-}
-
-func (s *Server) deleteProfile(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.Delete(r.PathValue("name")); err != nil {
-		writeError(w, http.StatusNotFound, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-}
-
 func (s *Server) listScripts(w http.ResponseWriter, r *http.Request) {
 	scripts, err := s.scripts.List()
 	if err != nil {
@@ -308,54 +284,6 @@ func (s *Server) saveScript(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) deleteScript(w http.ResponseWriter, r *http.Request) {
 	if err := s.scripts.Delete(r.PathValue("name")); err != nil {
-		writeError(w, http.StatusNotFound, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-}
-
-func (s *Server) listGroups(w http.ResponseWriter, r *http.Request) {
-	groups, err := s.groups.List()
-	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"groups": []string{}, "error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
-}
-
-func (s *Server) addGroup(w http.ResponseWriter, r *http.Request) {
-	var body struct{ Name string }
-	if !readJSON(w, r, &body) {
-		return
-	}
-	if err := s.groups.Put("", body.Name); err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"name": strings.TrimSpace(body.Name)})
-}
-
-// deleteGroup removes a group name, but only when no session or script uses it.
-func (s *Server) deleteGroup(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	profiles, _ := s.store.List()
-	scripts, _ := s.scripts.List()
-	used := 0
-	for _, p := range profiles {
-		if p.Group == name {
-			used++
-		}
-	}
-	for _, sc := range scripts {
-		if sc.Group == name {
-			used++
-		}
-	}
-	if used > 0 {
-		writeError(w, http.StatusConflict, fmt.Errorf("group %q still has %d session(s) or script(s)", name, used))
-		return
-	}
-	if err := s.groups.Delete(name); err != nil {
 		writeError(w, http.StatusNotFound, err)
 		return
 	}

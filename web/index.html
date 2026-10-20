@@ -13,17 +13,17 @@
     <div id="sidebar-resize" role="separator" aria-orientation="vertical" aria-label="Width of the left column" tabindex="0" title="Drag to change the width of the left column (or use the arrow keys)"></div>
     <header class="brand"><span>termdeck</span>
       <span class="backup">
-        <button id="export-settings" title="Save all sessions, scripts and groups in a file">Export</button>
-        <button id="import-settings" title="Add the sessions, scripts and groups of a file saved with Export; items with the same name are replaced">Import</button>
+        <button id="export-settings" title="Save all devices, ports and scripts in a file">Export</button>
+        <button id="import-settings" title="Add the devices, ports and scripts of a file saved with Export; items with the same name are replaced">Import</button>
         <input type="file" id="import-file" accept=".json,application/json" hidden>
-        <button id="import-putty" title="Add the serial sessions of PuTTY: found on this computer (Registry, or ~/.putty/sessions), or from a .reg export or a session file you choose">PuTTY</button>
+        <button id="import-putty" title="Add the serial sessions of PuTTY as devices (their port is remembered with them): found on this computer (Registry, or ~/.putty/sessions), or from a .reg export or a session file you choose">PuTTY</button>
         <input type="file" id="putty-file" hidden>
         <button id="open-tunnel" title="Join two ports: what one receives is written to the other, and you see both directions">Tunnel</button>
         <button id="open-help" title="Shortcuts and the little languages of the settings (Alt+Shift+H)">Help</button>
       </span></header>
     <div id="problem" class="problem" role="status" hidden></div>
     <nav id="port-tree" aria-label="Serial ports"></nav>
-    <nav id="tree" aria-label="Groups, sessions, scripts and ports"></nav>
+    <nav id="tree" aria-label="Devices, their scripts and their ports"></nav>
   </aside>
   <main>
     <div id="panes" class="single"></div>
@@ -143,6 +143,11 @@
 <dialog id="panel" aria-label="Edit">
         <form id="profile-form" class="panel-page" autocomplete="off">
           <header><h2 id="profile-title">Profile</h2></header>
+          <p id="layer-note" class="muted"></p>
+          <div class="layer-tools">
+            <label title="Settings that suit a common kind of device. Choosing one fills them in the form; nothing is saved until you click Save.">Preset <select id="preset"><option value="">Choose…</option></select></label>
+            <button type="button" id="profile-move" title="Make the changes of this port the settings of its device, so that every port opened with the device has them">Move these changes to the device</button>
+          </div>
           <nav class="form-tabs" aria-label="Settings pages">
             <button type="button" data-form-page="port" aria-pressed="true">Port</button>
             <button type="button" data-form-page="receive" aria-pressed="false">Receive</button>
@@ -152,9 +157,8 @@
           </nav>
           <div class="form-page" data-form-page="port">
           <div class="grid">
-            <label title="The name this session has in the list on the left, for example &quot;Router console&quot; or &quot;Dev board&quot;.">Name <input name="name" required spellcheck="false"></label>
-            <label title="Sessions and scripts are organised in groups, like folders. A script is offered only for sessions of its group. Leave empty (or type General) to keep it in the General group.">Group <input name="group" list="groups" spellcheck="false" placeholder="General"></label>
-            <label title="The serial port to open on the computer running termdeck. On Windows it looks like COM3 (see Device Manager); on Linux /dev/ttyUSB0 or /dev/ttyACM0. The ports found are listed at the top of the left column and suggested here.">Port <input name="device" required list="ports" spellcheck="false"></label>
+            <label class="for-device" title="The name of the device, for example &quot;Router&quot; or &quot;Dev board&quot;. Ports opened with it start from its settings.">Device <input name="name" spellcheck="false"></label>
+            <label class="for-port" title="The port these settings are for. They are its own changes over the settings of its device.">Port <input name="device" readonly spellcheck="false"></label>
             <label title="The speed of the line, in bits per second. It must be the same on the device, otherwise you see garbage. Common values: 9600, 115200. Check the device&#x27;s manual; 115200 is a frequent default.">Baud <input name="baud" type="number" min="50" value="115200"></label>
             <label title="Number of data bits in each character. Almost every device uses 8. Change it only if the device&#x27;s manual says so.">Data bits <select name="dataBits"><option>8</option><option>7</option><option>6</option><option>5</option></select></label>
             <label title="A simple error check added to each character. None is by far the most common (with 8 data bits). Use Even, Odd, Mark or Space only if the device requires it.">Parity <select name="parity"><option value="none">None</option><option value="even">Even</option><option value="odd">Odd</option><option value="mark">Mark</option><option value="space">Space</option></select></label>
@@ -300,7 +304,7 @@
               <div class="checks">
                 <label class="check" title="When the bell rings in a tab you are not looking at, its tab flashes until you open it."><input name="bellTab" type="checkbox"> Flash the tab</label>
               </div>
-              <label title="A sound to play instead of the beep (a short .wav or .mp3, up to 300 KB). It is saved in the session.">Bell sound <input type="file" id="bell-file" accept="audio/*"> <span id="bell-name" class="muted"></span> <button type="button" id="bell-clear" title="Go back to the default beep">Remove</button><input type="hidden" name="bellSound"></label>
+              <label title="A sound to play instead of the beep (a short .wav or .mp3, up to 300 KB). It is saved with these settings.">Bell sound <input type="file" id="bell-file" accept="audio/*"> <span id="bell-name" class="muted"></span> <button type="button" id="bell-clear" title="Go back to the default beep">Remove</button><input type="hidden" name="bellSound"></label>
             </fieldset>
           </div>
           <p id="profile-error" class="problem" hidden></p>
@@ -316,8 +320,8 @@
         <form id="script-form" class="panel-page" autocomplete="off" hidden>
           <header><h2 id="script-title">Script</h2></header>
           <div class="grid">
-            <label title="The name this session has in the list on the left, for example &quot;Router console&quot; or &quot;Dev board&quot;.">Name <input name="name" required spellcheck="false"></label>
-            <label title="Sessions and scripts are organised in groups, like folders. A script is offered only for sessions of its group. Leave empty (or type General) to keep it in the General group.">Group <input name="group" list="groups" spellcheck="false" placeholder="General"></label>
+            <label title="The name of the script, for example &quot;boot&quot; or &quot;flash&quot;.">Name <input name="name" required spellcheck="false"></label>
+            <label title="The device the script is for: it is listed with it. Leave empty (or Generic) for a script of every port.">Device <input name="device" list="devices" spellcheck="false" placeholder="Generic"></label>
           </div>
           <label title="The commands to send, one per line. The Enter key chosen in the session is added to each one, so write only the text, for example &quot;help&quot;. A line starting with @ is made of steps instead, separated by semicolons (see Help, Steps): text, hex, end, check, dtr, rts, break, wait, expect, baud, file, log, mark. Example: @dtr=1; wait=500; dtr=0. To send text that starts with @, write @@. Empty lines at the end are ignored.">Commands
             <textarea name="commands" rows="10" spellcheck="false" required></textarea></label>
@@ -381,7 +385,7 @@
   <article>
     <header><h2>termdeck help</h2><button type="button" data-close-help>Close</button></header>
     <h3>Keys</h3>
-    <p><kbd>Alt+Shift+N</kbd> new session · <kbd>W</kbd> close tab · <kbd>S</kbd> layout · <kbd>B</kbd> left column · <kbd>M</kbd> mark · <kbd>PageUp</kbd>/<kbd>PageDown</kbd> other tab · <kbd>←</kbd>/<kbd>→</kbd> move the tab · <kbd>H</kbd> this help.<br>
+    <p><kbd>Alt+Shift+N</kbd> new device · <kbd>W</kbd> close tab · <kbd>S</kbd> layout · <kbd>B</kbd> left column · <kbd>M</kbd> mark · <kbd>PageUp</kbd>/<kbd>PageDown</kbd> other tab · <kbd>←</kbd>/<kbd>→</kbd> move the tab · <kbd>H</kbd> this help.<br>
     <kbd>Ctrl+Shift+C</kbd> copy · <kbd>V</kbd> paste into the send bar · <kbd>L</kbd> clear · <kbd>F</kbd> find. In the send bar: <kbd>Enter</kbd> sends, <kbd>↑</kbd>/<kbd>↓</kbd> recall, <kbd>Alt+T</kbd>/<kbd>H</kbd>/<kbd>D</kbd>/<kbd>B</kbd> choose Text, Hex, Decimal, Binary.</p>
     <h3>Sending</h3>
     <p>Only the send bar sends; the output is read-only. Text accepts <code>\r \n \t \0 \\ \xNN</code>. Hex, Decimal and Binary refuse wrong characters and group the digits. <b>Cmd</b> takes steps (below). <b>End</b> is added after the data (None, CR, LF, CR LF, Custom); <b>Check</b> adds a sum, XOR or CRC after byte data. <b>Auto</b> sends again every N ms. <b>File…</b> sends a file as it is.</p>
@@ -421,7 +425,7 @@
   </form>
 </dialog>
 <datalist id="ports"></datalist>
-<datalist id="groups"></datalist>
+<datalist id="devices"></datalist>
 
 <script src="/vendor/xterm.js"></script>
 <script src="/vendor/addon-fit.js"></script>

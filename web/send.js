@@ -65,7 +65,7 @@ function sendRaw(tab, bytes) {
   if (tab.state === "connected") sendMessage(tab, { type: "raw", bytes: b64(bytes) });
 }
 
-// What was sent from the send bar is remembered per session, also after the page is reloaded.
+// What was sent from the send bar is remembered per port (whatever device it opens with), also after a reload.
 const HISTORY_MAX = 50;
 
 const historyKey = (name) => `termdeck.history.${name}`;
@@ -77,7 +77,7 @@ function rememberSent(tab, entry) {
   if (entry.text && !(last && last.type === entry.type && last.text === entry.text)) tab.sent.push(entry);
   tab.sent = tab.sent.slice(-HISTORY_MAX);
   tab.sentAt = tab.sent.length;
-  stored.write(historyKey(tab.profile.name), tab.sent);
+  stored.write(historyKey(tab.port || tab.profile.name), tab.sent);
 }
 
 // The send bar: what is typed goes out as text, bytes or steps. It says whether something was sent.

@@ -34,10 +34,34 @@ w.WebSocket = class {
 w.WebSocket.OPEN = 1;
 let portList = ["/dev/ttyUSB0"];
 const profile = { name: "p", device: "fake:echo", baud: 115200, dataBits: 8, parity: "none", stopBits: "1", flow: "none", enter: "lf", group: "", localEcho: true, rxMarker: "", txMarker: "TX ", view: "text", newLine: "terminal" };
+const requests = [];
+let deviceList = [{ name: "Generic", settings: { fontSize: 15 } }, { name: "Board", settings: { baud: 57600, enter: "lf" } }];
+let entryList = [];
 w.fetch = async (url, opt) => {
-  const body = { "/api/login": { secret: "s" }, "/api/profiles": { profiles: [profile] }, "/api/groups": { groups: ["Lab"] }, "/api/scripts": { scripts: [{ name: "boot", group: "", commands: ["a"], delayMs: 100, loop: false, count: 0 }] }, "/api/ports": portList, "/api/portinfo": { "/dev/ttyUSB0": { name: "FTDI FT232R", id: "0403:6001", info: "FTDI FT232R USB UART · 0403:6001 · A50285BI" } }, "/api/virtual": [{ name: "fake:echo", what: "echo" }], "/api/ping": {} }[url] ?? {};
+  requests.push({ url, method: opt?.method || "GET", body: opt?.body ? JSON.parse(opt.body) : undefined });
+  const [path, query] = url.split("?");
+  const params = new URLSearchParams(query || "");
+  let body = { "/api/login": { secret: "s" }, "/api/devices": { devices: deviceList }, "/api/portentries": { ports: entryList }, "/api/scripts": { scripts: [{ name: "boot", device: "", commands: ["a"], delayMs: 100, loop: false, count: 0 }] }, "/api/ports": portList, "/api/portinfo": { "/dev/ttyUSB0": { name: "FTDI FT232R", id: "0403:6001", serial: "A50285BI", info: "FTDI FT232R USB UART · 0403:6001 · A50285BI" } }, "/api/virtual": [{ name: "fake:echo", what: "echo" }], "/api/ping": {}, "/api/presets": [{ name: "Hex dump", what: "bytes", settings: { view: "hex" } }] }[path] ?? {};
+  if (path === "/api/layers") {  // the server merges the layers: defaults, Generic, the device, the port
+    const port = params.get("port"); const entry = entryList.find((e) => e.port === port) || { port, settings: {} };
+    const device = deviceList.find((d) => d.name === (params.get("device") || entry.device || "Generic")) || deviceList[0];
+    const defaults = { ...formDefaults(), ...profile, name: "", device: "", baud: 115200, fontSize: 14 };
+    body = { defaults, generic: deviceList[0].settings, device, port: port ? entry : undefined,
+             profile: port ? { ...defaults, ...deviceList[0].settings, ...device.settings, ...entry.settings, device: port, name: device.name === "Generic" ? port : `${device.name} · ${port}` } : undefined };
+  }
+  if (path === "/api/portentries" && opt?.method === "PUT") { const e = JSON.parse(opt.body); entryList = [...entryList.filter((x) => x.port !== e.port), e]; body = e; }
   return { ok: true, json: async () => body };
 };
+w.__profile = profile;
+// The defaults the server would send: every field of the settings form, with the value the form starts with.
+function formDefaults() {
+  const out = {};
+  for (const f of w.document.querySelector("#profile-form").elements) {
+    if (!f.name) continue;
+    out[f.name] = f.type === "checkbox" ? ["dtr", "rts", "warnClose", "autoWrap"].includes(f.name) : f.type === "number" ? Number(f.getAttribute("value") || 0) : f.tagName === "SELECT" ? f.options[0]?.value ?? "" : "";
+  }
+  return out;
+}
 
 const ctx = dom.getInternalVMContext();
 const run = (code, name) => new vm.Script(code, { filename: name }).runInContext(ctx);
@@ -62,7 +86,7 @@ const tab = () => run("tabs[0]", "x");
 (async () => {
   await sleep(50);
   check("startup did not replace the page", !!q("#panes .pane"), w.document.body.textContent.slice(0, 100));
-  run('openTab(profiles[0])', "x");
+  run('openTab(window.__profile)', "x");
   await sleep(10);
   const ws = sockets[0];
   check("a tab attaches to its session with an id, its settings and its view", ws && /\/api\/terminal\?id=[0-9a-f]{24}$/.test(ws.url) && ws.sent[0]?.type === "hello" && ws.sent[0].profile.name === "p" && ws.sent[0].view.mode === "text", ws && ws.sent);
@@ -136,7 +160,7 @@ const tab = () => run("tabs[0]", "x");
   input.value = "";
   // the history keeps type and data, and survives a reload (localStorage)
   check("sent data is remembered with its type", run("tabs[0].sent.length", "x") >= 3 && run("tabs[0].sent.some((e) => e.type === 'hex' && e.text === '41 42')", "x"));
-  check("and stored for the session", run("JSON.parse(localStorage.getItem('termdeck.history.p')).length", "x") >= 3);
+  check("and stored for the port", run("JSON.parse(localStorage.getItem('termdeck.history.fake:echo')).length", "x") >= 3);
   input.value = ""; typ.value = "text"; fire(typ, "change");
   input.dispatchEvent(new w.KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
   check("Up recalls the last entry with its type", typ.value === "hex" && input.value === "41 42", { type: typ.value, value: input.value });
@@ -214,7 +238,7 @@ const tab = () => run("tabs[0]", "x");
   t.term.keyHandler({ type: "keydown", key: "L", code: "KeyL", ctrlKey: true, shiftKey: true });
   check("Ctrl+Shift+L clears", ws.sent.pop().type === "clear");
   // two sessions on the same port are refused
-  run("openTab({...profiles[0], name: 'other'})", "x");
+  run("openTab({...window.__profile, name: 'other'})", "x");
   check("same port is not opened twice", run("tabs.length", "x") === 1);
 
   check("a USB port shows what it is under its name", /FTDI FT232R USB UART · 0403:6001/.test([...w.document.querySelectorAll("#port-tree .item.port")].map((r) => r.textContent).join("|")));
@@ -223,17 +247,18 @@ const tab = () => run("tabs[0]", "x");
   run("portPollMs = 30; pollPorts()", "x");
   portList = ["/dev/ttyUSB0", "/dev/ttyUSB1"];
   await sleep(150);
-  check("a new port shows up by itself", [...w.document.querySelectorAll("#port-tree .item.port")].some((r) => r.textContent === "/dev/ttyUSB1"));
+  const portRowNames = () => [...w.document.querySelectorAll("#port-tree .item.port .name")].map((r) => r.textContent);
+  check("a new port shows up by itself", portRowNames().includes("/dev/ttyUSB1"), portRowNames());
   portList = ["/dev/ttyUSB1"];
   await sleep(150);
-  check("and a port that was pulled out goes", ![...w.document.querySelectorAll("#port-tree .item.port")].some((r) => r.textContent === "/dev/ttyUSB0"));
+  check("and a port that was pulled out goes", !portRowNames().includes("/dev/ttyUSB0"), portRowNames());
   const rowsBefore = w.document.querySelector("#port-tree .item.port");
   await sleep(100);
   check("an unchanged list is not drawn again", w.document.querySelector("#port-tree .item.port") === rowsBefore);
   run("portPollMs = 600000", "x");
 
   // a message while the connection is still opening is dropped, not thrown (found by the monkey test)
-  const sentOk = run("openTab({ ...profiles[0], name: 'opening', device: 'fake:binary' }); sendMessage(tabs[tabs.length - 1], { type: 'mark' })", "x");
+  const sentOk = run("openTab({ ...window.__profile, name: 'opening', device: 'fake:binary' }); sendMessage(tabs[tabs.length - 1], { type: 'mark' })", "x");
   check("a message to a connection that is still opening is not sent and does not throw", sentOk === false && errors.length === 0, errors);
   run("closeTab(tabs[tabs.length - 1])", "x");
 
@@ -249,7 +274,7 @@ const tab = () => run("tabs[0]", "x");
   // style snapshot for refactoring the style sheet: SNAPSHOT=file node smoke.js
   if (process.env.SNAPSHOT) {
     q("#tree .item").click();
-    run("openTab({...profiles[0], name: 'second', device: 'fake:shell'})", "x");
+    run("openTab({...window.__profile, name: 'second', device: 'fake:shell'})", "x");
     await sleep(10);
     const rows = {};
     const css = fs.readFileSync(web + "app.css", "utf8");
@@ -265,7 +290,7 @@ const tab = () => run("tabs[0]", "x");
     run("showLines()", "x");
     fs.writeFileSync(process.env.SNAPSHOT, JSON.stringify(rows, null, 1));
   }
-  run("openTab({...profiles[0], name: 'main', device: 'COM61'})", "x");
+  run("openTab({...window.__profile, name: 'main', device: 'COM61'})", "x");
   await sleep(10);
   const mainWs = run("tabs[0].ws", "x");
   attach(mainWs, "connected");
@@ -285,7 +310,7 @@ const tab = () => run("tabs[0]", "x");
   check("and the button hides it again", q(".graphbar").hidden);
 
   // "All tabs": the same data goes to every connected tab
-  run("openTab({ ...profiles[0], name: 'all one', device: 'COM81' }); openTab({ ...profiles[0], name: 'all two', device: 'COM82' })", "x");
+  run("openTab({ ...window.__profile, name: 'all one', device: 'COM81' }); openTab({ ...window.__profile, name: 'all two', device: 'COM82' })", "x");
   const allOne = run("tabs.find((t) => t.profile.name === 'all one')", "x"), allTwo = run("tabs.find((t) => t.profile.name === 'all two')", "x");
   await sleep(10);  // the sockets of the stub are open a moment after they are made
   json(allOne.ws, { type: "state", state: "connected", message: "" }); json(allTwo.ws, { type: "state", state: "connected", message: "" });
@@ -302,7 +327,7 @@ const tab = () => run("tabs[0]", "x");
   // notifications for lines that match a notify rule, only while the tab is not in sight
   const sent = [];
   w.Notification = class { constructor(title, options) { sent.push({ title, body: options.body }); } static get permission() { return "granted"; } };
-  run("openTab({ ...profiles[0], name: 'noisy', device: 'COM71', highlights: 'FAULT = red+notify' }); openTab({ ...profiles[0], name: 'quiet', device: 'COM72' })", "x");
+  run("openTab({ ...window.__profile, name: 'noisy', device: 'COM71', highlights: 'FAULT = red+notify' }); openTab({ ...window.__profile, name: 'quiet', device: 'COM72' })", "x");
   const noisy = run("tabs.find((t) => t.profile.name === 'noisy')", "x");
   await sleep(10);
   run("activate(tabs.find((t) => t.profile.name === 'noisy'))", "x");
@@ -331,7 +356,7 @@ const tab = () => run("tabs[0]", "x");
   check("a send scrolls the output to the bottom", (bottomTab.term.bottomed || 0) === bottomBefore + 1, bottomTab.term.bottomed);
 
   // a tab that is not shown gets an activity mark when data arrives, and the title counts them
-  run("openTab({ ...profiles[0], name: 'bg one', device: 'COM91' }); openTab({ ...profiles[0], name: 'bg two', device: 'COM92' })", "x");
+  run("openTab({ ...window.__profile, name: 'bg one', device: 'COM91' }); openTab({ ...window.__profile, name: 'bg two', device: 'COM92' })", "x");
   const bgTwo = run("tabs.find((t) => t.profile.name === 'bg two')", "x");
   run("activate(tabs.find((t) => t.profile.name === 'bg one'))", "x");
   bin(bgTwo.ws, "background data");
@@ -376,7 +401,7 @@ const tab = () => run("tabs[0]", "x");
   json(qws, { type: "state", state: "connected", message: "" });
 
   // tabs come back after a reload, attached to their sessions
-  run("openTab({ ...profiles[0], name: 'second tab', device: 'COM62' })", "x");
+  run("openTab({ ...window.__profile, name: 'second tab', device: 'COM62' })", "x");
   await sleep(10);
   run("saveTabs()", "x");
   const saved = w.sessionStorage.getItem("termdeck.tabs");
@@ -393,6 +418,43 @@ const tab = () => run("tabs[0]", "x");
   check("each tab attaches again to its session, with its id", again.length === names.length && again.every((s, i) => s.url.endsWith(`id=${ids[i]}`) && s.sent[0]?.type === "hello"), again.map((s) => s.url));
   attach(again[0], "connected"); attach(again[1], "closed");
   check("a restored tab does not open a port by itself: the session says what it is doing", !again.some((s) => s.sent.some((m) => m.type === "open")) && run("tabs[0].state", "x") === "connected" && run("tabs[1].state", "x") === "closed");
+
+  // devices: a port opens with its device, and its settings are layers
+  const usbRow = () => [...w.document.querySelectorAll("#port-tree .item.port")].find((r) => r.querySelector(".name").textContent === "/dev/ttyUSB1");
+  const chooser = usbRow().querySelector(".device-choice");
+  check("a port offers Generic, the devices and a new device", [...chooser.options].map((o) => o.textContent).join(",") === "Generic,Board,New device…" && chooser.value === "Generic", [...chooser.options].map((o) => o.textContent));
+  check("the devices are listed with Generic first", [...w.document.querySelectorAll("#tree .node-head.group .title")].map((n) => n.textContent).join(",") === "Generic,Board");
+  chooser.value = "Board"; fire(chooser, "change");
+  await sleep(20);
+  check("choosing a device remembers it for the port", entryList.some((e) => e.port === "/dev/ttyUSB1" && e.device === "Board"), entryList);
+  usbRow().dispatchEvent(new w.MouseEvent("dblclick", { bubbles: true }));
+  await sleep(20);
+  const boardTab = run("tabs.find((t) => t.port === '/dev/ttyUSB1')", "x");
+  check("a double click opens the port with its device's settings", boardTab && boardTab.profile.name === "Board · /dev/ttyUSB1" && boardTab.profile.baud === 57600 && boardTab.profile.enter === "lf" && boardTab.profile.fontSize === 15, boardTab && boardTab.profile);
+  await run("editPort('/dev/ttyUSB1')", "x");
+  const baud = q("#profile-form [name=baud]");
+  check("a port's settings show what comes from its device", q("#profile-form").classList.contains("editing-port") && baud.closest("label").classList.contains("inherited") && baud.closest("label").dataset.from === "Board" && baud.value === "57600", { from: baud.closest("label").dataset.from, value: baud.value });
+  baud.value = "9600"; fire(baud, "input");
+  check("a value changed here is the port's own, with a way back", baud.closest("label").classList.contains("own") && !baud.closest("label").querySelector(".reset").hidden);
+  requests.length = 0;
+  q("#profile-form").dispatchEvent(new w.Event("submit", { cancelable: true }));
+  await sleep(30);
+  const savedPort = requests.find((r) => r.url === "/api/portentries" && r.method === "PUT");
+  check("saving keeps only what differs from the device", savedPort && JSON.stringify(savedPort.body.settings) === JSON.stringify({ baud: 9600 }) && savedPort.body.device === "Board", savedPort && savedPort.body);
+  check("the open tab follows its new settings", run("tabs.find((t) => t.port === '/dev/ttyUSB1').profile.baud", "x") === 9600);
+  await run("editDevice(devices[0])", "x");
+  check("Generic shows what it changed from the defaults", q("#profile-form [name=fontSize]").closest("label").classList.contains("own") && q("#profile-form [name=baud]").closest("label").dataset.from === "the defaults");
+  run("showLines()", "x");
+  const chooser2 = usbRow().querySelector(".device-choice");
+  chooser2.value = "+new"; fire(chooser2, "change");
+  await sleep(20);
+  q("#profile-form [name=name]").value = "Bench";
+  requests.length = 0;
+  q("#profile-form").dispatchEvent(new w.Event("submit", { cancelable: true }));
+  await sleep(30);
+  const made = requests.find((r) => r.url === "/api/devices" && r.method === "POST");
+  const moved = requests.find((r) => r.url === "/api/portentries" && r.method === "PUT");
+  check("a new device takes the port's changes, and the port opens with it", made && made.body.name === "Bench" && made.body.settings.baud === 9600 && moved && moved.body.device === "Bench" && JSON.stringify(moved.body.settings) === "{}", { made: made && made.body, moved: moved && moved.body });
   check("no errors", errors.length === 0, errors);
   console.log(failed ? `${failed} FAILED` : "all passed");
   process.exit(failed ? 1 : 0);

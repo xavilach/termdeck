@@ -57,7 +57,7 @@ type testServer struct {
 func newTestServer(t *testing.T) *testServer {
 	t.Helper()
 	dir := t.TempDir()
-	s := NewServer(NewStore(filepath.Join(dir, "profiles.json")), NewScriptStore(filepath.Join(dir, "scripts.json")), NewGroupStore(filepath.Join(dir, "groups.json")))
+	s := NewServer(dir)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
 	t.Cleanup(s.endSessions) // the sessions would outlive the test, and keep their ports
@@ -82,13 +82,13 @@ func (ts *testServer) do(t *testing.T, method, path, body, secret string) (int, 
 
 func TestAPIRequiresTheSecretAndLinksWorkOnce(t *testing.T) {
 	ts := newTestServer(t)
-	if code, _ := ts.do(t, "GET", "/api/profiles", "", ""); code != 401 {
+	if code, _ := ts.do(t, "GET", "/api/devices", "", ""); code != 401 {
 		t.Errorf("no secret: got %d, want 401", code)
 	}
-	if code, _ := ts.do(t, "GET", "/api/profiles", "", "wrong"); code != 401 {
+	if code, _ := ts.do(t, "GET", "/api/devices", "", "wrong"); code != 401 {
 		t.Errorf("wrong secret: got %d, want 401", code)
 	}
-	if code, _ := ts.do(t, "GET", "/api/profiles", "", ts.secret); code != 200 {
+	if code, _ := ts.do(t, "GET", "/api/devices", "", ts.secret); code != 200 {
 		t.Errorf("right secret: got %d, want 200", code)
 	}
 	if code, _ := ts.do(t, "POST", "/api/login", `{"token":"nope"}`, ""); code != 403 {
@@ -101,7 +101,7 @@ func TestAPIRequiresTheSecretAndLinksWorkOnce(t *testing.T) {
 
 func TestRefusesOtherHostsAndOrigins(t *testing.T) {
 	ts := newTestServer(t)
-	req, _ := http.NewRequest("GET", ts.URL+"/api/profiles", nil)
+	req, _ := http.NewRequest("GET", ts.URL+"/api/devices", nil)
 	req.Header.Set(authHeader, ts.secret)
 	req.Header.Set("Origin", "http://evil.example")
 	resp, _ := http.DefaultClient.Do(req)
@@ -116,20 +116,87 @@ func TestRefusesOtherHostsAndOrigins(t *testing.T) {
 	}
 }
 
-func TestProfilesOverHTTP(t *testing.T) {
+func TestTheLayersMakeTheSettingsOfAPort(t *testing.T) {
 	ts := newTestServer(t)
-	if code, body := ts.do(t, "POST", "/api/profiles", `{"name":"board","device":"/dev/ttyUSB0","baud":9600,"flow":"xonxoff"}`, ts.secret); code != 200 {
-		t.Fatalf("save: %d %s", code, body)
+	put := func(method, path, body string) {
+		t.Helper()
+		if code, out := ts.do(t, method, path, body, ts.secret); code != 200 {
+			t.Fatalf("%s %s: %d %s", method, path, code, out)
+		}
 	}
-	if code, _ := ts.do(t, "POST", "/api/profiles", `{"name":"bad","device":""}`, ts.secret); code != 400 {
-		t.Errorf("invalid profile: got %d, want 400", code)
+	put("PUT", "/api/devices/Generic", `{"name":"Generic","settings":{"fontSize":16,"baud":9600}}`)
+	put("POST", "/api/devices", `{"name":"Board","settings":{"baud":57600,"enter":"lf","quickSends":"Hi | text | hello"}}`)
+	put("PUT", "/api/portentries", `{"port":"COM3","device":"Board","settings":{"flow":"rtscts"}}`)
+	layers := func(query string) map[string]any {
+		_, out := ts.do(t, "GET", "/api/layers?"+query, "", ts.secret)
+		var m map[string]any
+		json.Unmarshal([]byte(out), &m)
+		return m
 	}
-	_, body := ts.do(t, "GET", "/api/profiles", "", ts.secret)
-	if !strings.Contains(body, `"xonxoff"`) {
-		t.Errorf("flow control was not stored: %s", body)
+	m := layers("port=COM3")
+	p := m["profile"].(map[string]any)
+	if p["name"] != "Board · COM3" || p["device"] != "COM3" || p["baud"] != float64(57600) || p["fontSize"] != float64(16) || p["flow"] != "rtscts" || p["enter"] != "lf" {
+		t.Errorf("Generic, then the device, then the port: %v", p)
 	}
-	if code, _ := ts.do(t, "DELETE", "/api/profiles/board", "", ts.secret); code != 200 {
-		t.Errorf("delete: %d", code)
+	if p := layers("port=COM3&device=Generic")["profile"].(map[string]any); p["baud"] != float64(9600) || p["flow"] != "rtscts" || p["name"] != "COM3" {
+		t.Errorf("the same port with another device keeps its own changes: %v", p)
+	}
+	if p := layers("port=COM7")["profile"].(map[string]any); p["baud"] != float64(9600) || p["flow"] != "none" {
+		t.Errorf("a port never seen starts from Generic: %v", p)
+	}
+	for _, bad := range []string{`{"name":"X","settings":{"baud":1}}`, `{"name":"X","settings":{"colour":"red"}}`, `{"name":"X","settings":{"device":"COM1"}}`, `{"name":"","settings":{}}`, `{"name":"generic"}`} {
+		if code, _ := ts.do(t, "POST", "/api/devices", bad, ts.secret); code != 400 {
+			t.Errorf("%s: got %d, want 400", bad, code)
+		}
+	}
+	if code, _ := ts.do(t, "PUT", "/api/portentries", `{"port":"COM4","device":"Nobody"}`, ts.secret); code != 400 {
+		t.Errorf("a port with a device that does not exist: got %d", code)
+	}
+	if code, _ := ts.do(t, "DELETE", "/api/devices/Generic", "", ts.secret); code != 400 {
+		t.Errorf("Generic cannot be deleted: %d", code)
+	}
+	_, list := ts.do(t, "GET", "/api/devices", "", ts.secret)
+	if !strings.HasPrefix(list, `{"devices":[{"name":"Generic"`) || !strings.Contains(list, `"Board"`) {
+		t.Errorf("Generic comes first: %s", list)
+	}
+}
+
+func TestAPortIsFoundByItsAdapterOnAnotherPortName(t *testing.T) {
+	ts := newTestServer(t)
+	ts.do(t, "POST", "/api/devices", `{"name":"Board","settings":{"baud":57600}}`, ts.secret)
+	ts.do(t, "PUT", "/api/portentries", `{"port":"/dev/ttyUSB0","serial":"A50285BI","device":"Board","settings":{"reconnect":true}}`, ts.secret)
+	_, out := ts.do(t, "GET", "/api/layers?port=/dev/ttyUSB1&serial=A50285BI", "", ts.secret)
+	if !strings.Contains(out, `"name":"Board · /dev/ttyUSB1"`) || !strings.Contains(out, `"reconnect":true`) {
+		t.Errorf("the adapter moved to ttyUSB1 and keeps its settings: %s", out)
+	}
+	ts.do(t, "PUT", "/api/portentries", `{"port":"/dev/ttyUSB1","serial":"A50285BI","device":"Board","settings":{}}`, ts.secret)
+	if _, list := ts.do(t, "GET", "/api/portentries", "", ts.secret); strings.Contains(list, "ttyUSB0") || !strings.Contains(list, "ttyUSB1") {
+		t.Errorf("saving it under its new name forgets the old one: %s", list)
+	}
+}
+
+func TestADeviceWithScriptsStaysAndARenameTakesItsPortsAndScripts(t *testing.T) {
+	ts := newTestServer(t)
+	ts.do(t, "POST", "/api/devices", `{"name":"Board","settings":{}}`, ts.secret)
+	ts.do(t, "PUT", "/api/portentries", `{"port":"COM3","device":"Board"}`, ts.secret)
+	ts.do(t, "POST", "/api/scripts", `{"name":"boot","device":"Board","commands":["x"]}`, ts.secret)
+	if code, _ := ts.do(t, "DELETE", "/api/devices/Board", "", ts.secret); code != 409 {
+		t.Errorf("a device with scripts: got %d, want 409", code)
+	}
+	if code, out := ts.do(t, "PUT", "/api/devices/Board", `{"name":"Bench","settings":{}}`, ts.secret); code != 200 {
+		t.Fatalf("rename %d %s", code, out)
+	}
+	_, ports := ts.do(t, "GET", "/api/portentries", "", ts.secret)
+	_, scripts := ts.do(t, "GET", "/api/scripts", "", ts.secret)
+	if !strings.Contains(ports, `"device":"Bench"`) || !strings.Contains(scripts, `"device":"Bench"`) {
+		t.Errorf("ports %s scripts %s", ports, scripts)
+	}
+	ts.do(t, "DELETE", "/api/scripts/boot", "", ts.secret)
+	if code, _ := ts.do(t, "DELETE", "/api/devices/Bench", "", ts.secret); code != 200 {
+		t.Errorf("delete %d", code)
+	}
+	if _, ports := ts.do(t, "GET", "/api/portentries", "", ts.secret); !strings.Contains(ports, `"device":""`) {
+		t.Errorf("its ports go back to Generic: %s", ports)
 	}
 }
 
@@ -297,7 +364,7 @@ func TestScriptSendsItsCommandsWithADelayAndLoops(t *testing.T) {
 	ts := newTestServer(t)
 	master, slave := newPty(t)
 	if code, body := ts.do(t, "POST", "/api/scripts",
-		`{"name":"boot","group":"","commands":["one","two"],"delayMs":50,"loop":true,"count":2}`, ts.secret); code != 200 {
+		`{"name":"boot","device":"","commands":["one","two"],"delayMs":50,"loop":true,"count":2}`, ts.secret); code != 200 {
 		t.Fatalf("save script: %d %s", code, body)
 	}
 	c, ctx := dialTerminal(t, ts)
@@ -339,30 +406,6 @@ func TestScriptCanBeStoppedAndNeedsAnOpenPort(t *testing.T) {
 	waitFor(t, c, ctx, "script", "running")
 	sendJSON(t, c, ctx, map[string]any{"type": "stop"})
 	waitFor(t, c, ctx, "script", "stopped")
-}
-
-func TestGroupsCanBeCreatedAndOnlyEmptyOnesDeleted(t *testing.T) {
-	ts := newTestServer(t)
-	if code, body := ts.do(t, "POST", "/api/groups", `{"name":"  Lab "}`, ts.secret); code != 200 {
-		t.Fatalf("create: %d %s", code, body)
-	}
-	if code, _ := ts.do(t, "POST", "/api/groups", `{"name":"lab"}`, ts.secret); code != 400 {
-		t.Errorf("duplicate group: got %d, want 400", code)
-	}
-	if code, _ := ts.do(t, "POST", "/api/groups", `{"name":""}`, ts.secret); code != 400 {
-		t.Errorf("empty name: got %d, want 400", code)
-	}
-	ts.do(t, "POST", "/api/profiles", `{"name":"b","device":"COM1","group":"Lab"}`, ts.secret)
-	if code, _ := ts.do(t, "DELETE", "/api/groups/Lab", "", ts.secret); code != 409 {
-		t.Errorf("group in use: got %d, want 409", code)
-	}
-	ts.do(t, "DELETE", "/api/profiles/b", "", ts.secret)
-	if code, _ := ts.do(t, "DELETE", "/api/groups/Lab", "", ts.secret); code != 200 {
-		t.Errorf("empty group: got %d, want 200", code)
-	}
-	if _, body := ts.do(t, "GET", "/api/groups", "", ts.secret); !strings.Contains(body, `"groups":[]`) {
-		t.Errorf("groups left: %s", body)
-	}
 }
 
 func TestPingNeedsTheSecret(t *testing.T) {
@@ -743,10 +786,10 @@ func TestScriptsAreListedAndDeletedOverHTTP(t *testing.T) {
 	if code, _ := ts.do(t, "DELETE", "/api/scripts/s", "", ts.secret); code != 404 {
 		t.Errorf("delete twice: got %d, want 404", code)
 	}
-	if code, _ := ts.do(t, "DELETE", "/api/profiles/none", "", ts.secret); code != 404 {
-		t.Errorf("delete a missing profile: got %d, want 404", code)
+	if code, _ := ts.do(t, "DELETE", "/api/devices/none", "", ts.secret); code != 404 {
+		t.Errorf("delete a missing device: got %d, want 404", code)
 	}
-	if code, _ := ts.do(t, "POST", "/api/profiles", `{not json`, ts.secret); code != 400 {
+	if code, _ := ts.do(t, "POST", "/api/devices", `{not json`, ts.secret); code != 400 {
 		t.Errorf("broken JSON: got %d, want 400", code)
 	}
 }
@@ -1511,4 +1554,61 @@ func sortedCopy(list []string) []string {
 	out := append([]string(nil), list...)
 	sort.Strings(out)
 	return out
+}
+
+// The defaults the server gives a new device must be values the form accepts, or the form cannot be saved.
+func TestTheDefaultsFitTheLimitsOfTheForm(t *testing.T) {
+	page, _ := webFiles.ReadFile("web/index.html")
+	defaults := defaultSettings()
+	attr := func(tag, name string) (float64, bool) {
+		m := regexp.MustCompile(name + `="(-?[0-9.]+)"`).FindStringSubmatch(tag)
+		if m == nil {
+			return 0, false
+		}
+		v, err := strconv.ParseFloat(m[1], 64)
+		return v, err == nil
+	}
+	checked := 0
+	for _, tag := range regexp.MustCompile(`<input [^>]*type="number"[^>]*>`).FindAllString(string(page), -1) {
+		name := regexp.MustCompile(`name="(\w+)"`).FindStringSubmatch(tag)
+		if name == nil {
+			continue
+		}
+		value, ok := defaults[name[1]].(float64)
+		if !ok {
+			continue
+		}
+		checked++
+		if min, ok := attr(tag, "min"); ok && value < min {
+			t.Errorf("%s: the default %v is below the form's min %v", name[1], value, min)
+		}
+		if max, ok := attr(tag, "max"); ok && value > max {
+			t.Errorf("%s: the default %v is above the form's max %v", name[1], value, max)
+		}
+	}
+	if checked < 8 {
+		t.Errorf("only %d number fields checked", checked)
+	}
+}
+
+// The page opens the port as soon as it reads the session: the counters of hello must come before it, or
+// they can come after the counters of the port that opened, and a quiet port then shows 0 for good.
+func TestTheCountersOfHelloComeBeforeTheSession(t *testing.T) {
+	ts := newTestServer(t)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "hello", "profile": map[string]any{"name": "t", "device": "fake:shell"}, "view": map[string]any{"mode": "text"}})
+	var order []string
+	for len(order) < 2 {
+		kind, data, err := c.Read(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m map[string]any
+		if kind == websocket.MessageText && json.Unmarshal(data, &m) == nil && (m["type"] == "counters" || m["type"] == "session") {
+			order = append(order, m["type"].(string))
+		}
+	}
+	if order[0] != "counters" {
+		t.Errorf("order %v", order)
+	}
 }

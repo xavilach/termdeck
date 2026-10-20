@@ -9,9 +9,10 @@ import (
 // What each port is, so that several adapters can be told apart: the USB product, vendor and serial number.
 
 type portDetail struct {
-	Name string `json:"name"` // what the device calls itself: "FT232R USB UART"
-	ID   string `json:"id"`   // VID:PID, such as 0403:6001
-	Info string `json:"info"` // a line for the list: name, ID and serial number
+	Name   string `json:"name"`   // what the device calls itself: "FT232R USB UART"
+	ID     string `json:"id"`     // VID:PID, such as 0403:6001
+	Serial string `json:"serial"` // the adapter's serial number, when it has one: termdeck finds a port's settings by it
+	Info   string `json:"info"`   // a line for the list: name, ID and serial number
 }
 
 // usbDetailFromSysfs reads the USB description of a Linux tty (ttyUSB0, ttyACM0) from sysfs under root.
@@ -23,10 +24,11 @@ func usbDetailFromSysfs(root, tty string) (portDetail, bool) {
 	for i := 0; i < 4 && dir != "/" && dir != "." && len(dir) > len(root); i++ { // the USB device is a few folders up from the interface
 		if vendor := readTrimmed(filepath.Join(dir, "idVendor")); vendor != "" {
 			d := portDetail{
-				Name: strings.TrimSpace(readTrimmed(filepath.Join(dir, "manufacturer")) + " " + readTrimmed(filepath.Join(dir, "product"))),
-				ID:   vendor + ":" + readTrimmed(filepath.Join(dir, "idProduct")),
+				Name:   strings.TrimSpace(readTrimmed(filepath.Join(dir, "manufacturer")) + " " + readTrimmed(filepath.Join(dir, "product"))),
+				ID:     vendor + ":" + readTrimmed(filepath.Join(dir, "idProduct")),
+				Serial: readTrimmed(filepath.Join(dir, "serial")),
 			}
-			d.Info = strings.Join(nonEmpty(d.Name, d.ID, readTrimmed(filepath.Join(dir, "serial"))), " · ")
+			d.Info = strings.Join(nonEmpty(d.Name, d.ID, d.Serial), " · ")
 			return d, true
 		}
 		dir = filepath.Dir(dir)

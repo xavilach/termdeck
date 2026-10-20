@@ -1,6 +1,6 @@
 "use strict";
 
-// Export and import of the sessions, scripts and groups (the buttons at the top of the left column).
+// Export and import of the devices, ports and scripts (the buttons at the top of the left column).
 
 async function exportSettings() {
   try {
@@ -13,9 +13,9 @@ async function exportSettings() {
 async function importSettings(file) {
   try {
     const result = await api("/api/import", { method: "POST", body: JSON.parse(await file.text()) });
-    await Promise.all([loadProfiles(), loadGroups(), loadScripts()]);
+    await Promise.all([loadDevices(), loadPortEntries(), loadScripts()]);
     showText($("#problem"), "");
-    tell(`Imported ${result.sessions} sessions, ${result.scripts} scripts and ${result.groups} groups (${result.replaced} replaced).`);
+    tell(`Imported ${result.devices} devices, ${result.ports} ports and ${result.scripts} scripts (${result.replaced} replaced).`);
   } catch (error) { showText($("#problem"), `Import failed: ${error.message}`); }
 }
 
@@ -39,17 +39,18 @@ $("#import-file").addEventListener("change", () => {
   if (file) importSettings(file);
 });
 
-// The serial sessions of PuTTY: those found on this computer, or else those of a file the user chooses.
-async function importSessions(sessions) {
-  const result = await api("/api/import", { method: "POST", body: { version: 1, profiles: sessions, scripts: [], groups: ["PuTTY"] } });
-  await Promise.all([loadProfiles(), loadGroups()]);
-  tell(`Imported ${result.sessions} serial sessions of PuTTY (${result.replaced} replaced).`);
+// The serial sessions of PuTTY (those found on this computer, or else those of a file the user chooses)
+// come as settings to import: each session is a device, and its port is remembered with it.
+async function importSessions(settings) {
+  const result = await api("/api/import", { method: "POST", body: settings });
+  await Promise.all([loadDevices(), loadPortEntries()]);
+  tell(`Imported ${result.devices} serial sessions of PuTTY as devices (${result.replaced} replaced).`);
 }
 
 $("#import-putty").addEventListener("click", async () => {
   try {
-    const found = (await api("/api/putty")).sessions;
-    if (found.length) await importSessions(found);
+    const found = await api("/api/putty");
+    if (found.devices.length) await importSessions(found);
     else $("#putty-file").click();  // nothing on this computer: choose a .reg export or a session file
   } catch (error) { showText($("#problem"), `PuTTY import failed: ${error.message}`); }
 });
@@ -61,8 +62,8 @@ $("#putty-file").addEventListener("change", async () => {
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const text = bytes[0] === 0xff && bytes[1] === 0xfe ? new TextDecoder("utf-16le").decode(bytes) : new TextDecoder().decode(bytes);
-    const sessions = (await api("/api/putty", { method: "POST", body: { name: file.name, text } })).sessions;
-    if (!sessions.length) showText($("#problem"), `No serial session of PuTTY in ${file.name}.`);
-    else await importSessions(sessions);
+    const settings = await api("/api/putty", { method: "POST", body: { name: file.name, text } });
+    if (!settings.devices.length) showText($("#problem"), `No serial session of PuTTY in ${file.name}.`);
+    else await importSessions(settings);
   } catch (error) { showText($("#problem"), `PuTTY import failed: ${error.message}`); }
 });

@@ -44,24 +44,24 @@ func TestNormalizeDefaultsAndErrors(t *testing.T) {
 }
 
 func TestStoreAddRenameDelete(t *testing.T) {
-	s := NewStore(filepath.Join(t.TempDir(), "sub", "profiles.json"))
-	if err := s.Put("", Profile{Name: "b", Device: "COM2", Flow: "rtscts"}); err != nil {
+	s := newDeviceStore(filepath.Join(t.TempDir(), "sub", "devices.json"))
+	if err := s.Put("", Device{Name: "b", Settings: map[string]any{"flow": "rtscts"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Put("", Profile{Name: "A", Device: "COM1"}); err != nil {
+	if err := s.Put("", Device{Name: "A"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Put("", Profile{Name: "a", Device: "COM9"}); err == nil {
+	if err := s.Put("", Device{Name: "a"}); err == nil {
 		t.Error("a name differing only by case should be refused")
 	}
-	if err := s.Put("b", Profile{Name: "c", Device: "COM2", Flow: "rtscts"}); err != nil {
+	if err := s.Put("b", Device{Name: "c", Settings: map[string]any{"flow": "rtscts"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Put("missing", Profile{Name: "z", Device: "COM2"}); err == nil {
-		t.Error("editing a missing profile should fail")
+	if err := s.Put("missing", Device{Name: "z"}); err == nil {
+		t.Error("editing a missing device should fail")
 	}
 	list, _ := s.List()
-	if len(list) != 2 || list[0].Name != "A" || list[1].Name != "c" || list[1].Flow != "rtscts" {
+	if len(list) != 2 || list[0].Name != "A" || list[1].Name != "c" || list[1].Settings["flow"] != "rtscts" {
 		t.Fatalf("unexpected list: %+v", list)
 	}
 	if err := s.Delete("A"); err != nil {
@@ -82,11 +82,11 @@ func TestScriptNormalizeAndStore(t *testing.T) {
 		}
 	}
 	s := NewScriptStore(filepath.Join(t.TempDir(), "scripts.json"))
-	if err := s.Put("", Script{Name: "boot", Group: "Lab", Commands: []string{"help", "", "ver", ""}, DelayMs: 200, Loop: true}); err != nil {
+	if err := s.Put("", Script{Name: "boot", Device: "Lab", Commands: []string{"help", "", "ver", ""}, DelayMs: 200, Loop: true}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.Get("boot")
-	if err != nil || len(got.Commands) != 3 || got.Group != "Lab" || !got.Loop {
+	if err != nil || len(got.Commands) != 3 || got.Device != "Lab" || !got.Loop {
 		t.Fatalf("unexpected script: %+v %v", got, err)
 	}
 	if _, err := s.Get("nope"); err == nil {
@@ -97,17 +97,10 @@ func TestScriptNormalizeAndStore(t *testing.T) {
 	}
 }
 
-func TestGeneralIsTheEmptyGroup(t *testing.T) {
-	p := Profile{Name: "a", Device: "COM1", Group: " general "}
-	if err := p.Normalize(); err != nil || p.Group != "" {
-		t.Errorf("group %q, err %v", p.Group, err)
-	}
-	s := Script{Name: "a", Group: "General", Commands: []string{"x"}}
-	if err := s.Normalize(); err != nil || s.Group != "" {
-		t.Errorf("group %q, err %v", s.Group, err)
-	}
-	if err := NewGroupStore(filepath.Join(t.TempDir(), "g.json")).Put("", "General"); err == nil {
-		t.Error("a group called General should be refused")
+func TestAScriptOfGenericIsForEveryPort(t *testing.T) {
+	s := Script{Name: "a", Device: " generic ", Commands: []string{"x"}}
+	if err := s.Normalize(); err != nil || s.Device != "" {
+		t.Errorf("device %q, err %v", s.Device, err)
 	}
 }
 

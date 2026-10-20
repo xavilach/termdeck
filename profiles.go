@@ -13,7 +13,7 @@ import (
 	"sync"
 )
 
-// Profile is a saved serial connection.
+// Profile is the settings a session opens its port with: the layers of its port merged (see devices.go).
 type Profile struct {
 	Name      string   `json:"name"`
 	Device    string   `json:"device"`
@@ -23,7 +23,6 @@ type Profile struct {
 	StopBits  string   `json:"stopBits"`  // 1, 1.5, 2
 	Flow      string   `json:"flow"`      // none, rtscts, xonxoff
 	Enter     string   `json:"enter"`     // what the Enter key sends: cr, lf, crlf
-	Group     string   `json:"group"`     // groups the profile in the list and picks its scripts
 	NoteLines bool     `json:"noteLines"` // write a note in the output when CTS, DSR, DCD or RI change
 	Peer      *Profile `json:"peer"`      // the second port of a tunnel: what one port receives is written to the other
 	Reconnect bool     `json:"reconnect"` // open the port again when it comes back after it went away
@@ -123,7 +122,6 @@ func oneOf(value string, choices []string) bool {
 func (p *Profile) Normalize() error {
 	p.Name = strings.TrimSpace(p.Name)
 	p.Device = strings.TrimSpace(p.Device)
-	p.Group = cleanGroup(p.Group)
 	p.LogPath = strings.TrimSpace(p.LogPath)
 	p.FontFamily = strings.TrimSpace(p.FontFamily)
 	for _, check := range []func() error{p.normalizeLine, p.normalizeChoices, p.normalizeLimits, p.normalizeRules, p.normalizeTunnel} {
@@ -205,7 +203,7 @@ func (p *Profile) normalizeLimits() error {
 		func() error { return withDefault(&p.CharDelayMs, 0, 0, 5000, "character delay") },
 		func() error { return withDefault(&p.LineDelayMs, 0, 0, 5000, "line delay") },
 		func() error { return withDefault(&p.LogMaxMB, 0, 0, 100_000, "log size (MB)") },
-		func() error { return withDefault(&p.LogKeep, 0, 0, 1000, "log files kept") },
+		func() error { return withDefault(&p.LogKeep, 5, 1, 1000, "log files kept") },
 		func() error { return withDefault(&p.LinePauseMs, 0, 0, 60_000, "new line pause (ms)") },
 	} {
 		if err := check(); err != nil {
@@ -284,22 +282,10 @@ func checkColours(text string) error {
 // asserted reports whether a control line option is on; unset means on.
 func asserted(b *bool) bool { return b == nil || *b }
 
-// generalGroup is how the page shows the empty group, the one for items without a group.
-const generalGroup = "General"
-
-// cleanGroup trims a group name; "General" is the empty group, so it is stored as "".
-func cleanGroup(name string) string {
-	name = strings.TrimSpace(name)
-	if strings.EqualFold(name, generalGroup) {
-		return ""
-	}
-	return name
-}
-
 // Script is a list of commands sent one after the other, with a pause between them.
 type Script struct {
 	Name     string   `json:"name"`
-	Group    string   `json:"group"` // shown for profiles of this group; empty means every group
+	Device   string   `json:"device"` // offered for ports opened with this device; empty (Generic) means every port
 	Commands []string `json:"commands"`
 	DelayMs  int      `json:"delayMs"` // pause after each command
 	Loop     bool     `json:"loop"`
@@ -308,7 +294,9 @@ type Script struct {
 
 func (s *Script) Normalize() error {
 	s.Name = strings.TrimSpace(s.Name)
-	s.Group = cleanGroup(s.Group)
+	if s.Device = strings.TrimSpace(s.Device); strings.EqualFold(s.Device, genericDevice) {
+		s.Device = ""
+	}
 	for len(s.Commands) > 0 && strings.TrimSpace(s.Commands[len(s.Commands)-1]) == "" {
 		s.Commands = s.Commands[:len(s.Commands)-1]
 	}
@@ -329,7 +317,7 @@ func (s *Script) Normalize() error {
 	return nil
 }
 
-// Store keeps named items (profiles or scripts) in one JSON file, readable by the owner only.
+// Store keeps named items (devices, ports, scripts) in one JSON file, readable by the owner only.
 type Store[T any] struct {
 	mu        sync.Mutex
 	path      string
@@ -338,27 +326,9 @@ type Store[T any] struct {
 	what      string
 }
 
-func NewStore(path string) *Store[Profile] {
-	return &Store[Profile]{path: path, what: "profile",
-		name: func(p *Profile) string { return p.Name }, normalize: (*Profile).Normalize}
-}
-
 func NewScriptStore(path string) *Store[Script] {
 	return &Store[Script]{path: path, what: "script",
 		name: func(s *Script) string { return s.Name }, normalize: (*Script).Normalize}
-}
-
-// NewGroupStore keeps the names of groups, so a group can exist before it has sessions or scripts.
-func NewGroupStore(path string) *Store[string] {
-	return &Store[string]{path: path, what: "group",
-		name: func(g *string) string { return *g },
-		normalize: func(g *string) error {
-			*g = strings.TrimSpace(*g)
-			if strings.EqualFold(*g, generalGroup) {
-				return errors.New(`"General" always exists`)
-			}
-			return nil
-		}}
 }
 
 func configDir() (string, error) {

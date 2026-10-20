@@ -48,7 +48,10 @@ func usbDetailsFromRegistry() map[string]portDetail {
 			}
 			id := strings.NewReplacer("VID_", "", "PID_", "", "&", ":").Replace(strings.SplitN(kind, "&MI", 2)[0])
 			d := portDetail{Name: strings.TrimSpace(friendly), ID: id}
-			d.Info = strings.Join(nonEmpty(d.Name, d.ID), " · ")
+			if !strings.Contains(instance, "&") { // an instance without & is the serial number of the adapter
+				d.Serial = instance
+			}
+			d.Info = strings.Join(nonEmpty(d.Name, d.ID, d.Serial), " · ")
 			out[strings.ToUpper(portName)] = d
 		}
 		kindKey.Close()
