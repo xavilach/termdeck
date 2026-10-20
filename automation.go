@@ -341,6 +341,9 @@ func (t *termSession) act(ctx context.Context, r rule, context string) {
 	if r.lap {
 		t.lap(context)
 	}
+	if r.cmd != "" {
+		t.sendJSON(map[string]string{"type": "command", "id": r.cmd})
+	}
 	if r.act == "" && r.log == "" {
 		return
 	}

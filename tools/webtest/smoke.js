@@ -309,6 +309,13 @@ const tab = () => run("tabs[0]", "x");
   check("the Graph button opens the graph with its legend", !q(".graphbar").hidden && q("[data-graph]").getAttribute("aria-pressed") === "true" && /Temp: 26.3/.test(q(".graph-legend").textContent), q(".graph-legend").textContent);
   q("[data-graph-clear]").click();
   check("Clear graph forgets the points", run("tabs[0].graph.series.size", "x") === 0);
+  check("and tells the session, which keeps them for a reload", mainWs.sent.some((m) => m.type === "cleargraph"));
+  json(mainWs, { type: "graph", series: { Temp: [{ t: 1, v: 20 }, { t: 2, v: 21 }] } });
+  check("the points the session kept are drawn again after a reload", run("tabs[0].graph.series.get('Temp').length", "x") === 2);
+  mainWs.sent.length = 0;
+  json(mainWs, { type: "command", id: "clear" });
+  check("a rule can ask for a command of the page (command clear)", mainWs.sent.some((m) => m.type === "clear"));
+  json(mainWs, { type: "graph", series: {} });
   q("[data-graph]").click();
   check("and the button hides it again", q(".graphbar").hidden);
 

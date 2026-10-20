@@ -23,6 +23,9 @@ const MESSAGES = {
   logexists: (tab, m) => askLog(tab, m.path),
   lines(tab, m) { tab.lines = m; REFRESH(tab); },
   points: receivePoints,
+  graph: receiveGraph,
+  // a rule asks for a command of the page ("REBOOT => command clear"); a page only runs it for its tab
+  command: (tab, m) => runCommand(m.id, tab),
   notify: (tab, m) => notifyLine(tab, m.text),
   sound: (tab) => playSound(tab),
   // the buttons and the graph series the rules of the settings make

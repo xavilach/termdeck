@@ -16,6 +16,12 @@ function addPoint(graph, name, t, value) {
   if (points.length > GRAPH_MAX_POINTS) points.splice(0, points.length - GRAPH_MAX_POINTS);
 }
 
+// Every point the session kept, when the page attaches (after a reload): the graph is drawn again.
+function receiveGraph(tab, message) {
+  tab.graph.series = new Map(Object.entries(message.series || {}));
+  scheduleGraph(tab);
+}
+
 // The server reads the received lines for the numbers of the series and sends them as points.
 function receivePoints(tab, message) {
   for (const { name, value } of message.values) addPoint(tab.graph, name, message.t, value);
@@ -148,7 +154,7 @@ function wireGraph(pane) {
     if (pane.active) { pane.active.graph.each = e.target.checked; drawGraph(pane.active); }
   });
   bar.querySelector("[data-graph-clear]").addEventListener("click", () => {
-    if (pane.active) { pane.active.graph.series.clear(); drawGraph(pane.active); }
+    if (pane.active) { pane.active.graph.series.clear(); sendMessage(pane.active, { type: "cleargraph" }); drawGraph(pane.active); }
   });
   bar.querySelector("[data-graph-csv]").addEventListener("click", () => {
     if (pane.active) download(fileName(pane.active, "csv"), new Blob([graphCsv(pane.active)], { type: "text/csv" }));

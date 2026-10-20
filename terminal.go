@@ -59,7 +59,8 @@ type termSession struct {
 	state      string // as last told to the page: connecting, connected, failed, closed, ended, reconnecting
 	marks      int
 	meters     meters
-	dtr        bool // the lines as we last set them
+	points     map[string][]graphPoint // the graph: kept here so that a reload draws it again
+	dtr        bool                    // the lines as we last set them
 	rts        bool
 	log        *Logger
 	jobs       map[int]*job // what runs over time: scripts, automatic sends, files, transfers
@@ -331,7 +332,7 @@ func (t *termSession) newLines() *renderer {
 			return
 		}
 		if values := graphValues(rules, line); len(values) > 0 {
-			t.sendJSON(map[string]any{"type": "points", "t": at.UnixMilli(), "values": values})
+			t.addPoints(at, values)
 		}
 		t.lineRules(rules, line)
 	}
@@ -768,6 +769,7 @@ func (t *termSession) hello(m clientMessage) {
 	t.sendJSON(t.meterMessage(0, 0))
 	t.sendJSON(info)
 	t.sendRuleNames()
+	t.sendGraph()
 	t.redraw()
 }
 
@@ -828,6 +830,7 @@ var messageHandlers = map[string]func(t *termSession, m clientMessage){
 	"raw":           func(t *termSession, m clientMessage) { t.writeRaw(m.Bytes) },
 	"resetcounters": func(t *termSession, m clientMessage) { t.resetCounters() },
 	"clear":         func(t *termSession, m clientMessage) { t.clearRecords() },
+	"cleargraph":    func(t *termSession, m clientMessage) { t.clearGraph() },
 	"note":          func(t *termSession, m clientMessage) { t.note(m.Data) },
 	"break":         func(t *termSession, m clientMessage) { t.sendBreak(250 * time.Millisecond) },
 	"script":        func(t *termSession, m clientMessage) { t.runScript(m.Name) },

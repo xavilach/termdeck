@@ -29,7 +29,52 @@ func (t *termSession) countUp(name string) {
 	t.meters.counts[name]++
 	n := t.meters.counts[name]
 	t.mu.Unlock()
-	t.sendJSON(map[string]any{"type": "points", "t": time.Now().UnixMilli(), "values": []graphValue{{name, float64(n)}}})
+	t.addPoints(time.Now(), []graphValue{{name, float64(n)}})
+}
+
+// maxPoints is how many points of each series the session keeps, as the page does.
+const maxPoints = 20000
+
+// graphPoint is a point of the graph as the session keeps it.
+type graphPoint struct {
+	T int64   `json:"t"`
+	V float64 `json:"v"`
+}
+
+// addPoints keeps the points of the graph (so that a reload draws them again) and sends them to the page.
+func (t *termSession) addPoints(at time.Time, values []graphValue) {
+	ms := at.UnixMilli()
+	t.mu.Lock()
+	if t.points == nil {
+		t.points = map[string][]graphPoint{}
+	}
+	for _, v := range values {
+		list := append(t.points[v.Name], graphPoint{ms, v.Value})
+		if len(list) > maxPoints*5/4 { // drop the oldest in one go
+			list = append([]graphPoint(nil), list[len(list)-maxPoints:]...)
+		}
+		t.points[v.Name] = list
+	}
+	t.mu.Unlock()
+	t.sendJSON(map[string]any{"type": "points", "t": ms, "values": values})
+}
+
+// sendGraph gives the page every point kept, for a page that attaches (after a reload).
+func (t *termSession) sendGraph() {
+	t.mu.Lock()
+	all := map[string][]graphPoint{}
+	for name, list := range t.points {
+		all[name] = append([]graphPoint(nil), list[max(len(list)-maxPoints, 0):]...)
+	}
+	t.mu.Unlock()
+	t.sendJSON(map[string]any{"type": "graph", "series": all})
+}
+
+// clearGraph forgets the points (Clear graph in the page).
+func (t *termSession) clearGraph() {
+	t.mu.Lock()
+	t.points = nil
+	t.mu.Unlock()
 }
 
 // countFrame counts a frame whose check was verified.

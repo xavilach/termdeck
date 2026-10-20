@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -17,6 +18,7 @@ import (
 //	      dim, underline, inverse) · hide (the line is not shown) · notify (a desktop notification) · sound ·
 //	      graph Name (the number after the match, or the first group of a /regex/) · count Name (a meter,
 //	      drawn on the graph too) · lap (the time since the last lap, a stopwatch) · log on|off ·
+//	      command Name (a command of the page: clear, freeze, graph...) ·
 //	      then one of: send <script line> · run <script> · mark [words] · note [words]
 //
 // A pattern's colours, hide and graph apply to the whole line; its other actions happen as soon as the
@@ -36,6 +38,7 @@ type rule struct {
 	sound  bool
 	graph  string
 	count  string // the name of a count to add one to
+	cmd    string // a command of the page (commands.js), such as clear or freeze
 	lap    bool   // a lap of the stopwatch
 	log    string // on, off or ""
 
@@ -116,6 +119,14 @@ func (r *rule) parseDo(do string) error {
 			r.sound = true
 		case lower == "lap":
 			r.lap = true
+		case lower == "command":
+			value, more, _ := strings.Cut(after, " ")
+			if !oneOf(strings.ToLower(value), pageCommands()) {
+				return fmt.Errorf("command is followed by a command of the page: %s", strings.Join(pageCommands(), ", "))
+			}
+			r.cmd = strings.ToLower(value)
+			rest = strings.TrimSpace(more)
+			continue
 		case lower == "graph" || lower == "count" || lower == "log":
 			value, more, _ := strings.Cut(after, " ")
 			if lower != "log" {
@@ -149,7 +160,7 @@ func (r *rule) parseDo(do string) error {
 			}
 			return nil
 		default:
-			return fmt.Errorf("%q: do is colours, hide, notify, sound, graph Name, count Name, lap, log on|off, then send, run, mark or note", word)
+			return fmt.Errorf("%q: do is colours, hide, notify, sound, graph Name, count Name, lap, log on|off, command Name, then send, run, mark or note", word)
 		}
 		rest = after
 	}
@@ -193,7 +204,9 @@ func checkRules(text string) error {
 func (r rule) lineRule() bool { return r.when == "match" && (r.sgr != "" || r.hide || r.graph != "") }
 
 // streamRule: a pattern rule that does something as soon as its text comes (not only to its line).
-func (r rule) streamRule() bool { return r.act != "" || r.log != "" || r.count != "" || r.lap }
+func (r rule) streamRule() bool {
+	return r.act != "" || r.log != "" || r.count != "" || r.lap || r.cmd != ""
+}
 
 // normalizeKey writes a key the way the page names it: Ctrl, Alt, Shift, Meta in this order, then the key
 // (Alt+1, Ctrl+Shift+F5). A key without Ctrl or Alt is refused: it would be typing.
@@ -282,3 +295,14 @@ func graphValues(rules []rule, line string) []graphValue {
 	}
 	return out
 }
+
+// pageCommands are the ids of the commands of the page (web/commands.js) a rule can ask for, read from the
+// page itself so that the two lists cannot differ.
+var pageCommands = sync.OnceValue(func() []string {
+	data, _ := webFiles.ReadFile("web/commands.js")
+	var ids []string
+	for _, m := range regexp.MustCompile(`\{ id: "([a-z-]+)"`).FindAllSubmatch(data, -1) {
+		ids = append(ids, string(m[1]))
+	}
+	return ids
+})

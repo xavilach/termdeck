@@ -92,3 +92,50 @@ func TestACaptureIsReplayedAsAPort(t *testing.T) {
 	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "r", "device": "replay:" + file + ".missing"}})
 	waitFor(t, c, ctx, "state", "failed")
 }
+
+func TestTheGraphComesBackAfterAReloadUntilItIsCleared(t *testing.T) {
+	ts := newTestServer(t)
+	c, ctx := dialTerminalID(t, ts, "graph-tab")
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:counter", "rules": "tick => graph Tick"}})
+	waitFor(t, c, ctx, "state", "connected")
+	waitFor(t, c, ctx, "points", "")
+	waitFor(t, c, ctx, "points", "")
+	c.CloseNow()
+
+	c, ctx = dialTerminalID(t, ts, "graph-tab")
+	sendJSON(t, c, ctx, map[string]any{"type": "hello", "view": map[string]any{"mode": "text"}})
+	m := waitFor(t, c, ctx, "graph", "")
+	ticks, _ := m["series"].(map[string]any)["Tick"].([]any)
+	if len(ticks) < 2 || ticks[0].(map[string]any)["v"] != float64(1) {
+		t.Fatalf("the points after a reload: %v", m)
+	}
+	sendJSON(t, c, ctx, map[string]any{"type": "cleargraph"})
+	sendJSON(t, c, ctx, map[string]any{"type": "close"})
+	waitFor(t, c, ctx, "state", "closed")
+	sendJSON(t, c, ctx, map[string]any{"type": "hello", "view": map[string]any{"mode": "text"}})
+	if m := waitFor(t, c, ctx, "graph", ""); len(m["series"].(map[string]any)) != 0 {
+		t.Errorf("a cleared graph stays cleared: %v", m)
+	}
+}
+
+func TestARuleCanAskForACommandOfThePage(t *testing.T) {
+	if !oneOf("clear", pageCommands()) || !oneOf("freeze", pageCommands()) || len(pageCommands()) < 20 {
+		t.Fatalf("the commands of the page: %v", pageCommands())
+	}
+	if _, err := parseRules("REBOOT => command clear\non connect => command graph"); err != nil {
+		t.Error(err)
+	}
+	for _, bad := range []string{"x => command", "x => command explode"} {
+		if _, err := parseRules(bad); err == nil {
+			t.Errorf("%q should be refused", bad)
+		}
+	}
+	ts := newTestServer(t)
+	c, ctx := dialTerminal(t, ts)
+	sendJSON(t, c, ctx, map[string]any{"type": "open", "profile": map[string]any{"name": "t", "device": "fake:echo", "rules": "REBOOT => command clear"}})
+	waitFor(t, c, ctx, "state", "connected")
+	sendJSON(t, c, ctx, map[string]any{"type": "raw", "bytes": []byte("REBOOT\n")})
+	if m := waitFor(t, c, ctx, "command", ""); m["id"] != "clear" {
+		t.Errorf("command %v", m)
+	}
+}
