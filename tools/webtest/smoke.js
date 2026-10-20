@@ -249,7 +249,7 @@ const tab = () => run("tabs[0]", "x");
   run("openTab({...window.__profile, name: 'other'})", "x");
   check("same port is not opened twice", run("tabs.length", "x") === 1);
 
-  check("a USB port shows what it is under its name", /FTDI FT232R USB UART · 0403:6001/.test([...w.document.querySelectorAll("#port-tree .item.port")].map((r) => r.textContent).join("|")));
+  check("a USB port says what it is in its hint", /FTDI FT232R USB UART · 0403:6001/.test([...w.document.querySelectorAll("#port-tree .item.port")].map((r) => r.title).join("|")));
 
   // the port list follows plugging in and pulling out
   run("portPollMs = 30; pollPorts()", "x");
@@ -443,7 +443,7 @@ const tab = () => run("tabs[0]", "x");
   check("a double click opens the port with its device's settings", boardTab && boardTab.profile.name === "Board · /dev/ttyUSB1" && boardTab.profile.baud === 57600 && boardTab.profile.enter === "lf" && boardTab.profile.fontSize === 15, boardTab && boardTab.profile);
   await run("editPort('/dev/ttyUSB1')", "x");
   const baud = q("#profile-form [name=baud]");
-  check("a port's settings show what comes from its device", q("#profile-form").classList.contains("editing-port") && baud.closest("label").classList.contains("inherited") && baud.closest("label").dataset.from === "Board" && baud.value === "57600", { from: baud.closest("label").dataset.from, value: baud.value });
+  check("a port's settings show what comes from its device", q("#profile-form").classList.contains("editing-port") && baud.closest("label").classList.contains("inherited") && /from Board$/.test(baud.closest("label").title) && baud.value === "57600", { hint: baud.closest("label").title, value: baud.value });
   baud.value = "9600"; fire(baud, "input");
   check("a value changed here is the port's own, with a way back", baud.closest("label").classList.contains("own") && !baud.closest("label").querySelector(".reset").hidden);
   requests.length = 0;
@@ -453,7 +453,7 @@ const tab = () => run("tabs[0]", "x");
   check("saving keeps only what differs from the device", savedPort && JSON.stringify(savedPort.body.settings) === JSON.stringify({ baud: 9600 }) && savedPort.body.device === "Board", savedPort && savedPort.body);
   check("the open tab follows its new settings", run("tabs.find((t) => t.port === '/dev/ttyUSB1').profile.baud", "x") === 9600);
   await run("editDevice(devices[0])", "x");
-  check("Generic shows what it changed from the defaults", q("#profile-form [name=fontSize]").closest("label").classList.contains("own") && q("#profile-form [name=baud]").closest("label").dataset.from === "the defaults");
+  check("Generic shows what it changed from the defaults", q("#profile-form [name=fontSize]").closest("label").classList.contains("own") && /from the defaults$/.test(q("#profile-form [name=baud]").closest("label").title));
   run("showLines()", "x");
   const chooser2 = usbRow().querySelector(".device-choice");
   chooser2.value = "+new"; fire(chooser2, "change");
@@ -485,6 +485,16 @@ const tab = () => run("tabs[0]", "x");
   quickTab.ws.sent.length = 0;
   w.document.dispatchEvent(new w.KeyboardEvent("keydown", { code: "Digit1", key: "1", altKey: true, bubbles: true }));
   check("a key of a rule goes to the session", quickTab.ws.sent.some((m) => m.type === "key" && m.name === "Alt+1"), quickTab.ws.sent);
+
+  // ☰ shows or hides parts, remembered in this browser
+  check("some parts are hidden at first", w.document.body.classList.contains("hide-break") && !w.document.body.classList.contains("hide-send"));
+  const sendBox = [...w.document.querySelectorAll("[data-parts] input[data-part-id=send]")][0];
+  sendBox.checked = false; fire(sendBox, "change");
+  check("unticking a part hides it and is remembered", w.document.body.classList.contains("hide-send") && JSON.parse(w.localStorage.getItem("termdeck.parts")).includes("send"));
+  run("runCommand('part-send')", "x");
+  check("the palette's command shows it again", !w.document.body.classList.contains("hide-send") && sendBox.checked);
+  run("showAllParts()", "x");
+  check("Show all shows everything", !w.document.body.className.includes("hide-"));
   check("no errors", errors.length === 0, errors);
   console.log(failed ? `${failed} FAILED` : "all passed");
   process.exit(failed ? 1 : 0);

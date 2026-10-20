@@ -10,16 +10,20 @@
 <body>
 <div id="app">
   <aside id="sidebar">
-    <div id="sidebar-resize" role="separator" aria-orientation="vertical" aria-label="Width of the left column" tabindex="0" title="Drag to change the width of the left column (or use the arrow keys)"></div>
+    <div id="sidebar-resize" role="separator" aria-orientation="vertical" aria-label="Width of the left column" tabindex="0" title="Drag (or arrow keys) to resize"></div>
     <header class="brand"><span>termdeck</span>
       <span class="backup">
-        <button id="export-settings" title="Save all devices, ports and scripts in a file">Export</button>
-        <button id="import-settings" title="Add the devices, ports and scripts of a file saved with Export; items with the same name are replaced">Import</button>
+        <button id="open-tunnel" title="Join two ports, or listen to both">Tunnel</button>
+        <button id="open-help" title="Keys and syntax (Alt+Shift+H)">Help</button>
+        <details class="menu files"><summary title="Export, import, PuTTY" aria-label="Export, import, PuTTY">⋯</summary>
+          <div class="menu-body">
+            <button id="export-settings" title="Save devices, ports and scripts to a file">Export</button>
+            <button id="import-settings" title="Load a file saved with Export">Import</button>
+            <button id="import-putty" title="Add PuTTY's serial sessions as devices">PuTTY sessions</button>
+          </div>
+        </details>
         <input type="file" id="import-file" accept=".json,application/json" hidden>
-        <button id="import-putty" title="Add the serial sessions of PuTTY as devices (their port is remembered with them): found on this computer (Registry, or ~/.putty/sessions), or from a .reg export or a session file you choose">PuTTY</button>
         <input type="file" id="putty-file" hidden>
-        <button id="open-tunnel" title="Join two ports: what one receives is written to the other, and you see both directions">Tunnel</button>
-        <button id="open-help" title="Shortcuts and the little languages of the settings (Alt+Shift+H)">Help</button>
       </span></header>
     <div id="problem" class="problem" role="status" hidden></div>
     <nav id="port-tree" aria-label="Serial ports"></nav>
@@ -33,74 +37,76 @@
 <template id="pane-template">
   <section class="pane">
     <div class="tabbar">
-      <button class="sidebar-toggle" aria-label="Hide the left column" aria-expanded="true" title="Hide or show the left column (Alt+Shift+B)">‹</button>
+      <button class="sidebar-toggle" aria-label="Hide the left column" aria-expanded="true" title="Left column (Alt+Shift+B)">‹</button>
       <div class="tabs" role="group" aria-label="Sessions"></div>
+      <details class="menu view-menu"><summary title="Show or hide bars and buttons" aria-label="Show or hide bars and buttons">☰</summary><div class="menu-body" data-parts></div></details>
       <div class="layout" role="group" aria-label="Layout">
         <button data-layout="single" aria-pressed="true" title="One pane"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10"/></svg></button>
-        <button data-layout="cols" aria-pressed="false" title="Two panes side by side (left and right). Each has its own tabs; drag a tab from one to the other."><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10"/><path d="M8 3v10"/></svg></button>
-        <button data-layout="rows" aria-pressed="false" title="Two panes one above the other (top and bottom). Each has its own tabs; drag a tab from one to the other."><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10"/><path d="M2 8h12"/></svg></button>
+        <button data-layout="cols" aria-pressed="false" title="Two panes, side by side"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10"/><path d="M8 3v10"/></svg></button>
+        <button data-layout="rows" aria-pressed="false" title="Two panes, stacked"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10"/><path d="M2 8h12"/></svg></button>
       </div>
     </div>
     <div class="toolbar" hidden>
       <span class="status"></span>
-      <span class="summary muted"></span>
+      <span class="summary muted" data-part="summary"></span>
       <span class="jobs" role="group" aria-label="What runs on this port" hidden></span>
       <span class="spacer"></span>
-      <span class="lines" title="Control lines. DTR and RTS are driven by you: click to toggle. CTS, DSR, DCD and RI are driven by the device and only shown here.">
+      <span class="lines" data-part="lines" title="DTR, RTS: click to toggle. CTS, DSR, DCD, RI: from the device">
         <button data-action="line-dtr" aria-pressed="false">DTR</button><button data-action="line-rts" aria-pressed="false">RTS</button>
         <span class="led" data-led="cts">CTS</span><span class="led" data-led="dsr">DSR</span><span class="led" data-led="dcd">DCD</span><span class="led" data-led="ri">RI</span>
       </span>
       <span class="vsep"></span>
-      <button data-action="port" title="Close the port, or open it again, keeping the lines on screen">Close port</button>
-      <button data-action="break" title="Send a break signal: a long pause on the line that some devices use as an attention or reset signal">Break</button>
-      <button data-action="clear" title="Clear the lines on screen (Ctrl+Shift+L)">Clear</button>
-      <button data-action="reset" title="Reset the terminal: forget the screen modes the device switched on (colours, cursor keys, alternate screen) and clear it. Use it when the screen is garbled.">Reset</button>
-      <button data-action="log" aria-pressed="false" title="Start or stop writing the log file. Needs a log file set in the session settings.">Log</button>
+      <button data-action="port" title="Close or reopen the port; the lines stay">Close port</button>
+      <button data-action="break" data-part="break" title="Send a break">Break</button>
+      <button data-action="clear" data-part="clear" title="Clear the lines (Ctrl+Shift+L)">Clear</button>
+      <button data-action="reset" data-part="clear" title="Reset the terminal when the screen is garbled">Reset</button>
+      <button data-action="log" data-part="log" aria-pressed="false" title="Start or stop the log (set its file in Settings)">Log</button>
       <span class="vsep"></span>
-      <button data-action="settings" title="Settings of this session">Settings</button>
-      <button data-action="font-down" title="Smaller text" aria-label="Smaller text">A-</button>
-      <button data-action="font-up" title="Larger text" aria-label="Larger text">A+</button>
+      <button data-action="settings" title="Settings of this port">Settings</button>
+      <button data-action="font-down" data-part="font" title="Smaller text" aria-label="Smaller text">A-</button>
+      <button data-action="font-up" data-part="font" title="Larger text" aria-label="Larger text">A+</button>
     </div>
-    <div class="viewbar" hidden>
-      <span class="bar-title" title="Settings of what the device sends">Receive</span>
-      <label title="How received data is shown. Text: as the device sends it. Hex, Decimal, Binary: each byte as a number, in rows, with the text next to it. Changing it redraws what is on screen from the data kept (the last 8 MB), so nothing is lost by switching back and forth.">
+    <div class="viewbar" data-part="receive" hidden>
+      <span class="bar-title" title="How the received data shows">Receive</span>
+      <label title="Text, or each byte as a number; switching loses nothing">
         <select data-view aria-label="View"><option value="text">Text</option><option value="hex">Hex</option><option value="dec">Decimal</option><option value="bin">Binary</option><option value="frames">Frames</option></select></label>
-      <label title="What ends a line in the received text. Terminal: the way a terminal does it (CR returns to the start of the line, LF goes down). CR, LF, CR LF or Custom: that sequence ends the line and any other CR or LF is dropped (shown as &lt;CR&gt; or &lt;LF&gt; with Control chars). None: only a pause ends lines. Custom is written like in the send bar: \r \n \t \xNN.">New line at
+      <label title="What ends a received line">New line at
         <select data-nl><option value="terminal">Terminal</option><option value="cr">CR</option><option value="lf">LF</option><option value="crlf">CR LF</option><option value="custom">Custom</option><option value="none">None</option></select>
         <input data-nl-custom hidden spellcheck="false" placeholder="\r\n" aria-label="Custom new line"></label>
-      <label title="Show only the lines that contain this text, or match /regex/; put ! in front to hide those lines instead (!heartbeat). Empty shows everything. Changing it redraws the data kept, so a filtered-out line is not lost.">Filter
+      <label data-part="filter" title="Show matching lines; !text hides them">Filter
         <input data-filter spellcheck="false" placeholder="text, /regex/, !hide" aria-label="Filter lines"></label>
-      <button data-view-reset title="The view was changed here and is not what the session settings say. Click to go back to them." hidden>Reset view</button>
+      <button data-view-reset title="Back to the view of the settings" hidden>Reset view</button>
       <details class="more">
-        <summary title="More settings of the view, and copy or save the output">More</summary>
+        <summary title="Time, control chars, copy, save">More</summary>
         <div class="more-body">
-        <label class="check" title="Start each received line with the time. Clock: the time of day, with milliseconds. Since last line: the time since the line before, to see how long a device takes to answer."><input type="checkbox" data-stamps> Time
+        <label class="check" title="Time of day, or time since the line before"><input type="checkbox" data-stamps> Time
           <select data-time-mode aria-label="What the time shows"><option value="clock">Clock</option><option value="delta">Since last line</option></select></label>
-        <label class="check" title="Show CR, LF and the other control characters as &lt;CR&gt;, &lt;LF&gt;, &lt;ESC&gt;... instead of acting on them. LF still ends the line (unless a pause does it). Escape sequences, such as colours, are shown as text too."><input type="checkbox" data-ctrl> Control chars</label>
-        <label title="Start a new line when nothing was received for this long, in milliseconds. For data that has no line ends. 0 turns it off. While it is on, CR and LF from the device are shown as &lt;CR&gt; and &lt;LF&gt; and do not end lines. Turning it off again shows the lines as the device sent them.">New line after
+        <label class="check" title="Show &lt;CR&gt;, &lt;LF&gt;, &lt;ESC&gt;… instead of acting on them"><input type="checkbox" data-ctrl> Control chars</label>
+        <label title="A new line after a silence (ms); 0 off">New line after
           <input type="number" data-pause min="0" max="60000" step="10" value="0"> ms</label>
-        <button data-copy-all title="Copy everything on the screen and in its scrollback">Copy</button>
-        <button data-save-text title="Save everything on the screen and in its scrollback as a text file">Save text</button>
-        <button data-save-raw title="Save the bytes the device sent (the last 8 MB kept) as a file">Save raw</button>
+        <button data-copy-all title="Copy all the lines">Copy</button>
+        <button data-save-text title="Save the lines as text">Save text</button>
+        <button data-save-raw title="Save the bytes received (last 8 MB)">Save raw</button>
         </div>
       </details>
       <span class="spacer"></span>
-      <span class="counters" title="Bytes received since the port opened (in a tunnel: carried from A to B), and how many came in the last second. Clear resets it.">Rx <b data-count="rx">0</b> <span class="muted" data-rate="rx"></span></span>
-      <span class="meters muted" data-meters title="The meters: the counts of the rules (count Name), the frames whose check is OK or BAD, the laps (lap)"></span>
-      <span class="marks" role="group" aria-label="Marks"><button data-mark title="Add a mark: a line of its own in the output and in the log, to find a moment again (Alt+Shift+M)">Mark</button><button data-mark-prev title="Go to the previous mark" aria-label="Previous mark">◀</button><button data-mark-next title="Go to the next mark" aria-label="Next mark">▶</button></span>
-      <button data-graph aria-pressed="false" title="Draw numbers found in the received lines as a graph (the series are rules with graph, on the Rules page of the settings)">Graph</button>
-      <button data-freeze aria-pressed="false" title="Keep the screen as it is while the device goes on sending. The data is still received, counted and kept; Resume shows it all.">Freeze</button>
-      <button data-action="find" title="Search the lines on screen (Ctrl+Shift+F)">Find</button>
+      <span class="counters" data-part="counters" title="Bytes received, and per second">Rx <b data-count="rx">0</b> <span class="muted" data-rate="rx"></span></span>
+      <span class="meters muted" data-part="counters" data-meters title="Counts of the rules, frames OK/BAD, laps"></span>
+      <span class="marks" data-part="marks" role="group" aria-label="Marks"><button data-mark title="Add a mark (Alt+Shift+M)">Mark</button><button data-mark-prev title="Go to the previous mark" aria-label="Previous mark">◀</button><button data-mark-next title="Go to the next mark" aria-label="Next mark">▶</button></span>
+      <button data-graph data-part="graph-button" aria-pressed="false" title="Graph of the numbers of the rules (graph Name)">Graph</button>
+      <button data-freeze data-part="freeze" aria-pressed="false" title="Hold the screen; data is still kept">Freeze</button>
+      <button data-action="find" data-part="find" title="Find (Ctrl+Shift+F)">Find</button>
     </div>
     <div class="graphbar" hidden>
       <div class="graph-head">
-        <span class="bar-title" title="Numbers found in the received lines, drawn over time. The series are rules (Temperature: =&gt; graph Temp) on the Rules page of the settings.">Graph</span>
+        <span class="bar-title" title="Numbers of the rules with graph Name">Graph</span>
         <label>Show <select data-graph-window><option value="10">10 s</option><option value="30">30 s</option><option value="60">1 min</option><option value="300">5 min</option><option value="900">15 min</option><option value="3600">1 hour</option><option value="0">All</option></select></label>
-        <label class="check" title="Draw each series over its own range (0 to 100 %), for series of very different sizes such as 21 and 1000."><input type="checkbox" data-graph-each> Each on its own scale</label>
+        <label class="check" title="Each series on its own scale"><input type="checkbox" data-graph-each> Each on its own scale</label>
         <span class="graph-legend"></span>
         <span class="spacer"></span>
-        <button data-graph-clear title="Forget the points drawn so far">Clear graph</button>
-        <button data-graph-csv title="Save the points as a CSV file: time, series, value">Save CSV</button>
+        <button data-graph-clear title="Forget the points">Clear graph</button>
+        <button data-graph-csv title="Save time, series, value as CSV">Save CSV</button>
+        <button data-graph-close title="Close the graph (☰ or the Graph button shows it again)" aria-label="Close the graph">✕</button>
       </div>
       <canvas class="graph-canvas" aria-label="Graph of the numbers received"></canvas>
     </div>
@@ -117,37 +123,34 @@
       </div>
       <div class="terminals"><div class="empty muted"><p data-empty-text>Open a session from the list on the left, or a port from Serial ports.</p><p class="try" data-empty-try hidden>No serial port yet? Try a virtual one: </p></div></div>
     </div>
-    <div class="quickbar" hidden></div>
-    <div class="sendbar" hidden>
-      <span class="bar-title" title="What you send to the device">Send</span>
-      <select data-send-type title="What you type is: Text (with \r \n \t \xNN \\ escapes); Hex bytes like 0D 0A; Decimal numbers 0 to 255; Binary groups like 01000001; Cmd, steps such as dtr=1; wait=500; dtr=0 (also hex=0D 0A). Alt+T, Alt+D, Alt+H and Alt+B choose the type while typing.">
+    <div class="quickbar" data-part="buttons" hidden></div>
+    <div class="sendbar" data-part="send" hidden>
+      <span class="bar-title" title="What you send">Send</span>
+      <select data-send-type title="Text (\r \n \xNN), Hex, Decimal, Binary, or Cmd steps · Alt+T/H/D/B">
         <option value="text">Text</option><option value="hex">Hex</option><option value="dec">Decimal</option><option value="bin">Binary</option><option value="cmd">Cmd</option></select>
       <input data-send-text spellcheck="false" autocomplete="off" aria-label="Data to send" placeholder="Data to send (Enter sends, Up and Down recall)">
-      <label class="end-hint" title="What is added after the data, for Text, Hex, Decimal and Binary. None sends the data alone. Custom is written like \r \n \t \xNN. It starts as the Enter key of the session.">End
+      <label class="end-hint" data-part="end" title="Added after the data">End
         <select data-send-end><option value="none">None</option><option value="cr">CR</option><option value="lf">LF</option><option value="crlf">CR LF</option><option value="custom">Custom</option></select>
         <input data-send-end-custom hidden spellcheck="false" placeholder="\r\n" aria-label="Custom end"></label>
-      <label class="check-hint" title="Bytes added after the data to check it: a sum, an XOR or a CRC. For Hex, Decimal and Binary only. The check bytes come before the End.">Check
+      <label class="check-hint" data-part="check" title="A sum or CRC after byte data">Check
         <select data-send-check><option value="none">None</option><option value="sum8">Sum (1 byte)</option><option value="xor8">XOR (1 byte)</option><option value="crc8">CRC-8</option><option value="crc16modbus">CRC-16 Modbus (low byte first)</option><option value="crc16ccitt">CRC-16 CCITT (high byte first)</option><option value="crc16xmodem">CRC-16 XMODEM (high byte first)</option><option value="crc32">CRC-32 (low byte first)</option></select></label>
-      <label class="check broadcast" title="Send to every connected tab, not only this one: for several devices at once. Quick sends and Auto go to all of them too."><input type="checkbox" data-all> All tabs</label>
-      <label class="check auto" title="Send the data again and again, every so many milliseconds, until you untick it, change tab or the port closes. The input is kept while it runs."><input type="checkbox" data-auto> Auto</label>
-      <input type="number" data-auto-ms min="10" max="3600000" step="100" value="1000" title="Milliseconds between two automatic sends" aria-label="Milliseconds between automatic sends"><span class="muted">ms</span>
+      <label class="check broadcast" data-part="all-tabs" title="Send to every connected tab"><input type="checkbox" data-all> All tabs</label>
+      <label class="check auto" data-part="auto" title="Send again every N ms (runs on the server)"><input type="checkbox" data-auto> Auto</label>
+      <input type="number" data-part="auto" data-auto-ms min="10" max="3600000" step="100" value="1000" title="ms between sends" aria-label="Milliseconds between automatic sends"><span class="muted" data-part="auto">ms</span>
       <button data-send class="primary">Send</button>
-      <button data-send-file title="Send the content of a file to the device, as it is">File…</button>
-      <button data-xmodem title="Send a file to the device, or receive one from it, with the XMODEM or YMODEM protocol">Transfer…</button>
+      <button data-send-file data-part="files" title="Send a file as it is">File…</button>
+      <button data-xmodem data-part="files" title="XMODEM / YMODEM">Transfer…</button>
       <input type="file" data-file hidden>
-      <span class="counters" title="Bytes sent since the port opened (in a tunnel: carried from B to A), and how many went in the last second. Clear resets it.">Tx <b data-count="tx">0</b> <span class="muted" data-rate="tx"></span></span>
+      <span class="counters" data-part="counters" title="Bytes sent, and per second">Tx <b data-count="tx">0</b> <span class="muted" data-rate="tx"></span></span>
     </div>
   </section>
 </template>
 <!-- Editing a session or a script happens in this dialog. -->
 <dialog id="panel" aria-label="Edit">
         <form id="profile-form" class="panel-page" autocomplete="off">
-          <header><h2 id="profile-title">Profile</h2></header>
-          <p id="layer-note" class="muted"></p>
-          <div class="layer-tools">
-            <label title="Settings that suit a common kind of device. Choosing one fills them in the form; nothing is saved until you click Save.">Preset <select id="preset"><option value="">Choose…</option></select></label>
-            <button type="button" id="profile-move" title="Make the changes of this port the settings of its device, so that every port opened with the device has them">Move these changes to the device</button>
-          </div>
+          <header><h2 id="profile-title">Profile</h2><span class="spacer"></span>
+            <select id="preset" title="Fill in the settings of a common device" aria-label="Preset"><option value="">Preset…</option></select>
+            <button type="button" id="profile-move" title="Make this port's changes the device's settings">To device</button></header>
           <nav class="form-tabs" aria-label="Settings pages">
             <button type="button" data-form-page="port" aria-pressed="true">Port</button>
             <button type="button" data-form-page="receive" aria-pressed="false">Receive</button>
@@ -158,27 +161,27 @@
           </nav>
           <div class="form-page" data-form-page="port">
           <div class="grid">
-            <label class="for-device" title="The name of the device, for example &quot;Router&quot; or &quot;Dev board&quot;. Ports opened with it start from its settings.">Device <input name="name" spellcheck="false"></label>
-            <label class="for-port" title="The port these settings are for. They are its own changes over the settings of its device.">Port <input name="device" readonly spellcheck="false"></label>
-            <label title="The speed of the line, in bits per second. It must be the same on the device, otherwise you see garbage. Common values: 9600, 115200. Check the device&#x27;s manual; 115200 is a frequent default.">Baud <input name="baud" type="number" min="50" value="115200"></label>
-            <label title="Number of data bits in each character. Almost every device uses 8. Change it only if the device&#x27;s manual says so.">Data bits <select name="dataBits"><option>8</option><option>7</option><option>6</option><option>5</option></select></label>
-            <label title="A simple error check added to each character. None is by far the most common (with 8 data bits). Use Even, Odd, Mark or Space only if the device requires it.">Parity <select name="parity"><option value="none">None</option><option value="even">Even</option><option value="odd">Odd</option><option value="mark">Mark</option><option value="space">Space</option></select></label>
-            <label title="Number of stop bits marking the end of each character. 1 is the usual value; use 2 (or 1.5) only if the device&#x27;s manual says so.">Stop bits <select name="stopBits"><option>1</option><option>1.5</option><option>2</option></select></label>
-            <label title="How the two sides slow each other down to avoid losing data. None: no control (the usual case). RTS/CTS: uses two wires of the cable and needs a cable with them. XON/XOFF: uses two special characters inside the data, so binary data should not be sent. DSR/DTR: uses two other wires; available on Windows only.">Flow control <select name="flow"><option value="none">None</option><option value="rtscts">RTS/CTS</option><option value="xonxoff">XON/XOFF</option><option value="dsrdtr">DSR/DTR (Windows only)</option></select></label>
-            <label title="The line end that scripts and rules add after each line they send, and the one the End box of the send bar starts with. Most devices expect CR (the default). Try CR LF for DOS-style devices, or LF for Unix-style ones, if commands are not accepted. The lines themselves are read-only: you type in the send bar.">Line end <select name="enter"><option value="cr">CR</option><option value="lf">LF</option><option value="crlf">CR LF</option></select></label>
-            <label title="Character set the device uses. Leave it on UTF-8 unless the device prints wrong characters for accents or symbols; many older devices use ISO-8859-1 (Latin-1), Windows-1252 or CP437/CP850 (the old DOS sets, which also hold box-drawing characters). What you type is converted the same way.">Character set <select name="charset"><option value="utf-8">UTF-8</option><option value="iso-8859-1">ISO-8859-1 (Latin-1)</option><option value="iso-8859-2">ISO-8859-2 (Central Europe)</option><option value="iso-8859-15">ISO-8859-15 (Latin-9)</option><option value="windows-1250">Windows-1250</option><option value="windows-1251">Windows-1251 (Cyrillic)</option><option value="windows-1252">Windows-1252</option><option value="cp437">CP437 (DOS)</option><option value="cp850">CP850 (DOS Europe)</option><option value="cp866">CP866 (DOS Cyrillic)</option><option value="koi8-r">KOI8-R</option><option value="koi8-u">KOI8-U</option><option value="macintosh">Macintosh</option></select></label>
+            <label class="for-device" title="Name of the device">Device <input name="name" spellcheck="false"></label>
+            <label class="for-port" title="The port these changes are for">Port <input name="device" readonly spellcheck="false"></label>
+            <label title="Speed; same as the device (often 9600 or 115200)">Baud <input name="baud" type="number" min="50" value="115200"></label>
+            <label title="Almost always 8">Data bits <select name="dataBits"><option>8</option><option>7</option><option>6</option><option>5</option></select></label>
+            <label title="Usually None">Parity <select name="parity"><option value="none">None</option><option value="even">Even</option><option value="odd">Odd</option><option value="mark">Mark</option><option value="space">Space</option></select></label>
+            <label title="Usually 1">Stop bits <select name="stopBits"><option>1</option><option>1.5</option><option>2</option></select></label>
+            <label title="Usually None; DSR/DTR on Windows only">Flow control <select name="flow"><option value="none">None</option><option value="rtscts">RTS/CTS</option><option value="xonxoff">XON/XOFF</option><option value="dsrdtr">DSR/DTR (Windows only)</option></select></label>
+            <label title="Added by scripts and rules; most devices want CR">Line end <select name="enter"><option value="cr">CR</option><option value="lf">LF</option><option value="crlf">CR LF</option></select></label>
+            <label title="Change it if accents or symbols are wrong">Character set <select name="charset"><option value="utf-8">UTF-8</option><option value="iso-8859-1">ISO-8859-1 (Latin-1)</option><option value="iso-8859-2">ISO-8859-2 (Central Europe)</option><option value="iso-8859-15">ISO-8859-15 (Latin-9)</option><option value="windows-1250">Windows-1250</option><option value="windows-1251">Windows-1251 (Cyrillic)</option><option value="windows-1252">Windows-1252</option><option value="cp437">CP437 (DOS)</option><option value="cp850">CP850 (DOS Europe)</option><option value="cp866">CP866 (DOS Cyrillic)</option><option value="koi8-r">KOI8-R</option><option value="koi8-u">KOI8-U</option><option value="macintosh">Macintosh</option></select></label>
           </div>
           <div class="checks">
-            <label class="check" title="DTR (Data Terminal Ready) is a control wire. Keep it ticked unless you know better. Some boards, such as Arduino and ESP32, reset when it changes, so untick it to open the port without resetting them. You can also toggle it later from the toolbar."><input name="dtr" type="checkbox"> DTR</label>
-            <label class="check" title="RTS (Request To Send) is a control wire, often used for flow control. Some boards (ESP32 for example) use it to reset or to enter their boot loader. You can also toggle it later from the toolbar."><input name="rts" type="checkbox"> RTS</label>
-            <label class="check" title="When the port goes away (a USB adapter pulled out, a device switched off), try to open it again every second until it is back. Close the port yourself to stop."><input name="reconnect" type="checkbox"> Reconnect</label>
-            <label class="check" title="Show what termdeck sends (the send bar, scripts, rules) in the lines, with the Tx marker. Untick it when you do not want to see it, or when the device echoes it back (then you see it once, as received)."><input name="localEcho" type="checkbox"> Local echo</label>
+            <label class="check" title="Asserted at open; untick so Arduino/ESP32 do not reset"><input name="dtr" type="checkbox"> DTR</label>
+            <label class="check" title="Asserted at open"><input name="rts" type="checkbox"> RTS</label>
+            <label class="check" title="Open the port again when it comes back"><input name="reconnect" type="checkbox"> Reconnect</label>
+            <label class="check" title="Show what is sent, with the Tx marker"><input name="localEcho" type="checkbox"> Local echo</label>
           </div>
           <fieldset>
             <legend>RS-485</legend>
             <div class="grid">
-              <label title="For an RS-485 adapter that is driven by RTS: RTS goes to the sending state while data is sent (high or low, as the adapter needs) and back when it is out. Off leaves RTS alone.">RS-485 direction <select name="rtsMode"><option value="off">Off</option><option value="high">RTS high while sending</option><option value="low">RTS low while sending</option></select></label>
-              <label title="How long RTS stays in the sending state after the last byte (milliseconds), for adapters that need time to finish.">RTS hold (ms) <input name="rtsDelayMs" type="number" min="0" max="1000" value="0"></label>
+              <label title="RTS switches direction while sending">Direction <select name="rtsMode"><option value="off">Off</option><option value="high">RTS high while sending</option><option value="low">RTS low while sending</option></select></label>
+              <label title="RTS hold after the last byte (ms)">RTS hold (ms) <input name="rtsDelayMs" type="number" min="0" max="1000" value="0"></label>
             </div>
           </fieldset>
           </div>
@@ -186,118 +189,117 @@
           <fieldset>
             <legend>Received data</legend>
             <div class="grid">
-              <label title="How received data is shown when the session opens. Hex, Decimal and Binary show each byte as a number, for binary data; Frames cuts the bytes into frames (describe them on the Receive page). You can change it later from the bar above the lines.">View <select name="view"><option value="text">Text</option><option value="hex">Hex</option><option value="dec">Decimal</option><option value="bin">Binary</option><option value="frames">Frames</option></select></label>
-              <label title="Start a new line when nothing was received for this long (milliseconds), for data without line ends. CR and LF are then shown as &lt;CR&gt; and &lt;LF&gt; instead of ending lines. 0 means never.">New line after pause (ms) <input name="linePauseMs" type="number" min="0" max="60000" value="0"></label>
+              <label title="The view a tab starts with">View <select name="view"><option value="text">Text</option><option value="hex">Hex</option><option value="dec">Decimal</option><option value="bin">Binary</option><option value="frames">Frames</option></select></label>
+              <label title="A new line after a silence (ms); 0 off">New line after (ms) <input name="linePauseMs" type="number" min="0" max="60000" value="0"></label>
             </div>
             <div class="grid">
-              <label title="What ends a line in the received text: Terminal (as a terminal does it), CR, LF, CR LF, Custom (below) or None (only a pause ends lines). Any other CR or LF is then dropped (shown as &lt;CR&gt; or &lt;LF&gt; with Show control characters).">New line at <select name="newLine"><option value="terminal">Terminal</option><option value="cr">CR</option><option value="lf">LF</option><option value="crlf">CR LF</option><option value="custom">Custom</option><option value="none">None</option></select></label>
-              <label title="The sequence for Custom, written like \r \n \t \xNN.">Custom new line <input name="newLineCustom" spellcheck="false" placeholder="\r\n"></label>
+              <label title="What ends a received line">New line at <select name="newLine"><option value="terminal">Terminal</option><option value="cr">CR</option><option value="lf">LF</option><option value="crlf">CR LF</option><option value="custom">Custom</option><option value="none">None</option></select></label>
+              <label title="Written like \r \n \xNN">Custom <input name="newLineCustom" spellcheck="false" placeholder="\r\n"></label>
             </div>
             <div class="checks">
-              <label class="check" title="Start each received line with the time."><input name="timestamps" type="checkbox"> Time at the start of each line</label>
-              <label title="What the time shows: the clock (time of day with milliseconds) or the time since the line before.">Time shows <select name="timeMode"><option value="clock">Clock</option><option value="delta">Since last line</option></select></label>
-              <label class="check" title="Show CR, LF and the other control characters as &lt;CR&gt;, &lt;LF&gt;, &lt;ESC&gt;... instead of acting on them."><input name="showControl" type="checkbox"> Show control characters</label>
+              <label class="check" title="Time at the start of each line"><input name="timestamps" type="checkbox"> Time</label>
+              <label title="Clock, or time since the line before">Time shows <select name="timeMode"><option value="clock">Clock</option><option value="delta">Since last line</option></select></label>
+              <label class="check" title="Show &lt;CR&gt;, &lt;LF&gt;… instead of acting on them"><input name="showControl" type="checkbox"> Control chars</label>
             </div>
           </fieldset>
           <fieldset>
             <legend>Markers</legend>
             <div class="grid">
-              <label title="Text added at the start of each line received from the device, to tell it apart from what you sent. For example &quot;RX&gt; &quot; (keep the trailing space if you want one). Leave empty for nothing.">Received <input name="rxMarker" spellcheck="false"></label>
-              <label title="Text added at the start of each line you send, to tell it apart from what the device sent. For example &quot;TX&gt; &quot;. It appears for lines termdeck shows itself: local echo, the send bar and scripts. A device that echoes your typing shows it as received text. Leave empty for nothing.">Sent <input name="txMarker" spellcheck="false"></label>
+              <label title="Before each received line, e.g. RX&gt;">Received <input name="rxMarker" spellcheck="false"></label>
+              <label title="Before each sent line, e.g. TX&gt;">Sent <input name="txMarker" spellcheck="false"></label>
             </div>
           </fieldset>
             <fieldset>
               <legend>Frames</legend>
-              <label title="How the Frames view cuts the received bytes into frames, one line each, with the check verified. One setting per line: sync = AA 55 (the bytes a frame starts with) · size = u8@2 + 5 (the size of the frame: a field, u8 or u16be or u16le at an offset, plus a number; or just a number) · end = 0D 0A (the frame ends with these bytes; instead of size) · header = 3 (bytes shown apart before the payload) · check = crc16modbus (the check at the end of the frame, over the bytes before it: sum8, xor8, crc8, crc16modbus, crc16ccitt, crc16xmodem, crc32). Bytes outside a frame show as ??.">Description <textarea name="frameSpec" rows="4" spellcheck="false" placeholder="sync = AA 55&#10;size = u8@2 + 5&#10;header = 3&#10;check = crc16modbus"></textarea></label>
+              <label title="sync = AA 55 · size = u8@2 + 5 (or end = 0D 0A) · header = 3 · check = crc16modbus">Description <textarea name="frameSpec" rows="4" spellcheck="false" placeholder="sync = AA 55&#10;size = u8@2 + 5&#10;header = 3&#10;check = crc16modbus"></textarea></label>
             </fieldset>
             <fieldset>
               <legend>Filter</legend>
-              <label title="Show only the lines that contain this text or match /regex/; ! in front hides them instead. You can change it later from the receive bar.">Filter <input name="filter" spellcheck="false" placeholder="text, /regex/ or !text"></label>
+              <label title="Text or /regex/; !text hides">Filter <input name="filter" spellcheck="false" placeholder="text, /regex/ or !text"></label>
             </fieldset>
           </div>
           <div class="form-page" data-form-page="send" hidden>
             <fieldset>
               <legend>Slow send</legend>
               <div class="grid">
-                <label title="For devices that lose characters sent at full speed: wait this long (milliseconds) after each character sent from the send bar, a script or a rule. 0 sends at full speed. The delays also apply to files.">Pause after each character (ms) <input name="charDelayMs" type="number" min="0" max="5000" value="0"></label>
-                <label title="An extra wait (milliseconds) after a CR or LF sent, for devices that need time to take a line in.">Extra pause after a line end (ms) <input name="lineDelayMs" type="number" min="0" max="5000" value="0"></label>
+                <label title="Pause after each character (ms)">Char pause (ms) <input name="charDelayMs" type="number" min="0" max="5000" value="0"></label>
+                <label title="Extra pause after CR or LF (ms)">Line pause (ms) <input name="lineDelayMs" type="number" min="0" max="5000" value="0"></label>
               </div>
             </fieldset>
           </div>
           <div class="form-page" data-form-page="rules" hidden>
             <fieldset>
               <legend>Rules</legend>
-              <label title="What the session does by itself, one rule per line: when =&gt; do. See Help, Rules, for every word.">Rules <textarea name="rules" rows="10" spellcheck="false" placeholder="ERROR =&gt; red bold notify&#10;login: =&gt; send admin&#10;Temperature: =&gt; graph Temp&#10;button Reset =&gt; send @dtr=0; wait=100; dtr=1&#10;every 5s =&gt; send @hex=01 03 00 00 00 01; check=crc16modbus&#10;on CTS =&gt; note"></textarea></label>
-              <p class="muted">When: a pattern (text in any case, or /regex/) · on connect · on disconnect · every 2s · button Name · idle 30s · on CTS (DSR, DCD, RI) · bad frame. Do: colours (red, green, yellow, blue, magenta, cyan, white, grey, orange, bold, dim, underline, inverse), hide, notify, sound, graph Name, count Name, lap, command clear, log on|off, then send …, run script, mark …, note ….</p>
-              <p><button type="button" id="allow-notifications" title="The browser asks once; notifications only come for rules with notify">Allow desktop notifications</button> <span id="notification-state" class="muted"></span></p>
+              <label title="when =&gt; do, one per line. When: pattern · on connect · on disconnect · every 2s · button Name · key Alt+1 · idle 30s · on CTS · bad frame. Do: colours · hide · notify · sound · graph Name · count Name · lap · command clear · log on · then send … · run … · mark … · note …">Rules · when =&gt; do <textarea name="rules" rows="10" spellcheck="false" placeholder="ERROR =&gt; red bold notify&#10;login: =&gt; send admin&#10;Temperature: =&gt; graph Temp&#10;button Reset =&gt; send @dtr=0; wait=100; dtr=1&#10;every 5s =&gt; send @hex=01 03 00 00 00 01; check=crc16modbus&#10;on CTS =&gt; note"></textarea></label>
+              <p><button type="button" id="allow-notifications" title="For rules with notify">Allow notifications</button> <span id="notification-state" class="muted"></span></p>
             </fieldset>
           </div>
           <div class="form-page" data-form-page="log" hidden>
           <fieldset>
             <legend>Log</legend>
-            <label title="Where to save everything sent and received, one line each. Leave empty to keep no log. {name}, {date} and {time} are replaced by the session name, the day and the time, for example logs/{name}-{date}.log. The file is created only once the port is open, and is added to if it exists.">File <input name="logPath" spellcheck="false" placeholder="logs/{name}-{date}.log"></label>
+            <label title="{name}, {date}, {time} are replaced; empty: no log">File <input name="logPath" spellcheck="false" placeholder="logs/{name}-{date}.log"></label>
             <div class="grid">
-              <label title="What to do when the log file is already there when the port opens. Append: add to the end. Overwrite: start the file again. Ask: you are asked each time.">If the file exists <select name="logExisting"><option value="append">Append</option><option value="overwrite">Overwrite</option><option value="ask">Ask</option></select></label>
-              <label title="Start a new log file when it is this big, in megabytes: the full one is kept as name.log.1 (older ones move up). 0 means one file that grows.">Start a new file at (MB) <input name="logMaxMB" type="number" min="0" value="0"></label>
-              <label title="How many full files are kept besides the current one.">Files kept <input name="logKeep" type="number" min="1" max="1000" value="5"></label>
+              <label title="Append, overwrite or ask">If it exists <select name="logExisting"><option value="append">Append</option><option value="overwrite">Overwrite</option><option value="ask">Ask</option></select></label>
+              <label title="Rotate at this size; 0 never">New file at (MB) <input name="logMaxMB" type="number" min="0" value="0"></label>
+              <label title="Old files kept">Files kept <input name="logKeep" type="number" min="1" max="1000" value="5"></label>
             </div>
             <div class="checks">
-              <label class="check" title="Leave escape sequences (colours, cursor moves) and control characters out of the log so it reads as plain text. A Backspace erases the character before it."><input name="logPrintable" type="checkbox"> Printable only</label>
-              <label class="check" title="Start the log with a line saying when it was opened, the port and the speed."><input name="logHeader" type="checkbox"> Header line</label>
-              <label class="check" title="Start each line of the log with the date and time it began, with milliseconds."><input name="logTimestamps" type="checkbox"> Time on each line</label>
+              <label class="check" title="No escape sequences or control characters"><input name="logPrintable" type="checkbox"> Printable only</label>
+              <label class="check" title="A first line with the date, port and speed"><input name="logHeader" type="checkbox"> Header line</label>
+              <label class="check" title="Date and time on each line"><input name="logTimestamps" type="checkbox"> Time on each line</label>
             </div>
             <div class="grid">
-              <label title="Text written at the start of each received line in the log file, for example &quot;RX &quot;. Leave empty for nothing. Independent of the markers shown on screen.">Received <input name="logRxMarker" spellcheck="false"></label>
-              <label title="Text written at the start of each sent line in the log file, for example &quot;TX &quot;. Leave empty for nothing. Independent of the markers shown on screen.">Sent <input name="logTxMarker" spellcheck="false"></label>
+              <label title="Before each received line in the log">Received <input name="logRxMarker" spellcheck="false"></label>
+              <label title="Before each sent line in the log">Sent <input name="logTxMarker" spellcheck="false"></label>
             </div>
           </fieldset>
           </div>
           <div class="form-page" data-form-page="display" hidden>
             <div class="checks">
-              <label class="check" title="Fixes text that shifts to the right line after line (a staircase). Tick it if the device ends its lines with only LF (line feed): the cursor then also returns to the start of the line."><input name="implicitCR" type="checkbox"> CR in every LF</label>
-              <label class="check" title="Fixes lines that overwrite each other on the same row. Tick it if the device ends its lines with only CR (carriage return): the cursor then also moves down a line."><input name="implicitLF" type="checkbox"> LF in every CR</label>
-              <label class="check" title="Makes the cursor in the lines blink."><input name="cursorBlink" type="checkbox"> Blinking cursor</label>
-              <label class="check" title="When ticked, closing a tab (or the browser page) while its port is open asks first: click the tab&#x27;s close button a second time to confirm."><input name="warnClose" type="checkbox"> Ask before closing</label>
+              <label class="check" title="For devices that end lines with LF only"><input name="implicitCR" type="checkbox"> CR in every LF</label>
+              <label class="check" title="For devices that end lines with CR only"><input name="implicitLF" type="checkbox"> LF in every CR</label>
+              <label class="check"><input name="cursorBlink" type="checkbox"> Blinking cursor</label>
+              <label class="check" title="Closing a connected tab asks first"><input name="warnClose" type="checkbox"> Ask before closing</label>
             </div>
             <div class="grid">
-              <label title="What happens when the device sends the bell character (Ctrl+G), for example after a mistyped command. Flash: the lines flash briefly. Beep: a short sound. Both, or Nothing.">Bell <select name="bell"><option value="visual">Flash</option><option value="sound">Beep</option><option value="both">Both</option><option value="none">Nothing</option></select></label>
-              <label title="Colours of the lines. System follows the light or dark setting of your computer.">Theme <select name="theme"><option value="auto">System</option><option value="dark">Dark</option><option value="light">Light</option></select></label>
-              <label title="Size of the text in the lines, from 6 to 72. You can also change it while connected with the A+ and A- buttons.">Font size <input name="fontSize" type="number" min="6" max="72" value="14"></label>
-              <label title="Name of the font to use, for example Consolas or Fira Code, or several separated by commas (the first one installed is used). Leave empty for the default. Pick a fixed-width font.">Font <input name="fontFamily" spellcheck="false"></label>
-              <label title="Shape of the cursor in the lines.">Cursor <select name="cursor"><option value="block">Block</option><option value="bar">Bar</option><option value="underline">Underline</option></select></label>
-              <label title="How many lines you can scroll back to. A bigger number uses more memory.">Scrollback <input name="scrollback" type="number" min="100" max="1000000" value="10000"></label>
+              <label title="When the device rings (Ctrl+G)">Bell <select name="bell"><option value="visual">Flash</option><option value="sound">Beep</option><option value="both">Both</option><option value="none">Nothing</option></select></label>
+              <label title="System follows your computer">Theme <select name="theme"><option value="auto">System</option><option value="dark">Dark</option><option value="light">Light</option></select></label>
+              <label title="6 to 72; also A+ / A-">Font size <input name="fontSize" type="number" min="6" max="72" value="14"></label>
+              <label title="e.g. Consolas; empty for the default">Font <input name="fontFamily" spellcheck="false"></label>
+              <label>Cursor <select name="cursor"><option value="block">Block</option><option value="bar">Bar</option><option value="underline">Underline</option></select></label>
+              <label title="Lines kept for scrolling">Scrollback <input name="scrollback" type="number" min="100" max="1000000" value="10000"></label>
             </div>
             <fieldset>
               <legend>Terminal</legend>
               <div class="checks">
-                <label class="check" title="When a line is longer than the screen, continue on the next row. Untick for devices that expect long lines to be cut off."><input name="autoWrap" type="checkbox"> Wrap long lines</label>
-                <label class="check" title="Cursor positions are counted from the top of the scrolling region, as the old DEC terminals did. Leave off unless the device&#x27;s manual asks for it."><input name="originMode" type="checkbox"> Origin mode</label>
-                <label class="check" title="Many devices can set a window title. By default it is shown in the tooltip of the tab and next to the session summary; tick this to ignore it."><input name="ignoreTitle" type="checkbox"> Ignore device title</label>
-                <label class="check" title="Some programs on the device ask to receive mouse clicks. Tick this to keep the mouse for selecting and copying text."><input name="noMouseReport" type="checkbox"> No mouse reports</label>
+                <label class="check" title="Continue long lines on the next row"><input name="autoWrap" type="checkbox"> Wrap long lines</label>
+                <label class="check" title="Rarely needed (DEC terminals)"><input name="originMode" type="checkbox"> Origin mode</label>
+                <label class="check" title="Do not show the title the device sets"><input name="ignoreTitle" type="checkbox"> Ignore device title</label>
+                <label class="check" title="Keep the mouse for selecting"><input name="noMouseReport" type="checkbox"> No mouse reports</label>
               </div>
             </fieldset>
             <fieldset>
               <legend>Mouse</legend>
               <div class="grid">
-                <label title="What a right click does. Copy or paste: copies the selected text, or pastes into the send bar when nothing is selected. Paste: always pastes into the send bar. Nothing: the browser&#x27;s own menu.">Right click <select name="rightClick"><option value="copypaste">Copy or paste</option><option value="paste">Paste</option><option value="none">Nothing</option></select></label>
+                <label title="Copy or paste, paste, or the browser's menu">Right click <select name="rightClick"><option value="copypaste">Copy or paste</option><option value="paste">Paste</option><option value="none">Nothing</option></select></label>
               </div>
               <div class="checks">
-                <label class="check" title="Whatever you select with the mouse is copied to the clipboard at once."><input name="copyOnSelect" type="checkbox"> Copy on select</label>
+                <label class="check" title="Copy whatever you select"><input name="copyOnSelect" type="checkbox"> Copy on select</label>
               </div>
             </fieldset>
             <fieldset>
               <legend>Colours</legend>
-              <label title="Overrides colours of the theme, one per line as NAME=#rrggbb. Names: foreground, background, cursor, selection, black, red, green, yellow, blue, magenta, cyan, white, and brightBlack... brightWhite. Example: background=#101820">Colour lines <textarea name="colours" rows="4" spellcheck="false" placeholder="background=#101820"></textarea></label>
+              <label title="NAME=#rrggbb per line: foreground, background, cursor, selection, red…">Colours <textarea name="colours" rows="4" spellcheck="false" placeholder="background=#101820"></textarea></label>
               <div class="grid">
-                <label title="How bold text shows. Bright colour: the colour gets brighter. Bold font: only the font gets heavier. Both: bold font in a brighter colour.">Bold text <select name="bold"><option value="colour">Bright colour</option><option value="font">Bold font</option><option value="both">Both</option></select></label>
+                <label>Bold text <select name="bold"><option value="colour">Bright colour</option><option value="font">Bold font</option><option value="both">Both</option></select></label>
               </div>
             </fieldset>
             <fieldset>
               <legend>Bell</legend>
               <div class="checks">
-                <label class="check" title="When the bell rings in a tab you are not looking at, its tab flashes until you open it."><input name="bellTab" type="checkbox"> Flash the tab</label>
+                <label class="check" title="Flash a tab you are not looking at"><input name="bellTab" type="checkbox"> Flash the tab</label>
               </div>
-              <label title="A sound to play instead of the beep (a short .wav or .mp3, up to 300 KB). It is saved with these settings.">Bell sound <input type="file" id="bell-file" accept="audio/*"> <span id="bell-name" class="muted"></span> <button type="button" id="bell-clear" title="Go back to the default beep">Remove</button><input type="hidden" name="bellSound"></label>
+              <label title="A short sound file (300 KB at most)">Bell sound <input type="file" id="bell-file" accept="audio/*"> <span id="bell-name" class="muted"></span> <button type="button" id="bell-clear" title="Go back to the default beep">Remove</button><input type="hidden" name="bellSound"></label>
             </fieldset>
           </div>
           <p id="profile-error" class="problem" hidden></p>
@@ -306,23 +308,23 @@
             <span class="spacer"></span>
             <button type="button" data-back>Cancel</button>
             <button type="submit" class="primary">Save</button>
-            <button type="button" id="profile-connect" class="primary">Save and open</button>
+            <button type="button" id="profile-connect" class="primary">Save, open</button>
           </div>
         </form>
 
         <form id="script-form" class="panel-page" autocomplete="off" hidden>
           <header><h2 id="script-title">Script</h2></header>
           <div class="grid">
-            <label title="The name of the script, for example &quot;boot&quot; or &quot;flash&quot;.">Name <input name="name" required spellcheck="false"></label>
-            <label title="The device the script is for: it is listed with it. Leave empty (or Generic) for a script of every port.">Device <input name="device" list="devices" spellcheck="false" placeholder="Generic"></label>
+            <label>Name <input name="name" required spellcheck="false"></label>
+            <label title="Empty: for every port">Device <input name="device" list="devices" spellcheck="false" placeholder="Generic"></label>
           </div>
-          <label title="The commands to send, one per line. The Enter key chosen in the session is added to each one, so write only the text, for example &quot;help&quot;. A line starting with @ is made of steps instead, separated by semicolons (see Help, Steps): text, hex, end, check, dtr, rts, break, wait, expect, baud, file, log, mark. Example: @dtr=1; wait=500; dtr=0. To send text that starts with @, write @@. Empty lines at the end are ignored.">Commands
+          <label title="One per line, sent with the Enter key; @ for steps: @dtr=1; wait=500; dtr=0">Commands
             <textarea name="commands" rows="10" spellcheck="false" required></textarea></label>
           <div class="grid">
-            <label title="Waiting time after each command before the next one is sent, in milliseconds (1000 = 1 second). Give the device time to answer.">Pause (ms) <input name="delayMs" type="number" min="0" max="3600000" value="1000"></label>
-            <label title="When looping: how many times to run the whole list. 0 means keep going until you press Stop.">Rounds <input name="count" type="number" min="0" value="0"></label>
+            <label title="Pause after each line (ms)">Pause (ms) <input name="delayMs" type="number" min="0" max="3600000" value="1000"></label>
+            <label title="0: until Stop">Rounds <input name="count" type="number" min="0" value="0"></label>
           </div>
-          <div class="checks"><label class="check" title="Run the commands again and again, instead of once. Stop it with the Stop button."><input name="loop" type="checkbox"> Loop</label></div>
+          <div class="checks"><label class="check"><input name="loop" type="checkbox"> Loop</label></div>
           <p id="script-error" class="problem" hidden></p>
           <div class="buttons">
             <button type="button" id="script-delete" class="danger">Delete</button>
@@ -336,19 +338,19 @@
   <article>
     <header><h2>XMODEM / YMODEM file transfer</h2></header>
     <div class="checks">
-      <label class="check" title="XMODEM: only the bytes travel, the last block is padded (1A). The device chooses the name."><input type="radio" name="xproto" value="xmodem" checked> XMODEM</label>
-      <label class="check" title="YMODEM: the name and the exact size travel with the file, in blocks of 1024 bytes."><input type="radio" name="xproto" value="ymodem"> YMODEM</label>
+      <label class="check" title="Only the bytes; the device names the file"><input type="radio" name="xproto" value="xmodem" checked> XMODEM</label>
+      <label class="check" title="The name and the size travel too"><input type="radio" name="xproto" value="ymodem"> YMODEM</label>
     </div>
     <div class="checks">
-      <label class="check"><input type="radio" name="xdir" value="send" checked> Send a file to the device</label>
-      <label class="check"><input type="radio" name="xdir" value="receive"> Receive a file from the device</label>
+      <label class="check"><input type="radio" name="xdir" value="send" checked> Send</label>
+      <label class="check"><input type="radio" name="xdir" value="receive"> Receive</label>
     </div>
-    <label id="xmodem-sendfile" title="The file to send.">File <input type="file" id="xmodem-file"></label>
-    <div class="checks"><label class="check" title="XMODEM only: blocks of 1024 bytes instead of 128 when sending (XMODEM-1K): faster, if the device supports it. YMODEM always uses 1024."><input type="checkbox" id="xmodem-1k"> 1K blocks (XMODEM sending)</label></div>
+    <label id="xmodem-sendfile">File <input type="file" id="xmodem-file"></label>
+    <div class="checks"><label class="check" title="Faster, if the device knows it"><input type="checkbox" id="xmodem-1k"> 1K blocks</label></div>
     <progress id="xmodem-progress" value="0" max="1" hidden></progress>
     <p id="xmodem-status" class="muted"></p>
     <div class="buttons">
-      <button type="button" id="xmodem-cancel" class="danger" disabled>Cancel transfer</button>
+      <button type="button" id="xmodem-cancel" class="danger" disabled>Cancel</button>
       <span class="spacer"></span>
       <button type="button" id="xmodem-close">Close</button>
       <button type="button" id="xmodem-start" class="primary">Start</button>
@@ -358,7 +360,6 @@
 <dialog id="tunnel" aria-label="Tunnel between two ports">
   <article>
     <header><h2>Tunnel between two ports</h2></header>
-    <p class="muted">What one port receives is written to the other. The tab shows both directions (green A→B, cyan B→A) and the log keeps them.</p>
     <div class="grid">
       <label>Port A <input name="portA" list="ports" spellcheck="false"></label>
       <label>Baud A <input name="baudA" type="number" min="50" value="115200"></label>
@@ -369,8 +370,8 @@
       <label>Stop bits <select name="stopBits"><option>1</option><option>1.5</option><option>2</option></select></label>
       <label>Flow control <select name="flow"><option value="none">None</option><option value="rtscts">RTS/CTS</option><option value="xonxoff">XON/XOFF</option><option value="dsrdtr">DSR/DTR (Windows only)</option></select></label>
     </div>
-    <label title="Where to save both directions, one line each, marked A&gt;B and B&gt;A. Leave empty for no log. {name}, {date} and {time} are replaced.">Log file <input name="logPath" spellcheck="false" placeholder="logs/tunnel-{date}.log"></label>
-    <div class="checks"><label class="check" title="Only listen to both ports, as with a sniffer cable that taps the two wires of a line: what one receives is shown, and not written to the other."><input name="monitor" type="checkbox"> Only listen (monitor)</label></div>
+    <label title="Both directions, marked A&gt;B and B&gt;A">Log file <input name="logPath" spellcheck="false" placeholder="logs/tunnel-{date}.log"></label>
+    <div class="checks"><label class="check" title="Show both ports, carry nothing (a sniffer cable)"><input name="monitor" type="checkbox"> Only listen (monitor)</label></div>
     <p id="tunnel-error" class="problem" hidden></p>
     <div class="buttons"><span class="spacer"></span><button type="button" id="tunnel-close">Cancel</button><button type="button" id="tunnel-start" class="primary">Start</button></div>
   </article>
@@ -382,34 +383,20 @@
 <dialog id="help" aria-label="Help">
   <article>
     <header><h2>termdeck help</h2><button type="button" data-close-help>Close</button></header>
+    <p class="muted">Hover a button or a field for its hint. ☰ shows or hides bars and buttons. <kbd>Alt+Shift+P</kbd> finds any command, port or script; <code>COM3@115200</code> opens a port at a speed.</p>
     <h3>Keys</h3>
     <ul id="help-keys" class="keys"></ul>
-    <p>In the send bar: <kbd>Enter</kbd> sends, <kbd>↑</kbd>/<kbd>↓</kbd> recall, <kbd>Alt+T</kbd>/<kbd>H</kbd>/<kbd>D</kbd>/<kbd>B</kbd> choose Text, Hex, Decimal, Binary. A rule <code>key Alt+1 =&gt; send …</code> gives a key of your own. <kbd>Alt+Shift+P</kbd> finds any command, a port to open, or a script to run; type <code>COM3@115200</code> to open a port at a speed (also on the command line: <code>termdeck COM3@115200</code>).</p>
-    <h3>Sending</h3>
-    <p>Only the send bar sends; the output is read-only. Text accepts <code>\r \n \t \0 \\ \xNN</code>. Hex, Decimal and Binary refuse wrong characters and group the digits. <b>Cmd</b> takes steps (below). <b>End</b> is added after the data (None, CR, LF, CR LF, Custom); <b>Check</b> adds a sum, XOR or CRC after byte data. <b>Auto</b> sends again every N ms. <b>File…</b> sends a file as it is.</p>
-    <h3>Steps (Cmd, scripts, the send of a rule)</h3>
-    <p>Everything termdeck sends is steps, separated by <code>;</code>: <code>text=AT\r</code> (a <code>;</code> in text is <code>\x3B</code>) · <code>hex=0D 0A</code> · <code>dec=13 10</code> · <code>bin=00001101</code> · <code>end=crlf</code> (cr, lf, crlf, enter, none, or text) · <code>check=crc16modbus</code> (over the bytes since the start or the last check) · <code>dtr=1</code> · <code>rts=0</code> · <code>break=250</code> · <code>wait=500</code> · <code>expect=login:</code> (or <code>/regex/</code>) waits until the device has sent it, for up to 10 s or as long as the last <code>timeout=3000</code> says · <code>baud=9600</code> · <code>file=C:\fw.bin</code> (a file on this computer) · <code>log=on</code> · <code>mark=flashing</code>. Bytes that follow each other go out together and show as one sent line.</p>
-    <p>A script line, the send of a rule and the Text of the send bar are text sent with the Enter key; a line that starts with <code>@</code> is steps (<code>@@</code> sends a literal <code>@</code>). In a script, expect looks at the answer to what was sent just before it.</p>
-    <h3>Rules</h3>
-    <p>What a session does by itself, one rule per line (settings, Rules page): <code>when =&gt; do</code>. Lines starting with <code>#</code> are notes.</p>
-    <ul>
-      <li><b>When</b>: a pattern in what the device sends · <code>on connect</code> · <code>on disconnect</code> · <code>every 500ms</code> (or <code>2s</code>, <code>1m</code>) · <code>button Name</code> (a button above the send bar) · <code>key Alt+1</code> · <code>idle 30s</code> (nothing received for so long) · <code>on CTS</code> (or DSR, DCD, RI: the line changed) · <code>bad frame</code> (a frame of the Frames description whose check fails).</li>
-      <li><b>Do</b>: colours of the line (red, green, yellow, blue, magenta, cyan, white, grey, orange, bold, dim, underline, inverse) · <code>hide</code> · <code>notify</code> (a desktop notification while the tab is out of sight; allow them on the Rules page) · <code>sound</code> · <code>graph Name</code> (the number after the match, or the first group of a /regex/) · <code>count Name</code> (a meter, shown next to Rx and drawn on the graph) · <code>lap</code> (the time since the last lap: a stopwatch) · <code>command clear</code> (a command of the page: clear, freeze, graph, reset… as in Alt+Shift+P) · <code>log on</code> or <code>off</code>; then one of <code>send</code> and a script line (text with the Enter key, or <code>@</code> and steps) · <code>run</code> a script · <code>mark</code> or <code>note</code> and words.</li>
-      <li>Examples: <code>ERROR =&gt; red bold notify</code> · <code>heartbeat =&gt; hide</code> · <code>login: =&gt; send admin</code> · <code>/temp=([0-9.]+)/ =&gt; graph Temp</code> · <code>button Reset =&gt; send @dtr=0; wait=100; dtr=1</code> · <code>every 5s =&gt; send @hex=01 03 00 00 00 01; check=crc16modbus</code> · <code>/\x05/ =&gt; send termdeck</code> (the answerback) · <code>on CTS =&gt; note</code>.</li>
-      <li>A pattern's colours, hide and graph work on whole lines; its other actions happen as soon as the text arrives (a prompt has no line end). Rules that send in a loop are paused.</li>
-      <li><b>Filter</b> (receive bar): <code>text</code>, <code>/regex/</code>, <code>!hide</code>, for the view of the tab.</li>
-    </ul>
-    <p>A pattern is the same everywhere (rules, expect, filter): text, in any case, or <code>/regex/</code> as written, or <code>/regex/i</code> in any case.</p>
-    <h3>Receive bar</h3>
-    <p>View (Text, Hex, Decimal, Binary, Frames), <b>New line at</b> and the filter are in the bar; <b>More</b> holds the time (clock or since the last line), control characters, new line after a pause, Copy and Save. Changing them redraws the data kept (the last 8 MB), so nothing is lost. A changed setting is marked; <b>Reset view</b> goes back to the session's.</p>
-    <h3>Tunnel</h3>
-    <p>The Tunnel button joins two ports: what one receives is written to the other, both directions are shown (green A→B, cyan B→A) and can be logged. Rx counts A to B, Tx counts B to A. Nothing is sent from the send bar into a tunnel. <b>Only listen (monitor)</b> shows both ports without carrying anything, for a sniffer cable.</p>
-    <h3>Frames</h3>
-    <p>View: Frames cuts the received bytes into frames. Describe them in the session settings (Receive page, Frames), one setting per line: <code>sync = AA 55</code> · <code>size = u8@2 + 5</code> (the size of the frame: u8, u16be or u16le at an offset, plus a number; or a plain number) · <code>end = 0D 0A</code> (instead of size) · <code>header = 3</code> · <code>check = crc16modbus</code>. A bad check shows as BAD with what it should be.</p>
-    <h3>About</h3>
+    <h3>Syntax</h3>
+    <dl class="syntax">
+      <dt>Send bar</dt><dd>Text <code>AT\r\n</code> · Hex <code>0D 0A</code> · Cmd <code>dtr=0; wait=100; dtr=1</code> · <kbd>↑</kbd><kbd>↓</kbd> history</dd>
+      <dt>Steps</dt><dd><code>text= hex= dec= bin= end= check= dtr= rts= break= wait= expect= timeout= baud= file= log= mark=</code></dd>
+      <dt>Scripts</dt><dd>a line is text sent with Enter; <code>@</code> starts steps</dd>
+      <dt>Rules</dt><dd><code>when =&gt; do</code> · <code>ERROR =&gt; red notify</code> · <code>login: =&gt; send admin</code> · <code>temp= =&gt; graph Temp</code> · <code>button Reset =&gt; send @dtr=0</code> · <code>every 5s =&gt; send @hex=01</code></dd>
+      <dt>Patterns</dt><dd>text (any case) · <code>/regex/</code> · <code>/regex/i</code></dd>
+      <dt>Frames</dt><dd><code>sync = AA 55</code> · <code>size = u8@2 + 5</code> or <code>end = 0D 0A</code> · <code>header = 3</code> · <code>check = crc16modbus</code></dd>
+      <dt>Ports</dt><dd><code>fake:echo</code> <code>fake:shell</code> (admin/admin) <code>fake:counter</code> <code>fake:link-a</code>/<code>b</code> … · <code>replay:file.bin</code></dd>
+    </dl>
     <p id="about" class="muted"></p>
-    <h3>Virtual ports</h3>
-    <p><code>fake:echo</code>, <code>fake:shell</code> (admin/admin), <code>fake:counter</code>, <code>fake:binary</code>, <code>fake:flaky</code> (drops and returns), <code>fake:stream</code> (600 KB/s for 5 s), <code>fake:link-a</code> and <code>fake:link-b</code> (a null-modem cable). <code>replay:</code> and the path of a file (a capture saved with Save raw) plays it as if a device sent it, at the speed of the port: open it with Alt+Shift+P, <code>replay:C:\captures\board.bin@115200</code>.</p>
   </article>
 </dialog>
 <dialog id="log-ask" aria-label="Log file exists">
@@ -417,9 +404,9 @@
     <p id="log-ask-text"></p>
     <div class="buttons">
       <span class="spacer"></span>
-      <button value="none" title="Open the port without writing a log this time">Do not log</button>
-      <button value="overwrite" class="danger" title="Erase the old content and start the file again">Overwrite</button>
-      <button value="append" class="primary" title="Add to the end of the existing file">Append</button>
+      <button value="none">Do not log</button>
+      <button value="overwrite" class="danger">Overwrite</button>
+      <button value="append" class="primary">Append</button>
     </div>
   </form>
 </dialog>

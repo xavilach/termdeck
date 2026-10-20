@@ -145,8 +145,7 @@ function portRow(port, detail, title) {
   const line = el("span", "port-line");
   line.append(el("span", "name", port), deviceChooser(port));
   row.append(line);
-  if (detail) row.append(el("span", "detail", detail));
-  row.title = `${title}Double-click to open it with its device; right-click for its settings`;
+  row.title = `${title}Double-click: open · right-click: its settings`;
   row.addEventListener("click", () => selectRow(row, () => {}));
   row.addEventListener("dblclick", () => openPort(port));
   row.addEventListener("keydown", (e) => {
@@ -185,7 +184,8 @@ function rememberedRow(entry, device) {
   const row = el("div", "item");
   const text = el("span", "text");
   const changes = Object.keys(entry.settings || {}).length;
-  text.append(el("span", "name", entry.port), el("span", "detail", changes ? `${changes} change${changes === 1 ? "" : "s"} of its own` : "the device's settings"));
+  text.append(el("span", "name", entry.port));
+  if (changes) text.append(el("span", "detail", `${changes} change${changes === 1 ? "" : "s"}`));
   row.append(text, toolButton("✎", `Settings of ${entry.port}`, () => editPort(entry.port)));
   row.title = "Double-click to open it with this device; right-click for its settings";
   row.addEventListener("click", () => selectRow(row, () => {}));
@@ -209,27 +209,27 @@ function deviceNode(device) {
   const mineScripts = scripts.filter((s) => (s.device || "") === stored);
   const minePorts = portEntries.filter((e) => (e.device || "") === stored);
   const settings = Object.keys(device.settings || {}).length;
-  const tools = [toolButton("✎", `Settings of ${name}`, () => editDevice(device))];
+  const tools = [toolButton("+", `New script for ${name}`, () => editScript(null, stored)), toolButton("✎", `Settings of ${name}`, () => editDevice(device))];
   if (!generic) tools.push(toolButton("❐", `A new device starting from ${name}`, () => editDevice(null, { name: `${name} copy`, settings: device.settings })));
   const select = () => { selectedDevice = name; renderTree(); };
+  // only what is there: the ports remembered with the device, then its scripts
   const { wrap, head } = node(`d:${name}`, name, "group", tools, (body) => {
-    body.append(el("div", "empty-note", generic ? `what every port starts from · ${settings} change${settings === 1 ? "" : "s"}` : `${settings} setting${settings === 1 ? "" : "s"}`));
-    const portsNode = node(`d:${name}/p`, `Ports · ${minePorts.length}`, "sub",
-      [toolButton("▶▶", `Open all ${minePorts.length} ports of ${name}`, () => minePorts.forEach((e) => openPort(e.port, name)), minePorts.length < 2)], (inner) => {
-        for (const e of minePorts) inner.append(rememberedRow(e, name));
-        if (!minePorts.length) inner.append(el("div", "empty-note", "none yet"));
-      });
-    const scriptsNode = node(`d:${name}/c`, `Scripts · ${mineScripts.length}`, "sub",
-      [toolButton("+", `New script for ${name}`, () => editScript(null, stored))], (inner) => {
+    if (minePorts.length) {
+      body.append(node(`d:${name}/p`, `Ports · ${minePorts.length}`, "sub",
+        [toolButton("▶▶", `Open all ${minePorts.length} ports of ${name}`, () => minePorts.forEach((e) => openPort(e.port, name)), minePorts.length < 2)], (inner) => {
+          for (const e of minePorts) inner.append(rememberedRow(e, name));
+        }).wrap);
+    }
+    if (mineScripts.length) {
+      body.append(node(`d:${name}/c`, `Scripts · ${mineScripts.length}`, "sub", [], (inner) => {
         for (const sc of mineScripts) inner.append(scriptRow(sc));
-        if (!mineScripts.length) inner.append(el("div", "empty-note", "none yet"));
-      });
-    body.append(portsNode.wrap, scriptsNode.wrap);
+      }).wrap);
+    }
   }, select);
   wrap.classList.add("group-node");
   wrap.style.setProperty("--gc", deviceColor(name));
   if (selectedDevice === name) head.classList.add("selected");
-  head.title = generic ? "The settings every port starts from (click to select)" : "Click to select the device";
+  head.title = `${generic ? "What every port starts from" : "A device"} · ${settings} setting${settings === 1 ? "" : "s"} · right-click: its settings`;
   head.addEventListener("contextmenu", (e) => { e.preventDefault(); editDevice(device); });
   return wrap;
 }

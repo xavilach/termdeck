@@ -20,6 +20,7 @@ function createPane() {
                  viewbar: root.querySelector(".viewbar"), quickbar: root.querySelector(".quickbar"), graphbar: root.querySelector(".graphbar"), sendbar: root.querySelector(".sendbar"), findbar: root.querySelector(".findbar"),
                  find: { index: -1, matches: [], key: "" } };
   wireBars(pane);
+  buildPartsMenu(pane);
   if (panes.length === 0) {  // the first pane carries the button for the left column and the layout buttons
     root.querySelector(".sidebar-toggle").id = "sidebar-toggle";
     layoutEl = root.querySelector(".layout");
@@ -528,11 +529,13 @@ function shiftTab(step) {
 }
 
 document.addEventListener("click", (e) => {  // a click elsewhere closes the open "More" menus
-  for (const menu of document.querySelectorAll(".viewbar details.more[open]")) if (!menu.contains(e.target)) menu.open = false;
+  for (const menu of document.querySelectorAll("details.more[open], details.menu[open]")) if (!menu.contains(e.target)) menu.open = false;
+  const item = e.target.closest?.("details.files .menu-body button");  // a menu item closes its menu
+  if (item) item.closest("details").open = false;
 });
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") document.querySelectorAll(".viewbar details.more[open]").forEach((menu) => { menu.open = false; });
+  if (e.key === "Escape") document.querySelectorAll("details.more[open], details.menu[open]").forEach((menu) => { menu.open = false; });
   if (!(e.altKey || e.ctrlKey)) return;
   const name = keyName(e);
   if (active?.keys?.includes(name)) {  // a key of a rule ("key Alt+1 => ...") of the shown tab

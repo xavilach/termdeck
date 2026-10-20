@@ -137,3 +137,90 @@ $("#palette-input").addEventListener("keydown", (e) => {
   }
 });
 palette.addEventListener("click", (e) => { if (e.target === palette) palette.close(); });
+
+// ---- parts of the page that can be shown or hidden (☰ in the tab bar, or the palette), kept in this browser
+
+const PARTS = [
+  { group: "Bars", id: "receive", label: "Receive bar" },
+  { group: "Bars", id: "buttons", label: "Buttons of the rules" },
+  { group: "Bars", id: "send", label: "Send bar" },
+  { group: "Toolbar", id: "summary", label: "Port summary" },
+  { group: "Toolbar", id: "lines", label: "Control lines" },
+  { group: "Toolbar", id: "break", label: "Break", hidden: true },
+  { group: "Toolbar", id: "clear", label: "Clear, Reset" },
+  { group: "Toolbar", id: "log", label: "Log" },
+  { group: "Toolbar", id: "font", label: "Text size", hidden: true },
+  { group: "Receive bar", id: "filter", label: "Filter" },
+  { group: "Receive bar", id: "counters", label: "Counters and meters" },
+  { group: "Receive bar", id: "marks", label: "Marks", hidden: true },
+  { group: "Receive bar", id: "graph-button", label: "Graph button" },
+  { group: "Receive bar", id: "freeze", label: "Freeze" },
+  { group: "Receive bar", id: "find", label: "Find" },
+  { group: "Send bar", id: "end", label: "End" },
+  { group: "Send bar", id: "check", label: "Check" },
+  { group: "Send bar", id: "all-tabs", label: "All tabs", hidden: true },
+  { group: "Send bar", id: "auto", label: "Auto" },
+  { group: "Send bar", id: "files", label: "File, Transfer" },
+];
+
+const PARTS_KEY = "termdeck.parts";
+// What is hidden: what the user chose, else the parts hidden at first.
+let hiddenParts = new Set(stored.read(PARTS_KEY, PARTS.filter((p) => p.hidden).map((p) => p.id)));
+
+// A rule per part hides what is marked with it while the part is hidden.
+const partStyle = el("style");
+partStyle.textContent = PARTS.map((p) => `body.hide-${p.id} [data-part~="${p.id}"] { display: none !important; }`).join("\n");
+document.head.append(partStyle);
+
+function applyParts() {
+  for (const p of PARTS) document.body.classList.toggle(`hide-${p.id}`, hiddenParts.has(p.id));
+  for (const box of document.querySelectorAll("[data-parts] input[data-part-id]")) box.checked = !hiddenParts.has(box.dataset.partId);
+  for (const pane of panes) {
+    const box = pane.el.querySelector("[data-parts] input[data-graph-shown]");
+    if (box) box.checked = graphOpen(pane);
+  }
+}
+
+function showPart(id, shown) {
+  if (shown) hiddenParts.delete(id); else hiddenParts.add(id);
+  stored.write(PARTS_KEY, [...hiddenParts]);
+  applyParts();
+  fitAll();
+}
+
+function showAllParts() {
+  hiddenParts = new Set();
+  stored.write(PARTS_KEY, []);
+  applyParts();
+  fitAll();
+}
+
+// The ☰ menu of a pane: the graph of the pane, the parts by group, and Show all.
+function buildPartsMenu(pane) {
+  const body = pane.el.querySelector("[data-parts]");
+  const check = (label, checked, onChange, attrs = {}) => {
+    const row = el("label", "check");
+    const box = el("input");
+    box.type = "checkbox";
+    box.checked = checked;
+    Object.assign(box.dataset, attrs);
+    box.addEventListener("change", () => onChange(box.checked));
+    row.append(box, ` ${label}`);
+    return row;
+  };
+  const items = [check("Graph", false, () => { toggleGraph(pane); applyParts(); }, { graphShown: "1" })];
+  let group = "";
+  for (const p of PARTS) {
+    if (p.group !== group) { group = p.group; items.push(el("div", "menu-title", group)); }
+    items.push(check(p.label, !hiddenParts.has(p.id), (on) => showPart(p.id, on), { partId: p.id }));
+  }
+  const all = el("button", "", "Show all");
+  all.type = "button";
+  all.addEventListener("click", showAllParts);
+  items.push(all);
+  body.replaceChildren(...items);
+  applyParts();
+}
+
+for (const p of PARTS) COMMANDS.push({ id: `part-${p.id}`, label: `Show or hide: ${p.label}`, run: () => showPart(p.id, hiddenParts.has(p.id)) });
+COMMANDS.push({ id: "show-all", label: "Show all bars and buttons", run: () => showAllParts() });

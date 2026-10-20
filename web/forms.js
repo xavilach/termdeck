@@ -92,7 +92,8 @@ function markLayers() {
     reset.hidden = !own;
     reset.title = `Back to the value of ${belowName()}`;
     reset.setAttribute("aria-label", `${field.name}: back to the value of ${belowName()}`);
-    label.dataset.from = own ? "" : belowName();
+    label.dataset.hint ??= label.title;  // the hint says where a value comes from
+    label.title = own ? label.dataset.hint : [label.dataset.hint, `from ${belowName()}`].filter(Boolean).join(" · ");
   }
 }
 
@@ -105,12 +106,12 @@ function fillField(field, value) {
 function showLayer(what, base, own, title, note) {
   editing = { ...what, base, own };
   $("#profile-title").textContent = title;
-  $("#layer-note").textContent = note;
+  $("#profile-title").title = note;
   form.classList.toggle("editing-device", what.kind === "device");
   form.classList.toggle("editing-port", what.kind === "port");
   form.elements.name.required = what.kind === "device";
   const remove = $("#profile-delete");
-  remove.dataset.label = what.kind === "port" ? "Forget this port" : "Delete";
+  remove.dataset.label = what.kind === "port" ? "Forget" : "Delete";
   remove.hidden = !(what.kind === "port" ? entryOf(what.port) : what.kind === "device" && what.name);
   resetDelete(remove);
   $("#profile-move").hidden = !(what.kind === "port" && what.device !== GENERIC);

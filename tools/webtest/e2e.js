@@ -68,6 +68,9 @@ async function startServer() {
   // (the other checks open the menu before they use what is in it)
   check("with no serial port and no session the empty pane offers virtual ports to try", await page.locator("[data-empty-try] button").count() === 3 && /Try a virtual one/.test(await page.locator("[data-empty-try]").first().textContent()));
   check("page loads with the start link and lists the ports", (await page.locator("#port-tree .node-head").first().textContent()).includes("Serial ports"));
+  // ☰ shows or hides parts; some are hidden at first, to keep the page plain
+  check("Break, Marks, Text size and All tabs are hidden at first", await page.evaluate(() => ["break", "marks", "font", "all-tabs"].every((p) => document.body.classList.contains(`hide-${p}`))));
+  await page.evaluate(() => showAllParts());  // the checks below use every button
   const virtualHead = page.locator("#port-tree .node-head", { hasText: "Virtual ports" });
   check("Virtual ports section is reduced at first", (await page.locator("#port-tree .item.port", { hasText: "fake:shell" }).count()) === 0 || !(await page.locator("#port-tree .item.port", { hasText: "fake:shell" }).first().isVisible()));
   await virtualHead.locator(".toggle").click();
@@ -346,11 +349,22 @@ async function startServer() {
   await csvDownload.saveAs(csvFile);
   const csv = fs.readFileSync(csvFile, "utf8");
   check("Save CSV writes time, series and value", /^time,series,value\n/.test(csv) && /,Temp,2\d\.\d\n/.test(csv) && /,Tick,\d+\n/.test(csv) && csvDownload.suggestedFilename().endsWith(".csv"), csv.slice(0, 120));
+  await page.click(".graphbar [data-graph-close]");
+  check("the ✕ of the graph closes it", !(await page.locator(".graphbar").first().isVisible()));
+  await page.click(".view-menu > summary");
+  await page.locator(".view-menu [data-graph-shown]").first().check();
+  check("☰ shows it again", await page.locator(".graphbar").first().isVisible());
+  await page.locator(".view-menu label", { hasText: "Send bar" }).locator("input").uncheck();
+  check("☰ hides a bar", !(await page.locator(".sendbar").first().isVisible()));
+  await page.locator(".view-menu label", { hasText: "Send bar" }).locator("input").check();
+  check("and shows it back", await page.locator(".sendbar").first().isVisible());
+  await page.keyboard.press("Escape");
   await page.click(".viewbar [data-graph]");
   await page.locator(".tab", { hasText: "Graphed" }).locator(".close").click();
   await page.locator(".tab", { hasText: "Graphed" }).locator(".close").click();
 
   // PuTTY: each serial session found on this computer becomes a device, and its port opens with it
+  await page.click(".files > summary");
   await page.click("#import-putty");
   await page.waitForSelector("#tree .node-head.group:has-text('Bench board')", { timeout: 4000 });
   const benchBoard = await page.evaluate(async () => (await api("/api/layers?port=COM7")).profile);
@@ -367,6 +381,7 @@ async function startServer() {
   });
 
   // export and import of the settings
+  await page.click(".files > summary");
   const [settingsDownload] = await Promise.all([page.waitForEvent("download"), page.click("#export-settings")]);
   const settingsFile = path.join(server.dir, "settings.json");
   await settingsDownload.saveAs(settingsFile);

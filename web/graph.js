@@ -38,6 +38,8 @@ function scheduleGraph(tab) {
 function toggleGraph(pane) {
   pane.graphbar.hidden = !pane.graphbar.hidden;
   syncGraph(pane);
+  const box = pane.el.querySelector("[data-parts] input[data-graph-shown]");
+  if (box) box.checked = graphOpen(pane);
   fitAll();  // the lines get the room that is left
 }
 
@@ -156,6 +158,7 @@ function wireGraph(pane) {
   bar.querySelector("[data-graph-clear]").addEventListener("click", () => {
     if (pane.active) { pane.active.graph.series.clear(); sendMessage(pane.active, { type: "cleargraph" }); drawGraph(pane.active); }
   });
+  bar.querySelector("[data-graph-close]").addEventListener("click", () => { if (graphOpen(pane)) toggleGraph(pane); });
   bar.querySelector("[data-graph-csv]").addEventListener("click", () => {
     if (pane.active) download(fileName(pane.active, "csv"), new Blob([graphCsv(pane.active)], { type: "text/csv" }));
   });

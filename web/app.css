@@ -303,10 +303,7 @@ dialog#tunnel label { display: block; margin: 6px 0; }
 #profile-form .for-device, #profile-form .for-port { display: none; }
 #profile-form.editing-device .for-device, #profile-form.editing-port .for-port { display: block; }
 #profile-form .for-port input { color: var(--muted); }
-#layer-note { margin: 0 0 6px; }
-.layer-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; }
 #profile-form label.inherited { color: var(--muted); }
-#profile-form label.inherited[data-from]:not([data-from=""])::after { content: "from " attr(data-from); font-size: 10px; color: var(--muted); margin-left: 4px; }
 #profile-form label.own { color: var(--text); }
 #profile-form label.own::before { content: "●"; color: var(--accent); font-size: 8px; margin-right: 3px; }
 #profile-form label .reset { border: 0; background: none; min-height: 0; padding: 0 3px; color: var(--accent); cursor: pointer; }
@@ -328,3 +325,20 @@ dialog#tunnel label { display: block; margin: 6px 0; }
 #palette-list kbd, .keys kbd { color: var(--muted); }
 .keys { columns: 2; padding-left: 0; list-style: none; }
 .keys li { margin: 2px 0; }
+
+/* ---- menus: ☰ (show or hide parts) and ⋯ (export, import, PuTTY) */
+details.menu { position: relative; }
+details.menu > summary { list-style: none; cursor: pointer; padding: 2px 8px; border-radius: 3px; color: var(--muted); }
+details.menu > summary::-webkit-details-marker { display: none; }
+details.menu > summary:hover, details.menu[open] > summary { color: var(--text); background: var(--panel-2); }
+details.menu > .menu-body { position: absolute; z-index: 20; right: 0; top: 100%; min-width: 190px; max-height: 70vh; overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; box-shadow: 0 4px 16px rgba(0,0,0,.25); display: flex; flex-direction: column; gap: 2px; }
+details.files > .menu-body { left: 0; right: auto; }
+.menu-body .menu-title { margin-top: 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.menu-body label.check { white-space: nowrap; }
+.view-menu { align-self: center; }
+.graph-head [data-graph-close] { border: 0; background: none; color: var(--muted); }
+#profile-form header select { max-width: 200px; }
+/* ---- the help: one screen */
+dl.syntax { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
+dl.syntax dt { font-weight: 600; }
+dl.syntax dd { margin: 0; }
